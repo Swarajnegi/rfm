@@ -137,7 +137,7 @@
     <!-- Alpine.js -->
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.3/dist/cdn.min.js"></script>
 
-    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="styles.css?v=20260907-2">
 
 </head>
 <body class="bg-background text-on-background min-h-screen pb-32 font-body-md text-body-md antialiased selection:bg-primary-container selection:text-on-primary-container bg-[#051424]" x-data="appData" x-cloak>
@@ -260,7 +260,7 @@
 </div>
 
 <!-- HOME / DASHBOARD PAGE -->
-<main x-show="activePage === 'home'" class="pt-24 pb-32 px-container-padding-mobile md:px-container-padding-desktop max-w-7xl mx-auto flex flex-col gap-6">
+<main x-show="activePage === 'home'" x-cloak class="pt-24 pb-32 px-container-padding-mobile md:px-container-padding-desktop max-w-7xl mx-auto flex flex-col gap-6">
 
 <!-- ═══════════ NET WORTH HERO CARD (CRED-style) ═══════════ -->
 <section class="portfolio-hero relative rounded-3xl overflow-hidden" style="background: linear-gradient(145deg, #13151f 0%, #1a1c28 60%, #13151f 100%); border: 1px solid rgba(255,255,255,0.07); box-shadow: 0 8px 48px rgba(0,0,0,0.7), inset 0 1px 0 rgba(255,255,255,0.07);">
@@ -274,10 +274,10 @@
         <div class="flex justify-between items-start mb-1">
             <span class="text-[10px] font-bold uppercase tracking-[0.2em] tabular" style="color: #8b8fa8;">MY NET WORTH</span>
             <div id="nwDayBadge" class="flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold tabular"
-                 :class="netWorthTotal >= 190000 ? 'text-emerald-400' : 'text-red-400'"
+                 :class="nwChartChangePct === null || nwChartChangePct >= 0 ? 'text-emerald-400' : 'text-red-400'"
                  style="background: rgba(68,229,194,0.08); border: 1px solid rgba(68,229,194,0.2);">
-                <span class="material-symbols-outlined text-[13px]" style="font-variation-settings: 'FILL' 1;" :class="netWorthTotal >= 190000 ? 'text-emerald-400' : 'text-red-400'">trending_up</span>
-                <span>+0.45%</span>
+                <span class="material-symbols-outlined text-[13px]" style="font-variation-settings: 'FILL' 1;" :class="nwChartChangePct === null || nwChartChangePct >= 0 ? 'text-emerald-400' : 'text-red-400'" x-text="nwChartChangePct === null || nwChartChangePct >= 0 ? 'trending_up' : 'trending_down'"></span>
+                <span x-text="nwChartChangeLabel"></span>
             </div>
         </div>
 
@@ -302,6 +302,10 @@
     <div class="relative px-6 pb-0" style="height: 140px;">
         <canvas id="nwChartCanvas" style="width:100%;height:140px;"></canvas>
     </div>
+
+    <p class="relative px-6 pt-1 text-[10px] tabular" style="color:#8b8fa8;"
+       x-text="nwChartData.length < 2 ? 'Tracking begins with price syncs and portfolio updates. No historical values are fabricated.' : nwChartData.length + ' recorded valuation points'">
+    </p>
 
     <!-- Range selector -->
     <div class="flex justify-around px-6 pb-4 pt-2 border-t" style="border-color: rgba(255,255,255,0.05);">
@@ -561,25 +565,33 @@
                 <span class="material-symbols-outlined text-sm" style="font-variation-settings:'FILL' 1;">add</span>
                 <span>Add Asset</span>
             </button>
-            <div class="relative" x-data="{overflowOpen:false}">
-                <button @click="overflowOpen=!overflowOpen" class="p-2.5 rounded-xl border text-on-surface-variant hover:text-white transition-all" style="border-color:rgba(255,255,255,0.1); background:rgba(255,255,255,0.03);">
+            <div>
+                <button @click="moreMenuOpen = true" aria-label="Open portfolio actions" class="p-2.5 rounded-xl border text-on-surface-variant hover:text-white transition-all" style="border-color:rgba(255,255,255,0.1); background:rgba(255,255,255,0.03);">
                     <span class="material-symbols-outlined text-[18px]">more_vert</span>
                 </button>
-                <div x-show="overflowOpen" @click.outside="overflowOpen=false" x-cloak
-                     class="absolute right-0 top-12 z-50 rounded-xl shadow-2xl w-48 py-1"
-                     style="background:#1a1c28; border:1px solid rgba(255,255,255,0.15); box-shadow:0 12px 32px rgba(0,0,0,0.8);">
-                    <button @click="fetchAllPrices(); overflowOpen=false" :disabled="navFetchState === 'fetching'" class="w-full text-left text-xs px-4 py-3 flex items-center gap-2.5 hover:bg-white/5 transition-colors disabled:opacity-50 text-white">
-                        <span class="material-symbols-outlined text-[16px] text-primary" :class="navFetchState === 'fetching' ? 'animate-spin' : ''">sync</span>
-                        <span>Sync Live Prices</span>
-                    </button>
-                    <button @click="loadActualPortfolio(); overflowOpen=false" class="w-full text-left text-xs px-4 py-3 flex items-center gap-2.5 hover:bg-white/5 transition-colors text-white" style="border-top:1px solid rgba(255,255,255,0.06);">
-                        <span class="material-symbols-outlined text-[16px]" style="color:#d4af37;">restart_alt</span>
-                        <span>Reset Seed Portfolio</span>
-                    </button>
+                <div x-show="moreMenuOpen" x-cloak @keydown.escape.window="moreMenuOpen = false"
+                     class="fixed inset-0 z-[80] flex items-end sm:items-center justify-center p-3 sm:p-6">
+                    <button @click="moreMenuOpen = false" aria-label="Close portfolio actions" class="absolute inset-0 cursor-default"></button>
+                    <div class="bottom-sheet relative w-full max-w-sm rounded-2xl overflow-hidden" role="dialog" aria-modal="true" aria-label="Portfolio actions">
+                        <div class="flex items-center justify-between px-5 py-4 border-b border-white/10">
+                            <span class="text-sm font-bold text-white">Portfolio actions</span>
+                            <button @click="moreMenuOpen = false" aria-label="Close" class="p-1.5 rounded-lg text-on-surface-variant hover:text-white hover:bg-white/5">
+                                <span class="material-symbols-outlined text-[18px]">close</span>
+                            </button>
+                        </div>
+                        <div class="p-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))]">
+                            <button @click="fetchAllPrices(); moreMenuOpen = false" :disabled="navFetchState === 'fetching'" class="w-full text-left text-sm px-4 py-3.5 rounded-xl flex items-center gap-3 hover:bg-white/5 transition-colors disabled:opacity-50 text-white">
+                                <span class="material-symbols-outlined text-[18px] text-primary" :class="navFetchState === 'fetching' ? 'animate-spin' : ''">sync</span>
+                                <span>Sync live prices</span>
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
+    <p x-show="navFetchState === 'fetching' || navFetchError" x-cloak class="mt-3 text-[11px] leading-relaxed" :class="navFetchState === 'error' ? 'text-red-300' : 'text-on-surface-variant'"
+       x-text="navFetchState === 'fetching' ? 'Syncing ' + navFetchProgress.completed + '/' + navFetchProgress.total + ' holdings...' : navFetchError"></p>
 </section>
 
 <!-- ═══════════ ASSET SECTIONS ═══════════ -->
@@ -1435,7 +1447,7 @@ Restore from JSON
 
             <!-- Squircle Button 2: Cog / Settings Button -->
             <button type="button"
-                    @click="regenWealth.activeTab = (regenWealth.activeTab === 'settings' ? null : 'settings')"
+                    @click="regenWealth.activeTab = (regenWealth.activeTab === 'settings' ? null : 'settings'); if (regenWealth.activeTab === 'settings') loadRegenModelCatalog()"
                     class="w-10 h-10 rounded-xl border flex items-center justify-center transition-all shadow-sm group"
                     :class="regenWealth.activeTab === 'settings' ? 'bg-[#d4af37]/20 border-[#d4af37] text-[#d4af37]' : 'bg-surface-container-high border-white/10 text-white/70 hover:text-white hover:bg-surface-bright'"
                     title="Model Switcher & Engine Settings">
@@ -1533,7 +1545,7 @@ Restore from JSON
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
                 <label class="block text-[11px] font-semibold text-on-surface-variant mb-1">Provider Detection Mode</label>
-                <select x-model="regenWealth.provider" @change="saveRegenApiKey()" class="w-full px-3 py-2 rounded-xl bg-surface-container-lowest border border-white/10 text-white text-xs outline-none focus:border-[#d4af37]">
+                <select x-model="regenWealth.provider" @change="saveRegenApiKey(false); loadRegenModelCatalog()" class="w-full px-3 py-2 rounded-xl bg-surface-container-lowest border border-white/10 text-white text-xs outline-none focus:border-[#d4af37]">
                     <option value="auto">Auto-Detect from Key Prefix</option>
                     <option value="openrouter">Force OpenRouter API</option>
                     <option value="gemini">Force Google Gemini Direct API</option>
@@ -1542,26 +1554,35 @@ Restore from JSON
             </div>
 
             <div>
-                <label class="block text-[11px] font-semibold text-on-surface-variant mb-1">Active Model (OpenRouter / OpenAI)</label>
-                <select x-model="regenWealth.model" @change="saveRegenApiKey()" class="w-full px-3 py-2 rounded-xl bg-surface-container-lowest border border-white/10 text-white text-xs outline-none focus:border-[#d4af37]">
-                    <option value="deepseek/deepseek-r1">🐋 DeepSeek R1 (Reasoning — deepseek/deepseek-r1)</option>
-                    <option value="deepseek/deepseek-chat">⚡ DeepSeek V3 (Chat — deepseek/deepseek-chat)</option>
-                    <option value="google/gemini-2.0-flash-001">✨ Gemini 2.0 Flash (google/gemini-2.0-flash-001)</option>
-                    <option value="anthropic/claude-3.5-sonnet">🧠 Claude 3.5 Sonnet (anthropic/claude-3.5-sonnet)</option>
-                    <option value="openai/gpt-4o-mini">🚀 GPT-4o Mini (openai/gpt-4o-mini)</option>
-                    <option value="meta-llama/llama-3.3-70b-instruct">🦙 Llama 3.3 70B (meta-llama/llama-3.3-70b-instruct)</option>
-                    <option value="qwen/qwen-2.5-72b-instruct">🌐 Qwen 2.5 72B (qwen/qwen-2.5-72b-instruct)</option>
+                <div class="flex items-center justify-between gap-2 mb-1">
+                    <label class="block text-[11px] font-semibold text-on-surface-variant">Active Model</label>
+                    <button type="button" @click="loadRegenModelCatalog()" :disabled="regenWealth.modelCatalogState === 'loading'" class="text-[10px] text-primary disabled:opacity-50">
+                        <span x-text="regenWealth.modelCatalogState === 'loading' ? 'Loading catalog...' : 'Refresh live catalog'"></span>
+                    </button>
+                </div>
+                <select x-model="regenWealth.model" @change="saveRegenApiKey(false)" class="w-full px-3 py-2 rounded-xl bg-surface-container-lowest border border-white/10 text-white text-xs outline-none focus:border-[#d4af37]">
+                    <option value="openai/gpt-4o-mini">Fast default (OpenAI GPT-4o mini)</option>
+                    <option value="deepseek/deepseek-r1">DeepSeek R1 (reasoning, slower)</option>
+                    <option value="deepseek/deepseek-chat">DeepSeek Chat</option>
+                    <option value="google/gemini-2.0-flash-001">Gemini 2.0 Flash</option>
+                    <option value="anthropic/claude-3.5-sonnet">Claude 3.5 Sonnet</option>
+                    <option value="meta-llama/llama-3.3-70b-instruct">Llama 3.3 70B</option>
+                    <option value="qwen/qwen-2.5-72b-instruct">Qwen 2.5 72B</option>
+                    <template x-for="model in regenWealth.modelCatalog" :key="model.id">
+                        <option :value="model.id" x-text="model.name + ' (' + model.id + ')'"></option>
+                    </template>
                     <option value="custom">⚙️ Custom Model String...</option>
                 </select>
+                <p x-show="regenWealth.modelCatalogError" x-cloak class="mt-1 text-[10px] text-amber-300" x-text="regenWealth.modelCatalogError"></p>
             </div>
         </div>
 
         <!-- Custom Model Input string -->
         <div x-show="regenWealth.model === 'custom'" class="pt-1">
-            <label class="block text-[11px] font-semibold text-on-surface-variant mb-1">Custom OpenRouter Model ID</label>
+            <label class="block text-[11px] font-semibold text-on-surface-variant mb-1">Custom Model ID</label>
             <div class="flex gap-2">
                 <input type="text" x-model="regenWealth.customModel"
-                       placeholder="e.g. mistralai/mistral-large-2411 or qwen/qwen-2.5-72b-instruct"
+                       placeholder="e.g. provider/model-id from your enabled provider"
                        class="flex-1 px-3 py-2 rounded-xl bg-surface-container-lowest border border-white/10 text-white text-xs font-mono outline-none focus:border-[#d4af37]">
                 <button @click="saveRegenApiKey()" class="bg-[#d4af37] text-black font-bold px-4 py-2 rounded-xl text-xs">Apply</button>
             </div>
@@ -1576,7 +1597,7 @@ Restore from JSON
 </div>
 <h3 class="font-bold text-white text-2xl mb-2">Ready to Analyse</h3>
 <p class="text-sm text-on-surface-variant max-w-md mb-6 leading-relaxed">
-Your portfolio will be cross-referenced with live market news and Gemini AI to surface your best investments.
+Your portfolio will be analysed against its current holdings, cash flow, goals, and available market context.
 </p>
 <div class="px-4 py-2 rounded-full bg-surface-container-lowest border border-white/5 text-xs text-on-surface-variant">
 Reads: <span class="text-white font-medium">ET Markets</span> · <span class="text-white font-medium">Moneycontrol</span> · <span class="text-white font-medium">RBI press releases</span>

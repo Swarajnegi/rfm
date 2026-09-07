@@ -430,6 +430,8 @@ nav[class*='bottom-0'] button:active {
   scrollbar-width: none;
 }
 
+[style*="display: none"],
+[style*="display:none"],
 [x-cloak] {
   display: none !important;
 }
@@ -448,8 +450,8 @@ nav[class*='bottom-0'] button:active {
     padding-top: 7.25rem !important;
   }
 
-  main[x-show="activePage === 'home'"] {
-    display: grid !important;
+  main[x-show="activePage === 'home'"]:not([style*="display: none"]):not([style*="display:none"]) {
+    display: grid;
     grid-template-columns: minmax(0, 1.28fr) minmax(20rem, 0.72fr);
     align-items: start;
     gap: 1.5rem !important;

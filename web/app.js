@@ -8,8 +8,8 @@ document.addEventListener('alpine:init', () => {
         // ── Data Stores ─────────────────────────────────────────────
         investments: [],
 
-        // ── Net Worth History (weekly snapshots for real chart) ──────
-        nwHistory: [],   // [{ date: 'YYYY-MM-DD', value: number }]
+        // ── Net Worth History (daily valuation snapshots) ────────────
+        nwHistory: [],   // [{ date: 'YYYY-MM-DD', capturedAt, value, source }]
 
         // Pension is the single source of truth for pension income
         // (Engineering Principle #008: No Data Duplication)
@@ -117,6 +117,7 @@ document.addEventListener('alpine:init', () => {
         navFetchState: 'idle', // 'idle' | 'fetching' | 'done' | 'error'
         navFetchError: '',
         lastNavFetchTime: null,
+        navFetchProgress: { completed: 0, total: 0, updated: 0, failed: 0 },
         mfSearchResults: [],
         isSearchingMf: false,
         mfSearchQuery: '',
@@ -152,8 +153,11 @@ document.addEventListener('alpine:init', () => {
         regenWealth: {
             apiKey:       '',
             provider:     'auto', // 'auto' | 'gemini' | 'openrouter' | 'openai'
-            model:        'google/gemini-2.0-flash-exp:free',
+            model:        'openai/gpt-4o-mini',
             customModel:  '',
+            modelCatalog: [],
+            modelCatalogState: 'idle', // 'idle' | 'loading' | 'ready' | 'error'
+            modelCatalogError: '',
             activeTab:    null,   // 'key' | 'settings' | null
             apiKeySet:    false,
             showKeyInput: false,
@@ -248,13 +252,20 @@ document.addEventListener('alpine:init', () => {
             this.fetchUsdInrRate();
             // Phase 12: Schedule native alerts after data loads (fire-and-forget, non-blocking)
             this.scheduleMaturityAlerts();
-            this.$watch('investments',  () => this.saveData(), { deep: true });
+            this.$watch('investments',  () => {
+                this.saveData({ rescheduleAlerts: true });
+                this.queueNwSnapshot('portfolio-change');
+            }, { deep: true });
             this.$watch('cashflow',     () => this.saveData(), { deep: true });
-            this.$watch('networth',     () => this.saveData(), { deep: true });
+            this.$watch('networth',     () => {
+                this.saveData();
+                this.queueNwSnapshot('balance-change');
+            }, { deep: true });
             this.$watch('emergency',    () => this.saveData(), { deep: true });
             this.$watch('tax',          () => this.saveData(), { deep: true });
             this.$watch('goals',        () => this.saveData(), { deep: true });
             this.$watch('pension',      () => this.saveData(), { deep: true });
+            this.$watch('sips',         () => this.saveData({ rescheduleAlerts: true }), { deep: true });
             // ITR checklist state (UI-only, not persisted)
             this.itrCheckState = {};
 
@@ -264,28 +275,28 @@ document.addEventListener('alpine:init', () => {
                 this.regenWealth.apiKey       = savedKey;
                 this.regenWealth.apiKeySet    = true;
                 this.regenWealth.provider     = localStorage.getItem('rfm_api_provider') || 'auto';
-                this.regenWealth.model        = localStorage.getItem('rfm_api_model') || 'google/gemini-2.0-flash-exp:free';
+                this.regenWealth.model        = localStorage.getItem('rfm_api_model') || 'openai/gpt-4o-mini';
                 this.regenWealth.customModel = localStorage.getItem('rfm_api_custom_model') || '';
             }
-            const cached = window.RegenWealth?.loadCached();
+            const cached = window.RegenWealth?.loadCached(this.$data);
             if (cached) this.regenWealth.analysis = cached;
 
             // Mobile Pull-to-Refresh touch gesture listener initialization
             this.initPullToRefresh();
 
-            // ── Save weekly NW snapshot & render chart after prices settle ──
+            // Record the opening valuation. Subsequent edits and quote syncs update it.
             setTimeout(() => {
-                this.saveNwSnapshot();
+                this.saveNwSnapshot({ source: 'app-open' });
                 this.renderNwChart();
             }, 1500);
         },
 
         // ════════════════════════════════════════════════════════════
-        //  NET WORTH HISTORY — Weekly snapshot engine
+        //  NET WORTH HISTORY — Daily valuation snapshot engine
         // ════════════════════════════════════════════════════════════
 
-        /** Save today's net worth if not already recorded this week */
-        saveNwSnapshot() {
+        /** Store the latest truthful value for today; never invent historical points. */
+        saveNwSnapshot({ source = 'valuation' } = {}) {
             try {
                 const today = new Date().toISOString().slice(0, 10);
                 const nw = this.netWorthTotal;
@@ -293,24 +304,22 @@ document.addEventListener('alpine:init', () => {
 
                 const raw = localStorage.getItem('rfm_nw_history');
                 let history = raw ? JSON.parse(raw) : [];
+                if (!Array.isArray(history)) history = [];
 
-                // Only store one point per calendar week (Monday-keyed)
-                const monday = (() => {
-                    const d = new Date(today);
-                    const day = d.getDay();
-                    const diff = (day === 0 ? -6 : 1 - day);
-                    d.setDate(d.getDate() + diff);
-                    return d.toISOString().slice(0, 10);
-                })();
-
-                // Replace existing point for this week, or append
-                const idx = history.findIndex(p => p.date === monday);
-                const point = { date: monday, value: Math.round(nw) };
+                // Legacy weekly records remain valid observations. New records are daily.
+                history = history.filter(point => point && point.date && Number.isFinite(Number(point.value)));
+                const idx = history.findIndex(point => point.date === today);
+                const point = {
+                    date: today,
+                    capturedAt: new Date().toISOString(),
+                    value: Math.round(nw),
+                    source
+                };
                 if (idx >= 0) history[idx] = point;
                 else history.push(point);
 
-                // Keep 104 weeks (2 years max)
-                history = history.sort((a, b) => a.date.localeCompare(b.date)).slice(-104);
+                // Retain two years of daily values. All points are values the app observed.
+                history = history.sort((a, b) => a.date.localeCompare(b.date)).slice(-730);
                 localStorage.setItem('rfm_nw_history', JSON.stringify(history));
                 this.nwHistory = history;
             } catch (e) {
@@ -326,6 +335,14 @@ document.addEventListener('alpine:init', () => {
             } catch (e) {
                 this.nwHistory = [];
             }
+        },
+
+        queueNwSnapshot(source) {
+            clearTimeout(this._nwSnapshotDebounce);
+            this._nwSnapshotDebounce = setTimeout(() => {
+                this.saveNwSnapshot({ source });
+                this.renderNwChart();
+            }, 300);
         },
 
         /** Active chart time range: '1M' | '3M' | '6M' | '1Y' | 'ALL' */
@@ -346,6 +363,18 @@ document.addEventListener('alpine:init', () => {
             return all.filter(p => new Date(p.date) >= cutoff);
         },
 
+        get nwChartChangePct() {
+            const points = this.nwChartData;
+            if (points.length < 2 || !points[0].value) return null;
+            return ((points[points.length - 1].value - points[0].value) / points[0].value) * 100;
+        },
+
+        get nwChartChangeLabel() {
+            const change = this.nwChartChangePct;
+            if (change === null || !Number.isFinite(change)) return 'Tracking';
+            return `${change >= 0 ? '+' : ''}${change.toFixed(2)}%`;
+        },
+
         /** Render or update the Chart.js net worth chart */
         renderNwChart() {
             const canvas = document.getElementById('nwChartCanvas');
@@ -353,14 +382,12 @@ document.addEventListener('alpine:init', () => {
 
             this.loadNwHistory();
 
-            // If only 1 point, duplicate to show a flat line
+            // A single observation is displayed as a point, not a fabricated flat line.
             let data = [...(this.nwChartData.length ? this.nwChartData : this.nwHistory)];
             if (data.length === 0) {
-                // Seed with today's value so chart is never empty
                 const today = new Date().toISOString().slice(0, 10);
                 data = [{ date: today, value: Math.round(this.netWorthTotal) }];
             }
-            if (data.length === 1) data = [data[0], data[0]];
 
             const labels = data.map(p => {
                 const d = new Date(p.date);
@@ -370,7 +397,8 @@ document.addEventListener('alpine:init', () => {
 
             const minVal = Math.min(...values);
             const maxVal = Math.max(...values);
-            const trend  = values[values.length - 1] >= values[0];
+            const padding = Math.max(Math.abs(maxVal) * 0.02, 1);
+            const trend  = data.length < 2 || values[values.length - 1] >= values[0];
 
             // Destroy existing chart instance if present
             if (window._rfmNwChart) {
@@ -394,7 +422,8 @@ document.addEventListener('alpine:init', () => {
                         backgroundColor: gradient,
                         fill: true,
                         tension: 0.45,
-                        pointRadius: 0,
+                        showLine: data.length > 1,
+                        pointRadius: data.length === 1 ? 4 : 0,
                         pointHoverRadius: 5,
                         pointHoverBackgroundColor: trend ? '#a7b8ff' : '#f87171',
                     }]
@@ -430,8 +459,8 @@ document.addEventListener('alpine:init', () => {
                         },
                         y: {
                             display: false,
-                            min: Math.max(0, minVal * 0.95),
-                            max: maxVal * 1.05,
+                            min: Math.max(0, minVal - padding),
+                            max: maxVal + padding,
                             grid: { display: false }
                         }
                     }
@@ -630,6 +659,7 @@ document.addEventListener('alpine:init', () => {
                     this.investments = p.investments || [];
                     this.goals       = p.goals       || [];
                     this.sips        = p.sips        || [];
+                    this.lastNavFetchTime = p.lastNavFetchTime || null;
 
                     if (p.pension) {
                         this.pension = { ...this.pension, ...p.pension };
@@ -657,6 +687,10 @@ document.addEventListener('alpine:init', () => {
                 } catch (e) {
                     console.error('Failed to parse saved RFM data:', e);
                 }
+
+                // Saved financial records belong to the user. Never rewrite holdings at startup.
+                this.checkSipDebits();
+                return;
 
                 // ── Auto-Migration Pass: Calibrate exact INDMoney holdings ──
                 let hasDram = false;
@@ -836,13 +870,13 @@ document.addEventListener('alpine:init', () => {
                 return;
             }
 
-            // If no saved data exists, seed actual real-world portfolio from JARVIS memory
-            this.loadActualPortfolio();
+            // A new user starts with an empty, explicit portfolio rather than another user's demo data.
+            this.saveData();
         },
 
-        saveData() {
+        saveData({ rescheduleAlerts = false } = {}) {
             localStorage.setItem('rfm_v1', JSON.stringify({
-                version:     '2.0',
+                version:     '3.0',
                 investments: this.investments,
                 pension:     this.pension,
                 cashflow:    this.cashflow,
@@ -850,12 +884,14 @@ document.addEventListener('alpine:init', () => {
                 emergency:   this.emergency,
                 tax:         this.tax,
                 goals:       this.goals,
-                sips:        this.sips
+                sips:        this.sips,
+                lastNavFetchTime: this.lastNavFetchTime
             }));
-            // Phase 12: Re-schedule native alerts whenever portfolio data changes
-            // Debounced via a short delay to avoid hammering the plugin on rapid edits
-            clearTimeout(this._alertDebounce);
-            this._alertDebounce = setTimeout(() => this.scheduleMaturityAlerts(), 2000);
+            // Notification work is native and expensive. Only holdings/SIP changes need it.
+            if (rescheduleAlerts) {
+                clearTimeout(this._alertDebounce);
+                this._alertDebounce = setTimeout(() => this.scheduleMaturityAlerts(), 2000);
+            }
         },
 
         // ════════════════════════════════════════════════════════════
@@ -2150,36 +2186,8 @@ document.addEventListener('alpine:init', () => {
         },
 
         async fetchLivePrices() {
-            if (this.investments.length === 0) return;
-            this.refreshingLivePrices = true;
-            this.livePriceMsg = 'Fetching live prices...';
-            let updatedCount = 0;
-
-            for (let inv of this.investments) {
-                const isEquity = ['Stock', 'Equity', 'Mutual Fund', 'ETF'].includes(inv.type);
-                if (!isEquity && !inv.ticker && !inv.isin) continue;
-
-                try {
-                    const newPrice = await this.fetchSingleLivePrice(inv);
-                    if (newPrice && newPrice > 0) {
-                        inv.currentPrice = newPrice;
-                        inv.nav          = newPrice;
-                        inv.lastUpdated  = new Date().toISOString();
-                        if (inv.units > 0) {
-                            inv.currentValue = inv.units * newPrice;
-                            inv.amount       = inv.currentValue;
-                        }
-                        updatedCount++;
-                    }
-                } catch (e) {
-                    console.warn(`Failed to update live price for ${inv.name}:`, e);
-                }
-            }
-
-            this.investments = [...this.investments];
-            this.refreshingLivePrices = false;
-            this.livePriceMsg = updatedCount > 0 ? `Updated ${updatedCount} asset prices!` : 'No prices found to update.';
-            setTimeout(() => { this.livePriceMsg = ''; }, 4000);
+            // Keep pull-to-refresh and the Portfolio button on one implementation.
+            await this.fetchAllPrices();
         },
 
         async fetchSingleLivePrice(inv) {
@@ -2824,121 +2832,125 @@ RULES: Return ONLY valid JSON. No markdown, no explanation. If a field is unknow
             this.mfSearchQuery = '';
         },
 
-        // Fetch single Mutual Fund NAV or Stock Price
+        async fetchJsonWithTimeout(url, timeoutMs = 4500) {
+            const controller = typeof AbortController === 'function' ? new AbortController() : null;
+            const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
+            try {
+                const response = await fetch(url, controller ? { signal: controller.signal } : undefined);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                return await response.json();
+            } finally {
+                if (timer) clearTimeout(timer);
+            }
+        },
+
+        // Fetch one instrument. A mutual fund must use an explicitly chosen AMFI scheme.
         async fetchSinglePrice(inv) {
             if (!inv) return null;
 
-            // 1. Mutual Fund via AMFI API (with auto-resolving scheme code fallback)
             if (inv.type === 'Mutual Fund' || inv.schemeCode) {
-                // If schemeCode is missing, perform dynamic AMFI lookup by name
-                if (!inv.schemeCode && inv.name) {
-                    try {
-                        const searchRes = await fetch(`https://api.mfapi.in/mf/search?q=${encodeURIComponent(inv.name.trim())}`);
-                        if (searchRes.ok) {
-                            const schemes = await searchRes.json();
-                            // Pick Direct Plan Growth if possible, else first match
-                            const directGrowth = (schemes || []).find(s =>
-                                (s.schemeName || '').toLowerCase().includes('direct') &&
-                                (s.schemeName || '').toLowerCase().includes('growth')
-                            ) || schemes?.[0];
-
-                            if (directGrowth) {
-                                inv.schemeCode = String(directGrowth.schemeCode);
-                            }
-                        }
-                    } catch (e) {}
+                if (!inv.schemeCode) {
+                    throw new Error(`${inv.name || 'Mutual fund'} needs an AMFI scheme code before it can be synced.`);
                 }
 
-                if (inv.schemeCode) {
-                    try {
-                        const res = await fetch(`https://api.mfapi.in/mf/${inv.schemeCode}`);
-                        if (res.ok) {
-                            const data = await res.json();
-                            const latest = data?.data?.[0];
-                            if (latest && latest.nav) {
-                                const newNav = parseFloat(latest.nav);
-                                inv.currentPrice = newNav;
-                                if (Number(inv.units) > 0) {
-                                    inv.currentValue = Math.round(Number(inv.units) * newNav * 100) / 100;
-                                }
-                                inv.lastNavUpdate = new Date().toISOString();
-                                return newNav;
-                            }
-                        }
-                    } catch (e) {
-                        console.warn(`Failed to fetch NAV for scheme ${inv.schemeCode}:`, e);
+                const data = await this.fetchJsonWithTimeout(`https://api.mfapi.in/mf/${encodeURIComponent(inv.schemeCode)}`);
+                const newNav = Number(data?.data?.[0]?.nav);
+                if (!Number.isFinite(newNav) || newNav <= 0) throw new Error('No valid NAV was returned.');
+
+                inv.currentPrice = newNav;
+                if (Number(inv.units) > 0) {
+                    inv.currentValue = Math.round(Number(inv.units) * newNav * 100) / 100;
+                }
+                inv.lastNavUpdate = new Date().toISOString();
+                return newNav;
+            }
+
+            if (!inv.ticker) return null;
+
+            const isUS = inv.type === 'Stock (US)' || inv.type === 'ETF (US)' || inv.currency === 'USD';
+            const cleanSymbol = inv.ticker.trim().toUpperCase().replace(/\.(NS|BO)$/, '');
+            const querySymbol = isUS ? cleanSymbol : `${cleanSymbol}.NS`;
+            const targetUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(querySymbol)}?interval=1d&range=5d`;
+            const endpoints = [
+                targetUrl,
+                `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`,
+                `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`
+            ];
+
+            let lastError = null;
+            for (const url of endpoints) {
+                try {
+                    const data = await this.fetchJsonWithTimeout(url);
+                    const meta = data?.chart?.result?.[0]?.meta;
+                    const price = Number(meta?.regularMarketPrice || meta?.chartPreviousClose);
+                    if (!Number.isFinite(price) || price <= 0) throw new Error('No valid market price was returned.');
+
+                    inv.currentPrice = price;
+                    inv.currency = isUS ? 'USD' : 'INR';
+                    const priceInInr = price * (isUS ? (this.usdInrRate || 95.74) : 1);
+                    if (Number(inv.units) > 0) {
+                        inv.currentValue = Math.round(Number(inv.units) * priceInInr * 100) / 100;
                     }
+                    inv.lastNavUpdate = new Date().toISOString();
+                    return price;
+                } catch (error) {
+                    lastError = error;
                 }
             }
 
-            // 2. Stock / ETF via Yahoo Finance chart API (with CORS proxy resilience)
-            if (inv.ticker) {
-                const isUS = (inv.type === 'Stock (US)' || inv.type === 'ETF (US)');
-                const cleanSymbol = inv.ticker.trim().toUpperCase().replace(/\.NS$|\.BO$/, '');
-                const querySymbol = isUS ? cleanSymbol : `${cleanSymbol}.NS`;
-
-                const endpoints = [
-                    `https://corsproxy.io/?https://query1.finance.yahoo.com/v8/finance/chart/${querySymbol}`,
-                    `https://api.allorigins.win/raw?url=${encodeURIComponent(`https://query1.finance.yahoo.com/v8/finance/chart/${querySymbol}`)}`,
-                    `https://query1.finance.yahoo.com/v8/finance/chart/${querySymbol}`
-                ];
-
-                for (const url of endpoints) {
-                    try {
-                        const res = await fetch(url);
-                        if (res.ok) {
-                            const data = await res.json();
-                            const meta = data.chart?.result?.[0]?.meta;
-                            const price = meta?.regularMarketPrice || meta?.chartPreviousClose;
-                            if (price && price > 0) {
-                                inv.currentPrice = price;
-                                inv.currency = isUS ? 'USD' : 'INR';
-
-                                // Currency conversion to INR for portfolio total valuation
-                                const usdRate = isUS ? (this.usdInrRate || 95.74) : 1;
-                                const priceInINR = price * usdRate;
-
-                                if (Number(inv.units) > 0) {
-                                    inv.currentValue = Math.round(Number(inv.units) * priceInINR * 100) / 100;
-                                }
-                                inv.lastNavUpdate = new Date().toISOString();
-                                return price;
-                            }
-                        }
-                    } catch (e) {
-                        continue;
-                    }
-                }
-            }
-
-            return null;
+            throw lastError || new Error('No price provider responded.');
         },
 
-        // Fetch live NAVs & prices for ALL eligible holdings in portfolio
+        // Refresh eligible holdings concurrently with a small worker pool to protect public data APIs.
         async fetchAllPrices() {
+            if (this.navFetchState === 'fetching') return;
+
+            const holdings = (this.investments || []).filter(inv => inv.schemeCode || inv.ticker || inv.type === 'Mutual Fund');
+            if (!holdings.length) {
+                this.navFetchState = 'done';
+                this.navFetchError = 'Add a ticker or AMFI scheme code to sync a holding.';
+                return;
+            }
+
             this.navFetchState = 'fetching';
             this.navFetchError = '';
+            this.navFetchProgress = { completed: 0, total: holdings.length, updated: 0, failed: 0 };
 
-            // 1. Refresh live USD/INR FX exchange rate first
-            await this.fetchUsdInrRate();
-
-            let updatedCount = 0;
             try {
-                for (const inv of (this.investments || [])) {
-                    if (inv.schemeCode || inv.ticker || inv.type === 'Mutual Fund') {
-                        const updatedPrice = await this.fetchSinglePrice(inv);
-                        if (updatedPrice) updatedCount++;
-                        await new Promise(r => setTimeout(r, 200));
+                await this.fetchUsdInrRate();
+                let nextIndex = 0;
+                const failures = [];
+                const worker = async () => {
+                    while (nextIndex < holdings.length) {
+                        const index = nextIndex++;
+                        const investment = holdings[index];
+                        try {
+                            const price = await this.fetchSinglePrice(investment);
+                            if (price) this.navFetchProgress.updated += 1;
+                            else failures.push(`${investment.name || investment.ticker}: no price returned`);
+                        } catch (error) {
+                            this.navFetchProgress.failed += 1;
+                            failures.push(`${investment.name || investment.ticker}: ${error.message || 'sync failed'}`);
+                        } finally {
+                            this.navFetchProgress.completed += 1;
+                        }
                     }
-                }
+                };
+
+                const workerCount = Math.min(3, holdings.length);
+                await Promise.all(Array.from({ length: workerCount }, worker));
 
                 this.lastNavFetchTime = new Date().toISOString();
-                this.navFetchState = 'done';
+                this.investments = [...this.investments];
+                this.saveNwSnapshot({ source: 'price-sync' });
+                this.renderNwChart();
                 this.saveData();
-            } catch (err) {
-                console.error('Error fetching live prices:', err);
+                this.navFetchState = failures.length === holdings.length ? 'error' : 'done';
+                this.navFetchError = failures.length ? failures.slice(0, 2).join(' | ') : '';
+            } catch (error) {
+                console.error('Error fetching live prices:', error);
                 this.navFetchState = 'error';
-                this.navFetchError = 'Failed to sync some prices. Please try again.';
+                this.navFetchError = 'Price sync could not start. Check your connection and retry.';
             }
         },
 
@@ -3060,8 +3072,49 @@ RULES: Return ONLY valid JSON. No markdown, no explanation. If a field is unknow
         //  REGENERATIVE WEALTH METHODS
         // ════════════════════════════════════════════════════════════
 
+        getActiveRegenModel() {
+            const model = this.regenWealth.model === 'custom'
+                ? this.regenWealth.customModel
+                : this.regenWealth.model;
+            return (model || '').trim();
+        },
+
+        async loadRegenModelCatalog() {
+            const key = (this.regenWealth.apiKey || '').trim();
+            const provider = this.regenWealth.provider === 'auto'
+                ? window.RegenWealth?.detectProvider(key)
+                : this.regenWealth.provider;
+
+            if (provider !== 'openrouter') {
+                this.regenWealth.modelCatalog = [];
+                this.regenWealth.modelCatalogState = 'idle';
+                this.regenWealth.modelCatalogError = 'The live catalog is available for OpenRouter keys only.';
+                return;
+            }
+
+            this.regenWealth.modelCatalogState = 'loading';
+            this.regenWealth.modelCatalogError = '';
+            try {
+                const data = await this.fetchJsonWithTimeout(
+                    'https://openrouter.ai/api/v1/models?output_modalities=text&sort=latency-low-to-high',
+                    6000
+                );
+                const models = (data?.data || [])
+                    .filter(model => model?.id && model?.name)
+                    .slice(0, 120)
+                    .map(model => ({ id: model.id, name: model.name }));
+                if (!models.length) throw new Error('No text models were returned.');
+
+                this.regenWealth.modelCatalog = models;
+                this.regenWealth.modelCatalogState = 'ready';
+            } catch (error) {
+                this.regenWealth.modelCatalogState = 'error';
+                this.regenWealth.modelCatalogError = 'Could not load the live OpenRouter catalog. Use a custom model ID or retry.';
+            }
+        },
+
         // Save API key & provider/model settings
-        saveRegenApiKey() {
+        saveRegenApiKey(closePanel = true) {
             const key = (this.regenWealth.apiKey || '').trim();
             if (key.length < 10) {
                 this.regenWealth.error = 'Please enter a valid API key (OpenRouter, Gemini, or OpenAI).';
@@ -3070,13 +3123,14 @@ RULES: Return ONLY valid JSON. No markdown, no explanation. If a field is unknow
             localStorage.setItem('rfm_api_key', key);
             localStorage.setItem('rfm_gemini_key', key); // Backward compatibility
             localStorage.setItem('rfm_api_provider', this.regenWealth.provider || 'auto');
-            localStorage.setItem('rfm_api_model', this.regenWealth.model || 'google/gemini-2.0-flash-001');
+            localStorage.setItem('rfm_api_model', this.regenWealth.model || 'openai/gpt-4o-mini');
             localStorage.setItem('rfm_api_custom_model', this.regenWealth.customModel || '');
 
             this.regenWealth.apiKeySet    = true;
             this.regenWealth.showKeyInput = false;
-            this.regenWealth.activeTab    = null; // Close key panel on save
+            if (closePanel) this.regenWealth.activeTab = null;
             this.regenWealth.error        = '';
+            this.loadRegenModelCatalog();
         },
 
         // Remove stored API key & settings
@@ -3116,7 +3170,13 @@ RULES: Return ONLY valid JSON. No markdown, no explanation. If a field is unknow
             this.regenWealth.error       = '';
             this.regenWealth.progressMsg = 'Starting analysis...';
 
-            const activeModel = this.regenWealth.model === 'custom' ? this.regenWealth.customModel : this.regenWealth.model;
+            const activeModel = this.getActiveRegenModel();
+            if (!activeModel) {
+                this.regenWealth.error = 'Choose a model from the live catalog or enter a custom model ID.';
+                this.regenWealth.loading = false;
+                this.regenWealth.progressMsg = '';
+                return;
+            }
 
             try {
                 const result = await window.RegenWealth.analyze(

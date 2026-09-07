@@ -1,17 +1,15 @@
 // ══════════════════════════════════════════════════════════════════════════════
 // regenWealth.js — Regenerative Wealth Analysis Engine
 // Architecture Layer : Intelligence / Advisory Layer
-// Depends on        : Gemini 2.0 Flash API, rss2json.com (free tier)
-// No backend needed : runs 100% in the browser
+// Depends on        : OpenRouter-compatible or direct LLM API, RSS bridge
+// Client mode is suitable for a personal prototype. Production needs a secure backend.
 // ══════════════════════════════════════════════════════════════════════════════
 
 window.RegenWealth = (() => {
 
     // ── Constants ──────────────────────────────────────────────────────────────
-    const GEMINI_ENDPOINT =
-        'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
     const CACHE_KEY    = 'rfm_regen_cache';
-    const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+    const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // Six hours, and invalidated on portfolio changes.
 
     // Free RSS → JSON bridge (500 req/day free, no key needed)
     const RSS2JSON = 'https://api.rss2json.com/v1/api.json?count=8&rss_url=';
@@ -39,7 +37,7 @@ window.RegenWealth = (() => {
         try {
             const res = await fetch(
                 RSS2JSON + encodeURIComponent(feed.url),
-                { signal: AbortSignal.timeout(9000) }
+                { signal: AbortSignal.timeout(4500) }
             );
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
             const data = await res.json();
@@ -56,61 +54,94 @@ window.RegenWealth = (() => {
     }
 
     // ── Portfolio Snapshot Builder ─────────────────────────────────────────────
-    // Distills the Alpine appData state into a lean, token-efficient object
-    // suitable for inclusion in the Gemini prompt.
+    // Distills app state into a lean snapshot with values calculated from holdings,
+    // rather than from stale display fields.
     function buildPortfolioSnapshot(appData) {
         const investments = appData.investments || [];
+        const fxRate = Number(appData.usdInrRate) || 1;
+        const number = value => Number(value) || 0;
+        const isUsdHolding = investment => investment.currency === 'USD'
+            || investment.type === 'Stock (US)'
+            || investment.type === 'ETF (US)';
+        const holdingCost = investment => {
+            if (number(investment.units) > 0 && number(investment.buyPrice) > 0) {
+                return number(investment.units) * number(investment.buyPrice) * (isUsdHolding(investment) ? fxRate : 1);
+            }
+            return number(investment.amount);
+        };
+        const holdingValue = investment => {
+            if (number(investment.units) > 0 && number(investment.currentPrice) > 0) {
+                return number(investment.units) * number(investment.currentPrice) * (isUsdHolding(investment) ? fxRate : 1);
+            }
+            return number(investment.currentValue) || number(investment.amount);
+        };
 
-        // Total capital deployed
-        const totalInvested = investments.reduce(
-            (s, i) => s + (parseFloat(i.amount) || 0), 0
-        );
+        const holdings = investments.map(investment => {
+            const cost = holdingCost(investment);
+            const value = holdingValue(investment);
+            const pnl = value - cost;
+            return {
+                name: investment.name || investment.ticker || 'Unnamed holding',
+                type: investment.type || 'Other',
+                ticker: investment.ticker || '',
+                invested: Math.round(cost),
+                marketValue: Math.round(value),
+                pnl: Math.round(pnl),
+                pnlPct: cost > 0 ? Number(((pnl / cost) * 100).toFixed(2)) : 0,
+                lastUpdated: investment.lastNavUpdate || ''
+            };
+        });
+        const totalInvested = holdings.reduce((sum, holding) => sum + holding.invested, 0);
+        const totalMarketValue = holdings.reduce((sum, holding) => sum + holding.marketValue, 0);
 
-        // Per-asset-class breakdown ₹ and %
         const breakdown = {};
-        investments.forEach(inv => {
-            const t = inv.type || 'Other';
-            breakdown[t] = (breakdown[t] || 0) + (parseFloat(inv.amount) || 0);
+        holdings.forEach(holding => {
+            breakdown[holding.type] = (breakdown[holding.type] || 0) + holding.marketValue;
         });
         const allocationPct = {};
         Object.entries(breakdown).forEach(([type, amt]) => {
-            allocationPct[type] = totalInvested > 0
-                ? Math.round((amt / totalInvested) * 100)
+            allocationPct[type] = totalMarketValue > 0
+                ? Math.round((amt / totalMarketValue) * 100)
                 : 0;
         });
 
-        // Concentration risk flags (anything >40% of portfolio)
         const concentrationRisks = Object.entries(allocationPct)
             .filter(([, pct]) => pct > 40)
             .map(([type, pct]) => `${type} (${pct}%)`);
 
-        // Monthly income / expense / surplus
-        const pension     = appData.pension?.monthlyAmount || 0;
+        const pension = number(appData.pension?.monthlyAmount);
         const cf          = appData.cashflow || {};
-        const totalIncome = pension + (cf.project || 0) + (cf.otherIncome || 0);
-        const totalExpense = (cf.housing || 0) + (cf.food || 0)
-                           + (cf.medical || 0) + (cf.otherExpense || 0);
+        const incomeStreams = Array.isArray(cf.incomes) ? cf.incomes : [];
+        const expenseStreams = Array.isArray(cf.expenses) ? cf.expenses : [];
+        const streamedIncome = incomeStreams.reduce((sum, stream) => sum + number(stream.amount), 0);
+        const hasPensionStream = incomeStreams.some(stream => (stream.category || '').toLowerCase() === 'pension');
+        const totalIncome = incomeStreams.length
+            ? streamedIncome + (hasPensionStream ? 0 : pension)
+            : pension + number(cf.project) + number(cf.otherIncome);
+        const totalExpense = expenseStreams.length
+            ? expenseStreams.reduce((sum, stream) => sum + number(stream.amount), 0)
+            : number(cf.housing) + number(cf.food) + number(cf.medical) + number(cf.otherExpense);
         const monthlySurplus = totalIncome - totalExpense;
 
-        // Net worth
         const nw = appData.networth || {};
-        const totalAssets      = (nw.bank || 0) + (nw.cash || 0)
-                               + (nw.property || 0) + (nw.otherAsset || 0)
-                               + totalInvested;
-        const totalLiabilities = (nw.homeLoan || 0) + (nw.personalLoan || 0)
-                               + (nw.credit || 0) + (nw.otherDebt || 0);
+        const totalAssets      = number(nw.bank) + number(nw.cash)
+                               + number(nw.property) + number(nw.otherAsset)
+                               + totalMarketValue;
+        const totalLiabilities = number(nw.homeLoan) + number(nw.personalLoan)
+                               + number(nw.creditCard || nw.credit) + number(nw.otherLiability || nw.otherDebt);
 
-        // Emergency fund adequacy
         const ef = appData.emergency || {};
-        const efTarget         = (ef.efMonthly || 0) * (ef.efMonths || 12);
-        const efCurrent        = ef.efCurrent || 0;
-        const efCoverageMonths = ef.efMonthly > 0
-            ? Math.round(efCurrent / ef.efMonthly)
+        const efTarget = number(ef.efMonthly) * number(ef.efMonths || 12);
+        const efCurrent = number(ef.efCurrent);
+        const efCoverageMonths = number(ef.efMonthly) > 0
+            ? Math.round(efCurrent / number(ef.efMonthly))
             : 0;
 
         return {
             totalInvested,
+            totalMarketValue,
             holdingsCount: investments.length,
+            holdings: holdings.sort((a, b) => b.marketValue - a.marketValue).slice(0, 25),
             allocationPct,
             breakdown,
             concentrationRisks,
@@ -124,20 +155,22 @@ window.RegenWealth = (() => {
             efCoverageMonths,
             efTarget,
             efCurrent,
-            efMonthlyNeeded: ef.efMonthly || 0,
+            efMonthlyNeeded: number(ef.efMonthly),
             taxRegime:   appData.tax?.regime || 'new',
             is80CUsed:   (appData.tax?.deduction80C || 0) > 0,
             goals: (appData.goals || []).map(g => ({
                 name:    g.name,
-                target:  g.target,
-                current: g.current
-            }))
+                target:  number(g.target),
+                current: number(g.current),
+                gap: Math.max(0, number(g.target) - number(g.current))
+            })),
+            lastPriceSync: appData.lastNavFetchTime || '',
+            capturedAt: new Date().toISOString()
         };
     }
 
     // ── Prompt Builder ─────────────────────────────────────────────────────────
-    // Constructs a structured Gemini prompt combining the portfolio snapshot
-    // with live macro headlines. Requests strict JSON output.
+    // Constructs structured decision support from the current portfolio and verified headlines.
     function buildPrompt(snapshot, newsFeeds) {
         const fmt = n => Number(n || 0).toLocaleString('en-IN');
 
@@ -145,6 +178,9 @@ window.RegenWealth = (() => {
         const allocationLines = Object.entries(snapshot.allocationPct)
             .map(([t, pct]) => `  - ${t}: ${pct}% (₹${fmt(snapshot.breakdown[t])})`)
             .join('\n') || '  - No investments recorded yet';
+        const holdingLines = snapshot.holdings
+            .map(holding => `  - ${holding.name}${holding.ticker ? ` (${holding.ticker})` : ''}: invested ₹${fmt(holding.invested)}, current ₹${fmt(holding.marketValue)}, P&L ${holding.pnlPct >= 0 ? '+' : ''}${holding.pnlPct}%`)
+            .join('\n') || '  - No holdings recorded yet';
 
         // News headlines block
         const newsSections = newsFeeds
@@ -153,13 +189,16 @@ window.RegenWealth = (() => {
             .join('\n\n');
         const hasNews = newsSections.length > 0;
 
-        return `You are a senior Indian financial advisor specialising in retirement wealth management for senior citizens. Your role is to analyse the user's current portfolio alongside live macroeconomic signals and suggest where they should invest next.
+        return `You are a financial-planning decision-support assistant for an Indian investor. Analyse the supplied portfolio precisely. Do not pretend to have live prices, news, tax facts, or account data that were not supplied.
 
 ## USER PORTFOLIO PROFILE
 - **Total Invested:** ₹${fmt(snapshot.totalInvested)}
+- **Current Portfolio Market Value:** ₹${fmt(snapshot.totalMarketValue)}
 - **Number of Holdings:** ${snapshot.holdingsCount}
 - **Asset Allocation:**
 ${allocationLines}
+- **Largest Holdings:**
+${holdingLines}
 - **Concentration Risks:** ${snapshot.concentrationRisks.length > 0 ? snapshot.concentrationRisks.join(', ') : 'None detected'}
 - **Monthly Pension Income:** ₹${fmt(snapshot.monthlyPension)}
 - **Monthly Total Income:** ₹${fmt(snapshot.monthlyIncome)}
@@ -172,20 +211,21 @@ ${allocationLines}
 - **Active Financial Goals:** ${snapshot.goals.length > 0 ? snapshot.goals.map(g => `${g.name} (target ₹${fmt(g.target)}, saved ₹${fmt(g.current)})`).join('; ') : 'None set'}
 
 ${hasNews
-    ? `## LIVE MARKET INTELLIGENCE (real-time news headlines)\n${newsSections}`
-    : '## MARKET CONTEXT\nUsing current general knowledge of Indian financial markets (July 2026).'}
+    ? `## VERIFIED MARKET CONTEXT (headlines may be incomplete)\n${newsSections}`
+    : '## MARKET CONTEXT\nNo verified market headlines loaded. Keep the analysis portfolio-specific and say that macro context is unavailable.'}
 
 ## INSTRUCTIONS
-1. Identify 4–6 specific, actionable investment opportunities ranked by urgency.
-2. Prioritise capital preservation and stable income (senior citizen, fixed-income profile).
-3. Consider Indian-specific instruments: Senior Citizen Savings Scheme (SCSS), Sovereign Gold Bonds (SGBs), RBI Floating Rate Bonds, PMVVY, NPS Tier 2, Debt Mutual Funds, REITs.
-4. Leverage tax-efficient options: 80C, 80D, 80TTB (senior), Section 24 interest deduction.
-5. Base suggested allocation amounts on the monthly surplus (₹${fmt(snapshot.monthlySurplus)}/month).
-6. Justify each recommendation by connecting a specific macro signal from the headlines to a portfolio gap.
+1. Identify 4–6 decisions ranked by urgency, each anchored to a holding, cash-flow figure, goal, liquidity gap, or supplied headline.
+2. Explain the evidence and trade-off for every recommendation. Do not repeat generic diversification advice.
+3. Prioritise emergency liquidity, debt, concentration, drawdown, tax planning, and goals before return seeking.
+4. Treat instruments as examples to research, not instructions to buy or sell. Flag items that need a SEBI-registered adviser or tax professional.
+5. Tie any allocation range to the actual monthly surplus of ₹${fmt(snapshot.monthlySurplus)} and distinguish recurring from one-time actions.
+6. If market context is unavailable, do not invent a macro rationale. State the limitation.
+7. Include at least one measurable next review trigger, such as a rebalance threshold, cash reserve target, or tax deadline to verify.
 
 ## REQUIRED OUTPUT FORMAT — respond ONLY with valid JSON, no markdown fences:
 {
-  "macroContext": "2–3 sentence summary of current Indian macro conditions relevant to a senior investor",
+  "macroContext": "2–3 sentence summary using only supplied market context, or clearly state that no verified macro context was available",
   "marketSentiment": "Bullish|Bearish|Neutral|Cautiously Optimistic",
   "portfolioHealthScore": 0-100,
   "portfolioHealthNote": "One sentence on overall portfolio health",
@@ -195,13 +235,13 @@ ${hasNews
       "id": "r1",
       "assetClass": "Gold|Bonds|Fixed Deposits|Mutual Funds|Equity|Real Estate|Sovereign Gold Bonds|PPF|SCSS|NPS|RBI Bonds|REITs|Other",
       "priority": "High|Medium|Low",
-      "title": "Short actionable title (max 8 words)",
-      "rationale": "2–3 sentences connecting a macro signal to a portfolio gap",
+      "title": "Short decision-support title (max 8 words)",
+      "rationale": "2–3 sentences citing a portfolio fact or supplied headline and its trade-off",
       "suggestedAllocation": "₹X – ₹Y (e.g. ₹25,000 – ₹50,000)",
       "timeHorizon": "e.g. 6–18 months",
       "risk": "Very Low|Low|Moderate|High",
       "urgencyScore": 0-100,
-      "specificInstruments": ["Instrument name 1", "Instrument name 2"]
+      "specificInstruments": ["Examples to research, or an adviser question"]
     }
   ]
 }`;
@@ -218,7 +258,14 @@ ${hasNews
         try {
             return JSON.parse(clean);
         } catch (e) {
-            throw new Error(`Could not parse AI response as JSON: ${e.message}`);
+            const firstBrace = clean.indexOf('{');
+            const lastBrace = clean.lastIndexOf('}');
+            if (firstBrace >= 0 && lastBrace > firstBrace) {
+                try {
+                    return JSON.parse(clean.slice(firstBrace, lastBrace + 1));
+                } catch (_) {}
+            }
+            throw new Error(`The selected model did not return usable JSON. Choose another model or retry: ${e.message}`);
         }
     }
 
@@ -229,6 +276,23 @@ ${hasNews
         if (key.startsWith('AIza')) return 'gemini';
         if (key.startsWith('sk-')) return 'openai';
         return 'openrouter'; // Default fallback for OpenRouter or custom proxy keys
+    }
+
+    function modelForProvider(model, provider) {
+        const value = (model || '').trim();
+        if (provider === 'openai') return value.replace(/^openai\//, '') || 'gpt-4o-mini';
+        if (provider === 'gemini') return value.replace(/^google\//, '') || 'gemini-2.0-flash';
+        return value || 'openai/gpt-4o-mini';
+    }
+
+    async function fetchWithTimeout(url, options, timeoutMs = 45000) {
+        const controller = typeof AbortController === 'function' ? new AbortController() : null;
+        const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
+        try {
+            return await fetch(url, { ...options, ...(controller ? { signal: controller.signal } : {}) });
+        } finally {
+            if (timer) clearTimeout(timer);
+        }
     }
 
     // ── Universal Multi-Provider LLM Caller ────────────────────────────────────
@@ -248,72 +312,46 @@ ${hasNews
 
         // 1. OpenRouter API Call
         if (provider === 'openrouter') {
-            const rawModel = options.model || 'google/gemini-2.0-flash-001';
-            
-            async function doOpenRouterCall(modelSlug) {
-                const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-                    method:  'POST',
-                    headers: {
-                        'Content-Type':  'application/json',
-                        'Authorization': `Bearer ${key}`,
-                        'HTTP-Referer':  'https://github.com/Swarajnegi/dadfinanceapp',
-                        'X-Title':       'RFM Portfolio Advisor'
-                    },
-                    body: JSON.stringify({
-                        model: modelSlug,
-                        messages: [
-                            { role: 'system', content: 'You are an expert Indian financial advisor. Output ONLY valid JSON.' },
-                            { role: 'user', content: prompt }
-                        ],
-                        response_format: { type: 'json_object' },
-                        temperature: temperature
-                    })
-                });
+            const model = modelForProvider(options.model, provider);
+            const res = await fetchWithTimeout('https://openrouter.ai/api/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${key}`,
+                    'HTTP-Referer': 'https://github.com/Swarajnegi/dadfinanceapp',
+                    'X-Title': 'RFM Portfolio Advisor'
+                },
+                body: JSON.stringify({
+                    model,
+                    messages: [
+                        { role: 'system', content: 'Return only the requested JSON. Provide precise financial-planning decision support, not trading instructions.' },
+                        { role: 'user', content: prompt }
+                    ],
+                    temperature
+                })
+            });
 
-                if (!res.ok) {
-                    const errBody = await res.json().catch(() => ({}));
-                    const msg = errBody?.error?.message || `HTTP ${res.status}`;
-
-                    // Auto-fix 1: If error suggests a specific paid slug, retry automatically with suggested slug
-                    if (msg.includes('use this slug instead:')) {
-                        const match = msg.match(/use this slug instead:\s*([a-zA-Z0-9\/\.\:\_-]+)/i);
-                        if (match && match[1] && match[1] !== modelSlug) {
-                            console.warn(`[RegenWealth] Retrying OpenRouter with suggested slug: ${match[1]}`);
-                            return await doOpenRouterCall(match[1].trim());
-                        }
-                    }
-
-                    // Auto-fix 2: If model slug ends with :free, strip :free and retry
-                    if (modelSlug.endsWith(':free')) {
-                        const cleanSlug = modelSlug.replace(':free', '');
-                        console.warn(`[RegenWealth] Retrying OpenRouter with clean slug: ${cleanSlug}`);
-                        return await doOpenRouterCall(cleanSlug);
-                    }
-
-                    // Auto-fix 3: Fallback retry with google/gemini-2.0-flash-001
-                    if (modelSlug !== 'google/gemini-2.0-flash-001') {
-                        console.warn('[RegenWealth] Retrying OpenRouter with fallback model google/gemini-2.0-flash-001');
-                        return await doOpenRouterCall('google/gemini-2.0-flash-001');
-                    }
-
-                    if (res.status === 401) throw new Error('Invalid OpenRouter API key. Check key at openrouter.ai/keys');
-                    if (res.status === 402) throw new Error('OpenRouter credits depleted. Please top up your account.');
-                    if (res.status === 429) throw new Error('OpenRouter rate limit hit. Please retry in 30 seconds.');
-                    throw new Error(`OpenRouter API error: ${msg}`);
+            if (!res.ok) {
+                const errBody = await res.json().catch(() => ({}));
+                const msg = errBody?.error?.message || `HTTP ${res.status}`;
+                const message = msg.toLowerCase();
+                if (res.status === 401) throw new Error('Invalid OpenRouter API key. Check the saved key and retry.');
+                if (res.status === 402) throw new Error('OpenRouter credits are unavailable for this request. Check account credits and model pricing.');
+                if (res.status === 429) throw new Error('OpenRouter rate limit reached. Retry in a few seconds.');
+                if (message.includes('no endpoints') || message.includes('no provider')) {
+                    throw new Error(`The selected model "${model}" has no eligible OpenRouter endpoint right now. Refresh the live catalog and choose another model.`);
                 }
-
-                const data = await res.json();
-                const text = data.choices?.[0]?.message?.content;
-                return parseJSONResponse(text);
+                throw new Error(`OpenRouter could not run "${model}": ${msg}`);
             }
 
-            return await doOpenRouterCall(rawModel);
+            const data = await res.json();
+            return parseJSONResponse(data.choices?.[0]?.message?.content);
         }
 
         // 2. OpenAI API Call
         if (provider === 'openai') {
-            const model = options.model || 'gpt-4o-mini';
-            const res = await fetch('https://api.openai.com/v1/chat/completions', {
+            const model = modelForProvider(options.model, provider);
+            const res = await fetchWithTimeout('https://api.openai.com/v1/chat/completions', {
                 method:  'POST',
                 headers: {
                     'Content-Type':  'application/json',
@@ -322,10 +360,9 @@ ${hasNews
                 body: JSON.stringify({
                     model: model,
                     messages: [
-                        { role: 'system', content: 'You are an expert Indian financial advisor. Output ONLY valid JSON.' },
+                        { role: 'system', content: 'Return only the requested JSON. Provide precise financial-planning decision support, not trading instructions.' },
                         { role: 'user', content: prompt }
                     ],
-                    response_format: { type: 'json_object' },
                     temperature: temperature
                 })
             });
@@ -342,8 +379,9 @@ ${hasNews
         }
 
         // 3. Direct Gemini (Google AI Studio) Call
-        const GEMINI_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
-        const res = await fetch(`${GEMINI_ENDPOINT}?key=${key}`, {
+        const model = modelForProvider(options.model, provider);
+        const geminiEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
+        const res = await fetchWithTimeout(`${geminiEndpoint}?key=${key}`, {
             method:  'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -383,7 +421,7 @@ ${hasNews
             ? options.provider
             : detectProvider(key);
 
-        const modelName = options.model || (provider === 'openrouter' ? 'google/gemini-2.0-flash-001' : 'gemini-2.0-flash');
+        const modelName = modelForProvider(options.model, provider);
 
         onProgress('Reading your portfolio snapshot...');
         const snapshot = buildPortfolioSnapshot(appData);
@@ -395,10 +433,10 @@ ${hasNews
         onProgress(`Building analysis prompt (${successCount}/3 news sources loaded)...`);
         const prompt = buildPrompt(snapshot, newsResults);
 
-        const providerLabel = provider === 'openrouter' ? `OpenRouter (${modelName})` : provider === 'openai' ? `OpenAI (${modelName})` : 'Gemini 2.0 Flash';
+        const providerLabel = provider === 'openrouter' ? `OpenRouter (${modelName})` : provider === 'openai' ? `OpenAI (${modelName})` : `Gemini (${modelName})`;
         onProgress(`Running ${providerLabel} AI analysis...`);
 
-        const result = await callLLM(prompt, key, { provider, model: modelName, temperature: 0.3 });
+        const result = await callLLM(prompt, key, { provider, model: modelName, temperature: 0.5 });
 
         // Sort by urgency score descending
         if (Array.isArray(result.recommendations)) {
@@ -413,10 +451,11 @@ ${hasNews
                 count:  f.headlines.length
             })),
             providerUsed: providerLabel,
+            portfolioFingerprint: snapshotFingerprint(snapshot),
             timestamp: new Date().toISOString()
         };
 
-        // Cache for 24 hours
+        // Keep a short cache only while the underlying portfolio is unchanged.
         try {
             localStorage.setItem(CACHE_KEY, JSON.stringify(analysis));
         } catch (_) { /* Storage full — skip caching */ }
@@ -425,13 +464,26 @@ ${hasNews
     }
 
     // ── Cache Utilities ────────────────────────────────────────────────────────
-    function loadCached() {
+    function snapshotFingerprint(snapshot) {
+        return JSON.stringify({
+            totalInvested: snapshot.totalInvested,
+            totalMarketValue: snapshot.totalMarketValue,
+            monthlySurplus: snapshot.monthlySurplus,
+            netWorth: snapshot.netWorth,
+            holdings: snapshot.holdings.map(holding => [holding.name, holding.invested, holding.marketValue, holding.lastUpdated]),
+            goals: snapshot.goals.map(goal => [goal.name, goal.target, goal.current])
+        });
+    }
+
+    function loadCached(appData) {
         try {
             const raw = localStorage.getItem(CACHE_KEY);
             if (!raw) return null;
             const cached = JSON.parse(raw);
             const ageMs  = Date.now() - new Date(cached.timestamp).getTime();
-            return ageMs < CACHE_TTL_MS ? cached : null;
+            if (ageMs >= CACHE_TTL_MS) return null;
+            if (appData && cached.portfolioFingerprint !== snapshotFingerprint(buildPortfolioSnapshot(appData))) return null;
+            return cached;
         } catch {
             return null;
         }
