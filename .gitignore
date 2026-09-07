@@ -1,2 +1,7 @@
 node_modules/
 .npm/
+android/.idea/
+android/jdk17.zip
+android/jdk21.zip
+android/jdk21/
+rfm-app-debug.apk

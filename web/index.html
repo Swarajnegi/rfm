@@ -4,63 +4,63 @@
 
 <meta charset="utf-8">
 <meta content="width=device-width, initial-scale=1.0" name="viewport">
-<title>RFM Dashboard</title>
+<title>RFM | Personal Finance</title>
 <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&amp;family=Outfit:wght@600;700&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&amp;family=Manrope:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
 <script id="tailwind-config">
         tailwind.config = {
             darkMode: "class",
             theme: {
                 extend: {
                     "colors": {
-                        "on-primary-container": "#004e40",
-                        "outline": "#85948e",
-                        "tertiary-fixed-dim": "#bac8dc",
-                        "on-secondary": "#233143",
-                        "surface": "#051424",
-                        "secondary": "#b8c8de",
-                        "primary-fixed-dim": "#38debb",
-                        "surface-dim": "#051424",
-                        "on-surface": "#ffffff",
-                        "on-tertiary": "#243141",
-                        "inverse-surface": "#d4e4fa",
-                        "surface-variant": "#273647",
-                        "background": "#051424",
-                        "surface-container": "#122131",
-                        "outline-variant": "#3c4a45",
-                        "primary-fixed": "#5ffbd6",
+                        "on-primary-container": "#1b2238",
+                        "outline": "#777e8d",
+                        "tertiary-fixed-dim": "#d8bd91",
+                        "on-secondary": "#2b2113",
+                        "surface": "#17191e",
+                        "secondary": "#e2b97d",
+                        "primary-fixed-dim": "#93a6ff",
+                        "surface-dim": "#101114",
+                        "on-surface": "#f0f1f3",
+                        "on-tertiary": "#2a2015",
+                        "inverse-surface": "#e5e7eb",
+                        "surface-variant": "#282b33",
+                        "background": "#101114",
+                        "surface-container": "#1a1d23",
+                        "outline-variant": "rgba(255,255,255,0.1)",
+                        "primary-fixed": "#c7d0ff",
                         "error": "#ffb4ab",
-                        "inverse-on-surface": "#233143",
-                        "secondary-container": "#3e4d5f",
-                        "primary-container": "#00c9a7",
+                        "inverse-on-surface": "#1a1d23",
+                        "secondary-container": "#423119",
+                        "primary-container": "#8299f7",
                         "on-error": "#690005",
-                        "surface-tint": "#38debb",
-                        "tertiary-fixed": "#d6e4f9",
-                        "on-secondary-fixed-variant": "#39485a",
-                        "on-tertiary-fixed": "#0f1c2c",
-                        "on-primary-fixed-variant": "#005142",
-                        "surface-container-low": "#0d1c2d",
-                        "surface-container-high": "#1c2b3c",
-                        "on-primary-fixed": "#002019",
-                        "surface-container-lowest": "#010f1f",
-                        "tertiary": "#c0cee3",
+                        "surface-tint": "#a7b8ff",
+                        "tertiary-fixed": "#f0d8ad",
+                        "on-secondary-fixed-variant": "#56411f",
+                        "on-tertiary-fixed": "#2a2010",
+                        "on-primary-fixed-variant": "#35437f",
+                        "surface-container-low": "#14161b",
+                        "surface-container-high": "#23262e",
+                        "on-primary-fixed": "#17204a",
+                        "surface-container-lowest": "#0b0c0f",
+                        "tertiary": "#e6bd80",
                         "error-container": "#93000a",
-                        "surface-container-highest": "#273647",
-                        "on-background": "#ffffff",
-                        "on-tertiary-container": "#384556",
-                        "secondary-fixed": "#d4e4fb",
-                        "inverse-primary": "#006b58",
-                        "on-tertiary-fixed-variant": "#3a4859",
-                        "secondary-fixed-dim": "#b8c8de",
+                        "surface-container-highest": "#2d313b",
+                        "on-background": "#f0f1f3",
+                        "on-tertiary-container": "#ffe7bf",
+                        "secondary-fixed": "#f7dbad",
+                        "inverse-primary": "#4052a0",
+                        "on-tertiary-fixed-variant": "#5e4927",
+                        "secondary-fixed-dim": "#e5bc7d",
                         "on-error-container": "#ffdad6",
-                        "on-primary": "#00382d",
-                        "primary": "#44e5c2",
-                        "tertiary-container": "#a5b3c7",
-                        "on-secondary-fixed": "#0d1d2d",
-                        "on-secondary-container": "#aebdd3",
-                        "on-surface-variant": "#bacac3",
-                        "surface-bright": "#2c3a4c"
+                        "on-primary": "#161b31",
+                        "primary": "#a7b8ff",
+                        "tertiary-container": "#70552b",
+                        "on-secondary-fixed": "#2b210e",
+                        "on-secondary-container": "#ffdfad",
+                        "on-surface-variant": "#a7acb8",
+                        "surface-bright": "#353943"
                     },
                     "borderRadius": {
                         "DEFAULT": "0.25rem",
@@ -76,13 +76,13 @@
                         "unit": "8px"
                     },
                     "fontFamily": {
-                        "body-md": ["Inter"],
-                        "display-currency-mobile": ["Outfit"],
-                        "display-currency": ["Outfit"],
-                        "headline-lg": ["Outfit"],
-                        "headline-md": ["Outfit"],
-                        "body-lg": ["Inter"],
-                        "label-caps": ["Inter"]
+                        "body-md": ["Manrope"],
+                        "display-currency-mobile": ["DM Serif Display"],
+                        "display-currency": ["DM Serif Display"],
+                        "headline-lg": ["DM Serif Display"],
+                        "headline-md": ["DM Serif Display"],
+                        "body-lg": ["Manrope"],
+                        "label-caps": ["Manrope"]
                     },
                     "fontSize": {
                         "body-md": ["16px", { "lineHeight": "24px", "fontWeight": "400" }],
@@ -98,22 +98,26 @@
         }
     </script>
 <style>
-        .hide-scrollbar::-webkit-scrollbar {
-            display: none;
-        }
-        .hide-scrollbar {
-            -ms-overflow-style: none;
-            scrollbar-width: none;
-        }
-        .pb-safe {
-            padding-bottom: env(safe-area-inset-bottom, 20px);
-        }
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .pb-safe { padding-bottom: env(safe-area-inset-bottom, 20px); }
+        /* Phase V2: Force tabular numbers so digits don't shift on live price updates */
+        .tabular { font-variant-numeric: tabular-nums; }
+        /* Pill badge for gain/loss */
+        .gain-pill  { background: rgba(52,211,153,0.15); color:#34d399; border: 1px solid rgba(52,211,153,0.3); border-radius:999px; padding:1px 8px; font-size:11px; font-weight:700; }
+        .loss-pill  { background: rgba(248,113,113,0.15); color:#f87171; border: 1px solid rgba(248,113,113,0.3); border-radius:999px; padding:1px 8px; font-size:11px; font-weight:700; }
+        /* Bottom sheet modal */
+        .bottom-sheet { transform: translateY(100%); transition: transform 0.35s cubic-bezier(0.32,0.72,0,1); }
+        .bottom-sheet.open { transform: translateY(0); }
+        /* Smooth page transitions */
+        [x-cloak] { display: none !important; }
+        /* Overflow menu */
+        .overflow-menu { transform-origin: top right; transform: scale(0.9); opacity: 0; transition: all 0.15s ease; pointer-events: none; }
+        .overflow-menu.open { transform: scale(1); opacity: 1; pointer-events: all; }
     </style>
 <style>
-    body {
-      min-height: max(884px, 100dvh);
-    }
-  </style>
+    body { min-height: max(884px, 100dvh); }
+</style>
 
     <!-- Chart.js -->
     <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
@@ -139,42 +143,39 @@
 <body class="bg-background text-on-background min-h-screen pb-32 font-body-md text-body-md antialiased selection:bg-primary-container selection:text-on-primary-container bg-[#051424]" x-data="appData" x-cloak>
 
 <!-- Integrated Top Header Bar -->
-<header class="fixed top-0 left-0 right-0 w-full bg-[#051424]/90 backdrop-blur-md border-b border-white/10 shadow-[0_4px_20px_rgba(0,0,0,0.5)] z-50 transition-all duration-200">
+<header class="app-header fixed top-0 left-0 right-0 w-full bg-[#051424]/90 backdrop-blur-md border-b border-white/10 shadow-[0_4px_20px_rgba(0,0,0,0.5)] z-50 transition-all duration-200">
     <div class="max-w-7xl mx-auto px-4 md:px-8 h-16 flex justify-between items-center">
-        <!-- Brand & User Profile -->
-        <div class="flex items-center gap-3 cursor-pointer" @click="activePage = 'home'">
-            <div class="w-10 h-10 rounded-full overflow-hidden border-2 border-surface-container-highest flex-shrink-0 bg-surface-variant">
-                <img class="w-full h-full object-cover" data-alt="Close-up portrait of an Indian retiree" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBMJIlAACdprmq72E0NRPufYGKBgoBJQMllFWWxul7gq0e57J1q5OwcaPRGnNDtkvAheVDpLF3Gp7Xd1QGLHQfTGweljDZLSQJP5FsKdjxl7GzIEVOB2tD7UO8D_7l6teddd0jR6UVrIOXzPv7qzZ4mkvZF2--qY7zhpIz3fLOjy-D8hMWvv28HD_BE1yd_gYwiZxUbtnLM0zkxmGfnI_Czz2AjmjJd511Ndx7X5EqZpUGOPGFGgyQF8cq3tjO-zUgL0CbkYg1TL17l">
-            </div>
-            <span class="font-headline-md text-headline-md-mobile md:text-headline-md text-on-surface tracking-tight text-on-background">RFM</span>
-        </div>
+        <!-- Brand -->
+        <button type="button" class="brand-link flex items-center gap-3" @click="activePage = 'home'" aria-label="Go to overview">
+            <span class="brand-mark" aria-hidden="true">R</span>
+            <span class="flex flex-col items-start leading-none">
+                <span class="font-headline-md text-headline-md-mobile md:text-headline-md text-on-surface tracking-tight text-on-background">RFM</span>
+                <span class="hidden sm:block mt-1 text-[9px] uppercase tracking-[0.16em] text-on-surface-variant">Personal finance</span>
+            </span>
+        </button>
 
         <!-- Desktop Navigation Tabs -->
-        <nav class="hidden md:flex items-center gap-1.5 bg-[#122131]/80 border border-white/10 p-1.5 rounded-xl shadow-inner">
-            <button @click="activePage = 'home'" :class="activePage === 'home' ? 'bg-primary-container text-on-primary-container shadow-[0_4px_12px_rgba(0,201,167,0.3)] border border-primary/50 font-semibold' : 'text-on-surface-variant hover:text-[#d4af37]'" class="flex items-center gap-2 px-4 py-1.5 rounded-lg font-label-caps text-label-caps transition-all duration-200">
-                <span class="material-symbols-outlined text-[18px]" style="font-variation-settings: 'FILL' 1;">dashboard</span>
-                Dashboard
+        <nav class="hidden md:flex items-center gap-0.5 p-1 rounded-2xl" aria-label="Main navigation" style="background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.07);">
+            <button @click="activePage = 'home'" :class="activePage === 'home' ? 'text-on-primary-container font-bold' : 'text-on-surface-variant hover:text-white'" class="flex items-center gap-2 px-4 py-1.5 rounded-xl text-[12px] transition-all duration-200" :style="activePage === 'home' ? 'background:rgba(68,229,194,0.15); color:#44e5c2;' : ''">
+                <span class="material-symbols-outlined text-[16px]" :style="activePage === 'home' ? 'font-variation-settings: FILL 1' : ''">home</span>
+                Overview
             </button>
-            <button @click="activePage = 'investments'" :class="activePage === 'investments' ? 'bg-primary-container text-on-primary-container shadow-[0_4px_12px_rgba(0,201,167,0.3)] border border-primary/50 font-semibold' : 'text-on-surface-variant hover:text-[#d4af37]'" class="flex items-center gap-2 px-4 py-1.5 rounded-lg font-label-caps text-label-caps transition-all duration-200">
-                <span class="material-symbols-outlined text-[18px]">account_balance_wallet</span>
-                Investments
+            <button @click="activePage = 'investments'" :class="['investments','stocks','mutualfunds','gold'].includes(activePage) ? 'font-bold' : 'text-on-surface-variant hover:text-white'" class="flex items-center gap-2 px-4 py-1.5 rounded-xl text-[12px] transition-all duration-200" :style="['investments','stocks','mutualfunds','gold'].includes(activePage) ? 'background:rgba(68,229,194,0.15); color:#44e5c2;' : ''">
+                <span class="material-symbols-outlined text-[16px]" :style="['investments','stocks','mutualfunds','gold'].includes(activePage) ? 'font-variation-settings: FILL 1' : ''">account_balance_wallet</span>
+                Portfolio
             </button>
-            <button @click="activePage = 'import'" :class="activePage === 'import' ? 'bg-primary-container text-on-primary-container shadow-[0_4px_12px_rgba(0,201,167,0.3)] border border-primary/50 font-semibold' : 'text-on-surface-variant hover:text-[#d4af37]'" class="flex items-center gap-2 px-4 py-1.5 rounded-lg font-label-caps text-label-caps transition-all duration-200">
-                <span class="material-symbols-outlined text-[18px]">upload_file</span>
-                Import
+            <button @click="activePage = 'cashflow'" :class="['cashflow','pension','emergency','goals'].includes(activePage) ? 'font-bold' : 'text-on-surface-variant hover:text-white'" class="flex items-center gap-2 px-4 py-1.5 rounded-xl text-[12px] transition-all duration-200" :style="['cashflow','pension','emergency','goals'].includes(activePage) ? 'background:rgba(68,229,194,0.15); color:#44e5c2;' : ''">
+                <span class="material-symbols-outlined text-[16px]" :style="['cashflow','pension','emergency','goals'].includes(activePage) ? 'font-variation-settings: FILL 1' : ''">bar_chart_4_bars</span>
+                Planning
             </button>
-            <button @click="activePage = 'tax'" :class="activePage === 'tax' ? 'bg-primary-container text-on-primary-container shadow-[0_4px_12px_rgba(0,201,167,0.3)] border border-primary/50 font-semibold' : 'text-on-surface-variant hover:text-[#d4af37]'" class="flex items-center gap-2 px-4 py-1.5 rounded-lg font-label-caps text-label-caps transition-all duration-200">
-                <span class="material-symbols-outlined text-[18px]">receipt_long</span>
-                Tax
-            </button>
-            <button @click="activePage = 'more'" :class="['cashflow','networth','pension','emergency','goals','maturity','regen','more'].includes(activePage) ? 'bg-primary-container text-on-primary-container shadow-[0_4px_12px_rgba(0,201,167,0.3)] border border-primary/50 font-semibold' : 'text-on-surface-variant hover:text-[#d4af37]'" class="flex items-center gap-2 px-4 py-1.5 rounded-lg font-label-caps text-label-caps transition-all duration-200">
-                <span class="material-symbols-outlined text-[18px]">grid_view</span>
+            <button @click="activePage = 'more'" :class="['more','tax','import','maturity','networth','regen'].includes(activePage) ? 'font-bold' : 'text-on-surface-variant hover:text-white'" class="flex items-center gap-2 px-4 py-1.5 rounded-xl text-[12px] transition-all duration-200" :style="['more','tax','import','maturity','networth','regen'].includes(activePage) ? 'background:rgba(68,229,194,0.15); color:#44e5c2;' : ''">
+                <span class="material-symbols-outlined text-[16px]" :style="['more','tax','import','maturity','networth','regen'].includes(activePage) ? 'font-variation-settings: FILL 1' : ''">apps</span>
                 More
             </button>
         </nav>
 
         <!-- Notification Bell Icon -->
-        <button @click="showNotifications = !showNotifications" class="w-10 h-10 rounded-full flex items-center justify-center text-on-surface hover:text-[#d4af37] hover:bg-surface-container-highest transition-all duration-200 bg-surface-container-high border border-white/5 shadow-inner relative">
+        <button @click="showNotifications = !showNotifications" aria-label="Show notifications" class="w-10 h-10 rounded-full flex items-center justify-center text-on-surface hover:text-[#d4af37] hover:bg-surface-container-highest transition-all duration-200 bg-surface-container-high border border-white/5 shadow-inner relative">
             <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0;">notifications</span>
             <template x-if="notificationsList.some(n => n.type === 'alert' || n.type === 'warning')">
                 <span class="absolute top-1 right-1 w-2.5 h-2.5 bg-primary rounded-full animate-pulse shadow-[0_0_8px_rgba(68,229,194,0.8)]"></span>
@@ -259,89 +260,198 @@
 </div>
 
 <!-- HOME / DASHBOARD PAGE -->
-<main x-show="activePage === 'home'" class="pt-24 pb-32 px-container-padding-mobile md:px-container-padding-desktop max-w-7xl mx-auto flex flex-col gap-8">
-<!-- Net Worth Hero Card -->
-<section class="bg-gradient-to-br from-[#122131] to-[#0d1c2d] border border-white/5 rounded-2xl p-6 shadow-[0_4px_12px_rgba(0,0,0,0.15),0_20px_40px_rgba(0,0,0,0.4)] hover:shadow-[0_16px_32px_rgba(0,0,0,0.3),0_40px_80px_rgba(0,0,0,0.7)] flex flex-col gap-4 relative overflow-hidden group hover:-translate-y-3 active:translate-y-0 transition-all duration-200 cursor-pointer shadow-[0_20px_50px_rgba(0,0,0,0.6)]">
-<div class="absolute -right-16 -top-16 w-48 h-48 bg-primary rounded-full blur-[100px] opacity-10 group-hover:opacity-20 transition-opacity duration-200"></div>
-<div class="flex justify-between items-start z-10">
-<div class="flex flex-col gap-1">
-<h2 class="font-label-caps text-label-caps text-on-surface-variant uppercase tracking-widest">Total Net Worth</h2>
-<div class="font-display-currency-mobile text-display-currency-mobile md:font-display-currency md:text-display-currency text-on-surface">
-                        <span x-text="formatCurrency(netWorthTotal)"></span>
-                    </div>
-</div>
-<div class="bg-surface-container-highest px-3 py-1 rounded-full flex items-center gap-1 border border-primary/20 shadow-[0_0_10px_rgba(0,201,167,0.1)]">
-<span class="material-symbols-outlined text-[16px] text-primary" style="font-variation-settings: 'FILL' 1;">trending_up</span>
-<span class="font-label-caps text-label-caps text-primary">+0.45%</span>
-</div>
-</div>
-<div class="w-full h-[200px] bg-surface-container-low rounded-xl border border-surface-container-highest overflow-hidden relative mt-2 z-10 flex items-end">
-<div class="w-full h-full absolute inset-0 opacity-30 flex items-end">
-<svg class="w-full h-full text-primary" preserveAspectRatio="none" viewBox="0 0 400 150">
-<path d="M0,150 L0,120 Q50,130 100,100 T200,80 T300,50 T400,20 L400,150 Z" fill="currentColor" opacity="0.2"></path>
-<path d="M0,120 Q50,130 100,100 T200,80 T300,50 T400,20" fill="none" stroke="currentColor" stroke-width="2"></path>
-</svg>
-</div>
-<div class="w-full h-8 flex justify-between items-center px-4 font-label-caps text-label-caps text-on-surface-variant/50 border-t border-surface-container-highest bg-surface-container/50 backdrop-blur-sm z-20">
-<span class="">1D</span>
-<span class="text-primary font-bold">1M</span>
-<span class="">3M</span>
-<span class="">1Y</span>
-<span class="">ALL</span>
-</div>
-</div>
+<main x-show="activePage === 'home'" class="pt-24 pb-32 px-container-padding-mobile md:px-container-padding-desktop max-w-7xl mx-auto flex flex-col gap-6">
+
+<!-- ═══════════ NET WORTH HERO CARD (CRED-style) ═══════════ -->
+<section class="portfolio-hero relative rounded-3xl overflow-hidden" style="background: linear-gradient(145deg, #13151f 0%, #1a1c28 60%, #13151f 100%); border: 1px solid rgba(255,255,255,0.07); box-shadow: 0 8px 48px rgba(0,0,0,0.7), inset 0 1px 0 rgba(255,255,255,0.07);">
+    <!-- Subtle teal aurora in top-right -->
+    <div class="absolute -right-24 -top-24 w-64 h-64 rounded-full pointer-events-none" style="background: radial-gradient(circle, rgba(68,229,194,0.12) 0%, transparent 70%);"></div>
+    <!-- Gold glint in bottom-left -->
+    <div class="absolute -left-12 -bottom-12 w-48 h-48 rounded-full pointer-events-none" style="background: radial-gradient(circle, rgba(212,175,55,0.07) 0%, transparent 70%);"></div>
+
+    <div class="relative z-10 p-6 pb-3">
+        <!-- Top row: label + date + change badge -->
+        <div class="flex justify-between items-start mb-1">
+            <span class="text-[10px] font-bold uppercase tracking-[0.2em] tabular" style="color: #8b8fa8;">MY NET WORTH</span>
+            <div id="nwDayBadge" class="flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold tabular"
+                 :class="netWorthTotal >= 190000 ? 'text-emerald-400' : 'text-red-400'"
+                 style="background: rgba(68,229,194,0.08); border: 1px solid rgba(68,229,194,0.2);">
+                <span class="material-symbols-outlined text-[13px]" style="font-variation-settings: 'FILL' 1;" :class="netWorthTotal >= 190000 ? 'text-emerald-400' : 'text-red-400'">trending_up</span>
+                <span>+0.45%</span>
+            </div>
+        </div>
+
+        <!-- Net Worth Number -->
+        <div class="mb-4">
+            <span class="tabular" style="font-size:clamp(32px,8vw,44px); font-weight:800; letter-spacing:-0.5px; color:#ffffff; font-family:'Outfit',sans-serif;" x-text="formatCurrency(netWorthTotal)"></span>
+        </div>
+
+        <!-- Top Gainer ticker (like INDMoney) -->
+        <div class="flex items-center gap-2 mb-3">
+            <template x-if="stockInvestments.length > 0">
+                <div class="flex items-center gap-2 text-xs">
+                    <span style="color:#8b8fa8;">Top Gainer:</span>
+                    <span class="font-bold text-emerald-400 tabular"
+                          x-text="(stockInvestments.slice().sort((a,b)=>getInvPnLPct(b)-getInvPnLPct(a))[0]?.ticker||'—') + ' ▲' + Math.abs(getInvPnLPct(stockInvestments.slice().sort((a,b)=>getInvPnLPct(b)-getInvPnLPct(a))[0]||{})).toFixed(2) + '%'"></span>
+                </div>
+            </template>
+        </div>
+    </div>
+
+    <!-- Real Chart.js canvas area -->
+    <div class="relative px-6 pb-0" style="height: 140px;">
+        <canvas id="nwChartCanvas" style="width:100%;height:140px;"></canvas>
+    </div>
+
+    <!-- Range selector -->
+    <div class="flex justify-around px-6 pb-4 pt-2 border-t" style="border-color: rgba(255,255,255,0.05);">
+        <template x-for="range in ['1M','3M','6M','1Y','ALL']" :key="range">
+            <button @click="nwChartRange = range; renderNwChart()"
+                    :class="nwChartRange === range ? 'text-primary font-bold' : 'text-on-surface-variant hover:text-white'"
+                    class="text-[11px] px-2 py-1 rounded-lg transition-colors duration-150 tabular"
+                    x-text="range"
+                    :style="nwChartRange === range ? 'background:rgba(68,229,194,0.1);' : ''"></button>
+        </template>
+    </div>
 </section>
 
-<!-- Asset Categories (Horizontal Scroll) -->
-<section class="flex flex-col gap-4">
-<h3 class="font-headline-md text-headline-md-mobile text-on-surface px-1">Assets</h3>
-<div class="flex overflow-x-auto gap-4 pb-6 pt-2 hide-scrollbar -mx-container-padding-mobile px-container-padding-mobile md:-mx-0 md:px-0">
-<div @click="activePage = 'investments'" class="min-w-[140px] bg-gradient-to-br from-[#122131] to-[#0d1c2d] border border-white/5 rounded-xl p-4 shadow-lg flex flex-col gap-3 hover:-translate-y-2 transition-all cursor-pointer">
-<div class="w-10 h-10 rounded-full bg-surface-container-highest flex items-center justify-center text-on-surface">
-<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">account_balance</span>
-</div>
-<div class="flex flex-col">
-<span class="font-label-caps text-label-caps text-on-surface-variant">Fixed Deposits</span>
-<span class="font-body-lg font-semibold text-on-surface mt-1"><span x-text="formatCurrency(getAssetTotal('Bank FD'))"></span></span>
-</div>
-</div>
-<div @click="activePage = 'investments'" class="min-w-[140px] bg-gradient-to-br from-[#122131] to-[#0d1c2d] border border-white/5 rounded-xl p-4 shadow-lg flex flex-col gap-3 hover:-translate-y-2 transition-all cursor-pointer">
-<div class="w-10 h-10 rounded-full bg-surface-container-highest flex items-center justify-center text-on-surface">
-<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">description</span>
-</div>
-<div class="flex flex-col">
-<span class="font-label-caps text-label-caps text-on-surface-variant">Bonds</span>
-<span class="font-body-lg font-semibold text-on-surface mt-1"><span x-text="formatCurrency(getAssetTotal('Bond') + getAssetTotal('RBI Bond'))"></span></span>
-</div>
-</div>
-<div @click="activePage = 'investments'" class="min-w-[140px] bg-gradient-to-br from-[#122131] to-[#0d1c2d] border border-white/5 rounded-xl p-4 shadow-lg flex flex-col gap-3 hover:-translate-y-2 transition-all cursor-pointer border-[#d4af37]/50">
-<div class="w-10 h-10 rounded-full bg-surface-container-highest flex items-center justify-center text-[#d4af37]">
-<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">pie_chart</span>
-</div>
-<div class="flex flex-col">
-<span class="font-label-caps text-label-caps text-on-surface-variant">Mutual Funds</span>
-<span class="font-body-lg font-semibold text-on-surface mt-1"><span x-text="formatCurrency(getAssetTotal('Mutual Fund'))"></span></span>
-</div>
-</div>
-<div @click="activePage = 'investments'" class="min-w-[140px] bg-gradient-to-br from-[#122131] to-[#0d1c2d] border border-white/5 rounded-xl p-4 shadow-lg flex flex-col gap-3 hover:-translate-y-2 transition-all cursor-pointer">
-<div class="w-10 h-10 rounded-full bg-surface-container-highest flex items-center justify-center text-on-surface">
-<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">show_chart</span>
-</div>
-<div class="flex flex-col">
-<span class="font-label-caps text-label-caps text-on-surface-variant">Stocks</span>
-<span class="font-body-lg font-semibold text-on-surface mt-1"><span x-text="formatCurrency(getAssetTotal('Stock'))"></span></span>
-</div>
-</div>
-<div @click="activePage = 'investments'" class="min-w-[140px] bg-gradient-to-br from-[#122131] to-[#0d1c2d] border border-white/5 rounded-xl p-4 shadow-lg flex flex-col gap-3 hover:-translate-y-2 transition-all cursor-pointer">
-<div class="w-10 h-10 rounded-full bg-surface-container-highest flex items-center justify-center text-[#d4af37]">
-<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">diamond</span>
-</div>
-<div class="flex flex-col">
-<span class="font-label-caps text-label-caps text-on-surface-variant">Gold</span>
-<span class="font-body-lg font-semibold text-on-surface mt-1"><span x-text="formatCurrency(getAssetTotal('Gold'))"></span></span>
-</div>
-</div>
-</div>
+<!-- ═══════════ ASSET ALLOCATION LIST (INDMoney-style) ═══════════ -->
+<section class="flex flex-col" style="border-radius:20px; overflow:hidden; background:#13151f; border:1px solid rgba(255,255,255,0.06); box-shadow:0 4px 24px rgba(0,0,0,0.4);">
+    <div class="flex justify-between items-center px-5 pt-5 pb-3">
+        <h3 class="font-semibold text-white text-[15px]">Assets</h3>
+        <span class="text-[11px] tabular" style="color:#8b8fa8;">Total current value</span>
+    </div>
+
+    <!-- One row per non-zero asset class -->
+    <template x-if="getAssetTotal('Mutual Fund') > 0 || getAssetTotal('Stock') > 0 || getAssetTotal('Bank FD') > 0 || getAssetTotal('Bond') > 0 || getAssetTotal('Gold') > 0">
+    <div class="flex flex-col">
+
+        <!-- US Stocks row -->
+        <template x-if="totalUsStockValuation > 0">
+        <button @click="activePage = 'investments'" class="flex items-center gap-4 px-5 py-4 transition-colors hover:bg-white/[0.03] text-left" style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+            <div class="w-9 h-9 rounded-full flex items-center justify-center shrink-0" style="background:rgba(212,175,55,0.12);">
+                <span class="text-base">🇺🇸</span>
+            </div>
+            <div class="flex-1 min-w-0">
+                <p class="font-semibold text-white text-[13px] mb-0.5">US Stocks</p>
+                <p class="text-[11px] tabular" style="color:#8b8fa8;" x-text="(totalUsStockValuation/totalAssets*100).toFixed(1) + '% allocation'"></p>
+            </div>
+            <div class="text-right">
+                <p class="font-bold tabular text-white text-[14px]" x-text="formatCurrency(totalUsStockValuation)"></p>
+                <p class="text-[11px] font-bold tabular"
+                   :class="totalStockPnLPct >= 0 ? 'text-emerald-400' : 'text-red-400'"
+                   x-text="(totalStockPnLPct >= 0 ? '▲' : '▼') + Math.abs(totalStockPnLPct) + '%'"></p>
+            </div>
+            <span class="material-symbols-outlined text-[16px]" style="color:#8b8fa8;">chevron_right</span>
+        </button>
+        </template>
+
+        <!-- Indian Stocks row -->
+        <template x-if="totalIndStockValuation > 0">
+        <button @click="activePage = 'investments'" class="flex items-center gap-4 px-5 py-4 transition-colors hover:bg-white/[0.03] text-left" style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+            <div class="w-9 h-9 rounded-full flex items-center justify-center shrink-0" style="background:rgba(68,229,194,0.1);">
+                <span class="text-base">🇮🇳</span>
+            </div>
+            <div class="flex-1 min-w-0">
+                <p class="font-semibold text-white text-[13px] mb-0.5">Indian Stocks</p>
+                <p class="text-[11px] tabular" style="color:#8b8fa8;" x-text="(totalIndStockValuation/totalAssets*100).toFixed(1) + '% allocation'"></p>
+            </div>
+            <div class="text-right">
+                <p class="font-bold tabular text-white text-[14px]" x-text="formatCurrency(totalIndStockValuation)"></p>
+            </div>
+            <span class="material-symbols-outlined text-[16px]" style="color:#8b8fa8;">chevron_right</span>
+        </button>
+        </template>
+
+        <!-- Mutual Funds row -->
+        <template x-if="getAssetTotal('Mutual Fund') > 0">
+        <button @click="activePage = 'mutualfunds'" class="flex items-center gap-4 px-5 py-4 transition-colors hover:bg-white/[0.03] text-left" style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+            <div class="w-9 h-9 rounded-full flex items-center justify-center shrink-0" style="background:rgba(212,175,55,0.12);">
+                <span class="material-symbols-outlined text-[18px]" style="color:#d4af37; font-variation-settings:'FILL' 1;">pie_chart</span>
+            </div>
+            <div class="flex-1 min-w-0">
+                <p class="font-semibold text-white text-[13px] mb-0.5">Mutual Funds</p>
+                <p class="text-[11px] tabular" style="color:#8b8fa8;" x-text="(getAssetTotal('Mutual Fund')/totalAssets*100).toFixed(1) + '% allocation'"></p>
+            </div>
+            <div class="text-right">
+                <p class="font-bold tabular text-white text-[14px]" x-text="formatCurrency(getAssetTotal('Mutual Fund'))"></p>
+                <p class="text-[11px] font-bold tabular"
+                   :class="Number(totalMfPnLPct) >= 0 ? 'text-emerald-400' : 'text-red-400'"
+                   x-text="mfInvestments.length ? ((Number(totalMfPnLPct) >= 0 ? '▲' : '▼') + Math.abs(Number(totalMfPnLPct)).toFixed(2) + '%') : ''"></p>
+            </div>
+            <span class="material-symbols-outlined text-[16px]" style="color:#8b8fa8;">chevron_right</span>
+        </button>
+        </template>
+
+        <!-- EPF row -->
+        <template x-if="getAssetTotal('Government Scheme') > 0">
+        <button @click="activePage = 'more'" class="flex items-center gap-4 px-5 py-4 transition-colors hover:bg-white/[0.03] text-left" style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+            <div class="w-9 h-9 rounded-full flex items-center justify-center shrink-0" style="background:rgba(139,143,168,0.12);">
+                <span class="material-symbols-outlined text-[18px]" style="color:#c8ccd8; font-variation-settings:'FILL' 1;">savings</span>
+            </div>
+            <div class="flex-1 min-w-0">
+                <p class="font-semibold text-white text-[13px] mb-0.5">Govt. Schemes</p>
+                <p class="text-[11px] tabular" style="color:#8b8fa8;" x-text="(getAssetTotal('Government Scheme')/totalAssets*100).toFixed(1) + '% allocation'"></p>
+            </div>
+            <div class="text-right">
+                <p class="font-bold tabular text-white text-[14px]" x-text="formatCurrency(getAssetTotal('Government Scheme'))"></p>
+            </div>
+            <span class="material-symbols-outlined text-[16px]" style="color:#8b8fa8;">chevron_right</span>
+        </button>
+        </template>
+
+        <!-- Fixed Deposits row -->
+        <template x-if="getAssetTotal('Bank FD') > 0">
+        <button @click="activePage = 'investments'" class="flex items-center gap-4 px-5 py-4 transition-colors hover:bg-white/[0.03] text-left" style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+            <div class="w-9 h-9 rounded-full flex items-center justify-center shrink-0" style="background:rgba(68,229,194,0.1);">
+                <span class="material-symbols-outlined text-[18px]" style="color:#44e5c2; font-variation-settings:'FILL' 1;">account_balance</span>
+            </div>
+            <div class="flex-1 min-w-0">
+                <p class="font-semibold text-white text-[13px] mb-0.5">Fixed Deposits</p>
+                <p class="text-[11px] tabular" style="color:#8b8fa8;" x-text="(getAssetTotal('Bank FD')/totalAssets*100).toFixed(1) + '% allocation'"></p>
+            </div>
+            <div class="text-right">
+                <p class="font-bold tabular text-white text-[14px]" x-text="formatCurrency(getAssetTotal('Bank FD'))"></p>
+            </div>
+            <span class="material-symbols-outlined text-[16px]" style="color:#8b8fa8;">chevron_right</span>
+        </button>
+        </template>
+
+        <!-- Gold row -->
+        <template x-if="getAssetTotal('Gold') > 0">
+        <button @click="activePage = 'gold'" class="flex items-center gap-4 px-5 py-4 transition-colors hover:bg-white/[0.03] text-left">
+            <div class="w-9 h-9 rounded-full flex items-center justify-center shrink-0" style="background:rgba(212,175,55,0.12);">
+                <span class="material-symbols-outlined text-[18px]" style="color:#d4af37; font-variation-settings:'FILL' 1;">diamond</span>
+            </div>
+            <div class="flex-1 min-w-0">
+                <p class="font-semibold text-white text-[13px] mb-0.5">Gold</p>
+                <p class="text-[11px] tabular" style="color:#8b8fa8;" x-text="(getAssetTotal('Gold')/totalAssets*100).toFixed(1) + '% allocation'"></p>
+            </div>
+            <div class="text-right">
+                <p class="font-bold tabular text-white text-[14px]" x-text="formatCurrency(getAssetTotal('Gold'))"></p>
+            </div>
+            <span class="material-symbols-outlined text-[16px]" style="color:#8b8fa8;">chevron_right</span>
+        </button>
+        </template>
+
+    </div>
+    </template>
+
+    <!-- Empty state -->
+    <template x-if="totalAssets === 0">
+    <div class="px-5 py-8 text-center">
+        <span class="material-symbols-outlined text-4xl mb-3 block" style="color:#8b8fa8;">add_circle</span>
+        <p class="text-sm font-semibold text-white mb-1">No investments yet</p>
+        <p class="text-xs" style="color:#8b8fa8;">Tap <strong class="text-primary">Portfolio</strong> to add your first asset</p>
+    </div>
+    </template>
+
+    <!-- View All button -->
+    <template x-if="totalAssets > 0">
+    <button @click="activePage = 'investments'" class="flex items-center justify-center gap-1 py-4 text-primary text-[12px] font-bold hover:opacity-80 transition-opacity" style="border-top: 1px solid rgba(255,255,255,0.05);">
+        View All Assets <span class="material-symbols-outlined text-[15px]">arrow_forward</span>
+    </button>
+    </template>
 </section>
 <!-- Monthly Income Section -->
 <section class="bg-gradient-to-br from-[#122131] to-[#0d1c2d] border border-white/5 rounded-2xl p-6 shadow-xl flex flex-col gap-4 relative overflow-hidden group hover:-translate-y-2 transition-all cursor-pointer">
@@ -419,90 +529,305 @@
 </main>
 
 <!-- INVESTMENTS PAGE -->
-<main x-show="activePage === 'investments'" x-cloak class="pt-24 pb-32 px-container-padding-mobile md:px-container-padding-desktop max-w-3xl mx-auto flex flex-col gap-[32px]">
-<section class="flex flex-col gap-unit">
-<h2 class="font-headline-lg text-on-background">Portfolio Overview</h2>
-<div class="bg-gradient-to-br from-[#1c2b3c] to-[#0d1b2a] p-[24px] rounded-xl shadow-xl border border-white/5 flex flex-col gap-1">
-<div class="flex justify-between items-center">
-<div>
-<span class="font-display-currency-mobile md:font-display-currency text-on-background" x-text="formatCurrency(totalInvested)"></span>
-<span class="font-body-lg text-on-surface-variant ml-2">Total Invested</span>
-</div>
-</div>
-<p class="font-body-md text-[#d4af37] mt-1">Generating <span x-text="formatCurrency(monthlyInvestmentIncome)"></span> monthly income</p>
-</div>
-</section>
+<!-- INVESTMENTS PAGE -->
+<main x-show="activePage === 'investments'" x-cloak class="pt-24 pb-32 px-container-padding-mobile md:px-container-padding-desktop max-w-4xl mx-auto flex flex-col gap-6">
 
-<!-- Holdings List -->
-<section class="flex flex-col gap-card-gap">
-<div class="flex justify-between items-center px-1">
-<h3 class="font-headline-md text-on-surface">Holdings</h3>
-<div class="flex items-center gap-2">
-<button type="button" @click="fetchAllPrices()" :disabled="navFetchState === 'fetching'" class="text-xs font-semibold px-3 py-1.5 rounded-lg bg-[#d4af37]/20 text-[#d4af37] border border-[#d4af37]/30 hover:bg-[#d4af37]/30 transition-all flex items-center gap-1.5 disabled:opacity-50">
-    <span class="material-symbols-outlined text-sm" :class="navFetchState === 'fetching' ? 'animate-spin' : ''">sync</span>
-    <span x-text="navFetchState === 'fetching' ? 'Syncing...' : 'Sync Prices'"></span>
-</button>
-<button @click="addingInv = true" class="text-xs font-semibold px-3 py-1.5 rounded-lg bg-primary/20 text-primary border border-primary/30 hover:bg-primary/30 transition-all">+ Add Asset</button>
-</div>
-</div>
-
-<template x-for="inv in investments" :key="inv.id">
-    <div @click="openEditModal(inv)" class="bg-gradient-to-br from-[#1c2b3c] to-[#0d1b2a] p-[24px] rounded-xl cursor-pointer shadow-lg border border-white/5 relative overflow-hidden group hover:-translate-y-2 transition-transform">
-        <div class="flex justify-between items-start mb-4 relative z-10">
-            <div class="flex flex-col gap-2">
-                <div class="flex items-center gap-2">
-                    <span class="bg-[#122131]/80 px-3 py-1 rounded-full font-label-caps text-label-caps text-on-surface-variant border border-outline-variant" x-text="inv.type"></span>
-                    <h3 class="font-headline-md text-on-surface" x-text="inv.name"></h3>
-                </div>
-                <p class="font-body-md text-on-surface-variant" x-text="(inv.issuer ? inv.issuer + ' • ' : '') + 'Matures ' + formatDate(inv.maturityDate)"></p>
+<!-- ═══════════ PORTFOLIO OVERVIEW CARD ═══════════ -->
+<section class="relative rounded-3xl overflow-visible p-6 z-20"
+         style="background: linear-gradient(145deg, #13151f 0%, #1a1c28 60%, #13151f 100%); border: 1px solid rgba(255,255,255,0.07); box-shadow: 0 8px 32px rgba(0,0,0,0.6);">
+    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+            <span class="text-[10px] font-bold uppercase tracking-[0.2em] block mb-1" style="color: #8b8fa8;">PORTFOLIO VALUE</span>
+            <div class="flex items-baseline gap-3">
+                <span class="tabular text-3xl sm:text-4xl font-extrabold text-white" style="font-family:'Outfit',sans-serif;" x-text="formatCurrency(totalAssets)"></span>
+                <span class="text-xs px-2.5 py-0.5 rounded-full font-bold tabular"
+                      :class="(totalAssets - totalInvested) >= 0 ? 'gain-pill' : 'loss-pill'"
+                      x-text="((totalAssets - totalInvested) >= 0 ? '+' : '') + formatCurrency(totalAssets - totalInvested) + ' (' + (totalInvested > 0 ? (((totalAssets - totalInvested)/totalInvested)*100).toFixed(2) : '0.00') + '%)'"></span>
             </div>
-            <div class="flex flex-col items-end gap-1">
-                <span class="font-headline-md text-on-background" x-text="formatCurrency(inv.currentValue || inv.amount)"></span>
-                <div x-show="inv.rate" class="flex items-center gap-1 text-primary">
-                    <span class="material-symbols-outlined text-sm">trending_up</span>
-                    <span class="font-body-md" x-text="inv.rate + '%'"></span>
+            <p class="text-xs mt-1" style="color:#8b8fa8;">
+                Invested: <span class="text-white font-medium tabular" x-text="formatCurrency(totalInvested)"></span>
+                <span class="mx-1.5">•</span>
+                Monthly Yield: <span class="text-[#d4af37] font-semibold tabular" x-text="formatCurrency(monthlyInvestmentIncome)"></span>
+            </p>
+        </div>
+        <div class="flex items-center gap-2 flex-wrap">
+            <button @click="fetchAllPrices()" :disabled="navFetchState === 'fetching'"
+                    class="text-xs font-semibold px-3 py-2.5 rounded-xl border text-primary transition-all flex items-center gap-1.5 hover:bg-primary/10 disabled:opacity-50"
+                    style="border-color:rgba(68,229,194,0.3); background:rgba(68,229,194,0.08);">
+                <span class="material-symbols-outlined text-[16px]" :class="navFetchState === 'fetching' ? 'animate-spin' : ''">sync</span>
+                <span x-text="navFetchState === 'fetching' ? 'Syncing...' : 'Sync Prices'"></span>
+            </button>
+            <button @click="addingInv = true" class="text-xs font-bold px-3.5 py-2.5 rounded-xl bg-primary text-on-primary hover:brightness-110 transition-all shadow-md flex items-center gap-1.5">
+                <span class="material-symbols-outlined text-sm" style="font-variation-settings:'FILL' 1;">add</span>
+                <span>Add Asset</span>
+            </button>
+            <div class="relative" x-data="{overflowOpen:false}">
+                <button @click="overflowOpen=!overflowOpen" class="p-2.5 rounded-xl border text-on-surface-variant hover:text-white transition-all" style="border-color:rgba(255,255,255,0.1); background:rgba(255,255,255,0.03);">
+                    <span class="material-symbols-outlined text-[18px]">more_vert</span>
+                </button>
+                <div x-show="overflowOpen" @click.outside="overflowOpen=false" x-cloak
+                     class="absolute right-0 top-12 z-50 rounded-xl shadow-2xl w-48 py-1"
+                     style="background:#1a1c28; border:1px solid rgba(255,255,255,0.15); box-shadow:0 12px 32px rgba(0,0,0,0.8);">
+                    <button @click="fetchAllPrices(); overflowOpen=false" :disabled="navFetchState === 'fetching'" class="w-full text-left text-xs px-4 py-3 flex items-center gap-2.5 hover:bg-white/5 transition-colors disabled:opacity-50 text-white">
+                        <span class="material-symbols-outlined text-[16px] text-primary" :class="navFetchState === 'fetching' ? 'animate-spin' : ''">sync</span>
+                        <span>Sync Live Prices</span>
+                    </button>
+                    <button @click="loadActualPortfolio(); overflowOpen=false" class="w-full text-left text-xs px-4 py-3 flex items-center gap-2.5 hover:bg-white/5 transition-colors text-white" style="border-top:1px solid rgba(255,255,255,0.06);">
+                        <span class="material-symbols-outlined text-[16px]" style="color:#d4af37;">restart_alt</span>
+                        <span>Reset Seed Portfolio</span>
+                    </button>
                 </div>
-                <div x-show="inv.currentPrice" class="text-xs text-primary font-semibold" x-text="'NAV/Price: ₹' + inv.currentPrice"></div>
-                <div x-show="inv.lastNavUpdate" class="text-[10px] text-on-surface-variant/70" x-text="'Sync: ' + formatDate(inv.lastNavUpdate)"></div>
             </div>
         </div>
     </div>
-</template>
-<div x-show="investments.length === 0" class="text-center p-8 text-on-surface-variant">
-    No investments found. Click + to add.
-</div>
 </section>
 
-<!-- SIP & Recurring Cash Flows -->
-<section class="flex flex-col gap-4 mt-4">
-<div class="flex justify-between items-center px-1">
-<div>
-<h3 class="font-headline-md text-on-surface">SIP &amp; Recurring Cash Flows</h3>
-<p class="text-xs text-on-surface-variant">Monthly Outflow: <span class="text-primary font-bold" x-text="formatCurrency(totalMonthlySipOutflow)"></span></p>
-</div>
-<button @click="addingSip = true" class="text-xs font-semibold px-3 py-1.5 rounded-lg bg-[#d4af37]/20 text-[#d4af37] border border-[#d4af37]/30 hover:bg-[#d4af37]/30 transition-all">+ Add SIP</button>
-</div>
+<!-- ═══════════ ASSET SECTIONS ═══════════ -->
+<section class="flex flex-col gap-6">
 
-<div class="flex flex-col gap-3">
-<template x-for="sip in sips" :key="sip.id">
-<div class="bg-gradient-to-br from-[#122131] to-[#0d1c2d] p-4 rounded-xl border border-white/5 flex justify-between items-center shadow-md">
-<div>
-<div class="flex items-center gap-2">
-<span class="text-xs px-2 py-0.5 rounded bg-surface-container-highest text-[#d4af37]" x-text="sip.type || 'SIP'"></span>
-<span class="font-semibold text-white" x-text="sip.name"></span>
-</div>
-<p class="text-xs text-on-surface-variant mt-1" x-text="'Deducted on ' + (sip.dayOfMonth || 5) + 'th of month'"></p>
-</div>
-<div class="flex items-center gap-3">
-<span class="font-bold text-primary" x-text="formatCurrency(sip.monthlyAmount) + '/mo'"></span>
-<button @click="deleteSip(sip.id)" class="text-xs text-red-400 hover:text-red-300">✕</button>
-</div>
-</div>
-</template>
-<div x-show="sips.length === 0" class="text-center p-6 bg-surface-container-lowest rounded-xl border border-white/5 text-on-surface-variant text-xs">
-No active recurring SIPs or RDs. Click "+ Add SIP" to set up auto-scheduling.
-</div>
-</div>
+    <!-- 1. 🇺🇸 US STOCKS SECTION -->
+    <div class="flex flex-col gap-3">
+        <div class="flex justify-between items-center px-1">
+            <div class="flex items-center gap-2">
+                <span class="text-base">🇺🇸</span>
+                <h4 class="font-bold text-white text-sm">US Stocks &amp; ETFs</h4>
+            </div>
+            <div class="text-right">
+                <span class="text-xs font-bold text-white font-mono tabular block" x-text="formatCurrency(totalUsStockValuation)"></span>
+                <span class="text-[10px] text-[#d4af37] font-mono font-bold tabular block" x-text="'$' + totalUsStockUSD.toFixed(2) + ' USD'"></span>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <template x-for="inv in usStockList" :key="inv.id">
+                <div @click="openEditModal(inv)" class="p-4 rounded-2xl cursor-pointer transition-all hover:border-white/20 relative group"
+                     style="background:#13151f; border:1px solid rgba(255,255,255,0.06); box-shadow:0 4px 16px rgba(0,0,0,0.3);">
+                    <div class="flex justify-between items-start mb-3">
+                        <div class="flex items-center gap-2.5 min-w-0">
+                            <span class="px-2 py-1 rounded-lg text-xs font-mono font-bold text-[#d4af37] shrink-0"
+                                  style="background:rgba(212,175,55,0.12); border:1px solid rgba(212,175,55,0.3);"
+                                  x-text="inv.ticker || 'US'"></span>
+                            <div class="min-w-0">
+                                <h5 class="font-semibold text-white text-[13px] truncate" x-text="inv.name"></h5>
+                                <span class="text-[11px] tabular block" style="color:#8b8fa8;" x-text="inv.units + ' Shares @ $' + inv.buyPrice"></span>
+                            </div>
+                        </div>
+                        <button @click.stop="deleteInvestment(inv.id)" class="p-1 rounded-lg text-white/30 hover:text-red-400 hover:bg-red-950/30 shrink-0 ml-2">
+                            <span class="material-symbols-outlined text-sm">delete</span>
+                        </button>
+                    </div>
+                    <div class="grid grid-cols-3 gap-2 pt-2.5 text-xs" style="border-top:1px solid rgba(255,255,255,0.05);">
+                        <div>
+                            <span class="text-[9px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">Live Price</span>
+                            <span class="font-bold text-[#d4af37] font-mono text-[12px] tabular" x-text="'$' + Number(inv.currentPrice || inv.buyPrice).toFixed(2)"></span>
+                        </div>
+                        <div>
+                            <span class="text-[9px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">Value (INR)</span>
+                            <span class="font-bold text-white font-mono text-[12px] tabular" x-text="formatCurrency(getInvCurrentValue(inv))"></span>
+                        </div>
+                        <div class="text-right">
+                            <span class="text-[9px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">P&amp;L</span>
+                            <span class="font-bold tabular text-[11px]"
+                                  :class="getInvPnL(inv) >= 0 ? 'text-emerald-400' : 'text-red-400'"
+                                  x-text="(getInvPnL(inv) >= 0 ? '+' : '') + formatCurrency(getInvPnL(inv)) + ' (' + getInvPnLPct(inv) + '%)'"></span>
+                        </div>
+                    </div>
+                </div>
+            </template>
+            <div x-show="usStockList.length === 0" class="col-span-full p-6 text-center text-xs rounded-2xl" style="background:#13151f; border:1px solid rgba(255,255,255,0.05); color:#8b8fa8;">
+                No US stock holdings recorded. Tap "+ Add Asset" to add US equities.
+            </div>
+        </div>
+    </div>
+
+    <!-- 2. 🇮🇳 INDIAN STOCKS SECTION -->
+    <div class="flex flex-col gap-3">
+        <div class="flex justify-between items-center px-1">
+            <div class="flex items-center gap-2">
+                <span class="text-base">🇮🇳</span>
+                <h4 class="font-bold text-white text-sm">Indian Stocks (NSE/BSE)</h4>
+            </div>
+            <span class="text-xs font-bold text-white font-mono tabular" x-text="formatCurrency(totalIndStockValuation)"></span>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <template x-for="inv in indStockList" :key="inv.id">
+                <div @click="openEditModal(inv)" class="p-4 rounded-2xl cursor-pointer transition-all hover:border-white/20 relative group"
+                     style="background:#13151f; border:1px solid rgba(255,255,255,0.06); box-shadow:0 4px 16px rgba(0,0,0,0.3);">
+                    <div class="flex justify-between items-start mb-3">
+                        <div class="flex items-center gap-2.5 min-w-0">
+                            <span class="px-2 py-1 rounded-lg text-xs font-mono font-bold text-primary shrink-0"
+                                  style="background:rgba(68,229,194,0.12); border:1px solid rgba(68,229,194,0.3);"
+                                  x-text="inv.ticker || 'IND'"></span>
+                            <div class="min-w-0">
+                                <h5 class="font-semibold text-white text-[13px] truncate" x-text="inv.name"></h5>
+                                <span class="text-[11px] tabular block" style="color:#8b8fa8;" x-text="inv.units + ' Shares'"></span>
+                            </div>
+                        </div>
+                        <button @click.stop="deleteInvestment(inv.id)" class="p-1 rounded-lg text-white/30 hover:text-red-400 hover:bg-red-950/30 shrink-0 ml-2">
+                            <span class="material-symbols-outlined text-sm">delete</span>
+                        </button>
+                    </div>
+                    <div class="grid grid-cols-3 gap-2 pt-2.5 text-xs" style="border-top:1px solid rgba(255,255,255,0.05);">
+                        <div>
+                            <span class="text-[9px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">Live Price</span>
+                            <span class="font-bold text-primary font-mono text-[12px] tabular" x-text="'₹' + Number(inv.currentPrice || inv.buyPrice).toFixed(2)"></span>
+                        </div>
+                        <div>
+                            <span class="text-[9px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">Value (INR)</span>
+                            <span class="font-bold text-white font-mono text-[12px] tabular" x-text="formatCurrency(getInvCurrentValue(inv))"></span>
+                        </div>
+                        <div class="text-right">
+                            <span class="text-[9px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">P&amp;L</span>
+                            <span class="font-bold tabular text-[11px]"
+                                  :class="getInvPnL(inv) >= 0 ? 'text-emerald-400' : 'text-red-400'"
+                                  x-text="(getInvPnL(inv) >= 0 ? '+' : '') + formatCurrency(getInvPnL(inv)) + ' (' + getInvPnLPct(inv) + '%)'"></span>
+                        </div>
+                    </div>
+                </div>
+            </template>
+            <div x-show="indStockList.length === 0" class="col-span-full p-6 text-center text-xs rounded-2xl" style="background:#13151f; border:1px solid rgba(255,255,255,0.05); color:#8b8fa8;">
+                No Indian stock holdings recorded. Tap "+ Add Asset" to add NSE/BSE stocks.
+            </div>
+        </div>
+    </div>
+
+    <!-- 3. 📈 MUTUAL FUNDS SECTION -->
+    <div class="flex flex-col gap-3">
+        <div class="flex justify-between items-center px-1">
+            <div class="flex items-center gap-2">
+                <span class="material-symbols-outlined text-base" style="color:#d4af37; font-variation-settings:'FILL' 1;">pie_chart</span>
+                <h4 class="font-bold text-white text-sm">Mutual Funds (Direct Growth)</h4>
+            </div>
+            <span class="text-xs font-bold text-white font-mono tabular" x-text="formatCurrency(totalMfValuation)"></span>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <template x-for="inv in mutualFundList" :key="inv.id">
+                <div @click="openEditModal(inv)" class="p-4 rounded-2xl cursor-pointer transition-all hover:border-white/20 relative group"
+                     style="background:#13151f; border:1px solid rgba(255,255,255,0.06); box-shadow:0 4px 16px rgba(0,0,0,0.3);">
+                    <div class="flex justify-between items-start mb-3">
+                        <div class="flex items-center gap-2.5 min-w-0">
+                            <span class="px-2 py-1 rounded-lg text-xs font-mono font-bold text-[#d4af37] shrink-0"
+                                  style="background:rgba(212,175,55,0.12); border:1px solid rgba(212,175,55,0.3);"
+                                  x-text="inv.schemeCode ? ('AMFI ' + inv.schemeCode) : 'MF'"></span>
+                            <div class="min-w-0">
+                                <h5 class="font-semibold text-white text-[13px] truncate" x-text="inv.name"></h5>
+                                <span class="text-[11px] tabular block" style="color:#8b8fa8;" x-text="inv.units + ' Units @ ₹' + inv.buyPrice"></span>
+                            </div>
+                        </div>
+                        <button @click.stop="deleteInvestment(inv.id)" class="p-1 rounded-lg text-white/30 hover:text-red-400 hover:bg-red-950/30 shrink-0 ml-2">
+                            <span class="material-symbols-outlined text-sm">delete</span>
+                        </button>
+                    </div>
+                    <div class="grid grid-cols-3 gap-2 pt-2.5 text-xs" style="border-top:1px solid rgba(255,255,255,0.05);">
+                        <div>
+                            <span class="text-[9px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">Live NAV</span>
+                            <span class="font-bold text-primary font-mono text-[12px] tabular" x-text="'₹' + Number(inv.currentPrice || inv.buyPrice).toFixed(2)"></span>
+                        </div>
+                        <div>
+                            <span class="text-[9px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">Current Value</span>
+                            <span class="font-bold text-white font-mono text-[12px] tabular" x-text="formatCurrency(getInvCurrentValue(inv))"></span>
+                        </div>
+                        <div class="text-right">
+                            <span class="text-[9px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">P&amp;L</span>
+                            <span class="font-bold tabular text-[11px]"
+                                  :class="getInvPnL(inv) >= 0 ? 'text-emerald-400' : 'text-red-400'"
+                                  x-text="(getInvPnL(inv) >= 0 ? '+' : '') + formatCurrency(getInvPnL(inv)) + ' (' + getInvPnLPct(inv) + '%)'"></span>
+                        </div>
+                    </div>
+                </div>
+            </template>
+            <div x-show="mutualFundList.length === 0" class="col-span-full p-6 text-center text-xs rounded-2xl" style="background:#13151f; border:1px solid rgba(255,255,255,0.05); color:#8b8fa8;">
+                No mutual fund holdings recorded.
+            </div>
+        </div>
+    </div>
+
+    <!-- 4. 🏛️ EPF & FIXED INCOME SECTION -->
+    <div class="flex flex-col gap-3">
+        <div class="flex justify-between items-center px-1">
+            <div class="flex items-center gap-2">
+                <span class="material-symbols-outlined text-base" style="color:#c8ccd8; font-variation-settings:'FILL' 1;">account_balance</span>
+                <h4 class="font-bold text-white text-sm">EPF, Fixed Income &amp; Debt</h4>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <template x-for="inv in debtAndEpfList" :key="inv.id">
+                <div @click="openEditModal(inv)" class="p-4 rounded-2xl cursor-pointer transition-all hover:border-white/20 relative group"
+                     style="background:#13151f; border:1px solid rgba(255,255,255,0.06); box-shadow:0 4px 16px rgba(0,0,0,0.3);">
+                    <div class="flex justify-between items-start mb-3">
+                        <div class="flex items-center gap-2.5 min-w-0">
+                            <span class="px-2 py-1 rounded-lg text-xs font-mono font-bold text-emerald-400 shrink-0"
+                                  style="background:rgba(52,211,153,0.12); border:1px solid rgba(52,211,153,0.3);"
+                                  x-text="inv.type"></span>
+                            <div class="min-w-0">
+                                <h5 class="font-semibold text-white text-[13px] truncate" x-text="inv.name"></h5>
+                                <span class="text-[11px] block" style="color:#8b8fa8;" x-text="inv.issuer || 'Government of India'"></span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2 pt-2.5 text-xs" style="border-top:1px solid rgba(255,255,255,0.05);">
+                        <div>
+                            <span class="text-[9px] uppercase block mb-0.5" style="color:#8b8fa8;">Guaranteed Rate</span>
+                            <span class="font-bold text-emerald-400 font-mono tabular text-[12px]" x-text="(inv.rate || '8.25') + '% p.a.'"></span>
+                        </div>
+                        <div class="text-right">
+                            <span class="text-[9px] uppercase block mb-0.5" style="color:#8b8fa8;">Corpus</span>
+                            <span class="font-bold text-white font-mono tabular text-[12px]" x-text="formatCurrency(getInvCurrentValue(inv))"></span>
+                        </div>
+                    </div>
+                </div>
+            </template>
+            <div x-show="debtAndEpfList.length === 0" class="col-span-full p-6 text-center text-xs rounded-2xl" style="background:#13151f; border:1px solid rgba(255,255,255,0.05); color:#8b8fa8;">
+                No fixed income / EPF holdings recorded.
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ═══════════ SIP & RECURRING SECTION ═══════════ -->
+<section class="flex flex-col gap-3 mt-2">
+    <div class="flex justify-between items-center px-1">
+        <div>
+            <h3 class="font-bold text-white text-sm">SIP &amp; Recurring Mandates</h3>
+            <p class="text-[11px]" style="color:#8b8fa8;">Monthly Outflow: <span class="text-primary font-bold tabular" x-text="formatCurrency(totalMonthlySipOutflow)"></span></p>
+        </div>
+        <button @click="addingSip = true" class="text-xs font-semibold px-3 py-1.5 rounded-xl border text-primary transition-all"
+                style="border-color:rgba(68,229,194,0.3); background:rgba(68,229,194,0.1);">+ Add SIP</button>
+    </div>
+
+    <div class="flex flex-col gap-2.5">
+        <template x-for="sip in sips" :key="sip.id">
+            <div class="p-3.5 rounded-2xl flex justify-between items-center"
+                 style="background:#13151f; border:1px solid rgba(255,255,255,0.06); box-shadow:0 2px 12px rgba(0,0,0,0.3);">
+                <div class="min-w-0 cursor-pointer" @click="openEditSipModal(sip)">
+                    <div class="flex items-center gap-2">
+                        <span class="text-[10px] px-2 py-0.5 rounded font-bold font-mono text-[#d4af37]"
+                              style="background:rgba(212,175,55,0.12);" x-text="sip.type || 'SIP'"></span>
+                        <span class="font-semibold text-white text-[13px] truncate" x-text="sip.name"></span>
+                    </div>
+                    <p class="text-[11px] mt-0.5 tabular" style="color:#8b8fa8;" x-text="'Debit on ' + (sip.dayOfMonth || 3) + 'th of every month'"></p>
+                </div>
+                <div class="flex items-center gap-2 shrink-0 ml-2">
+                    <button @click="toggleSipStatus(sip); saveData()"
+                            class="px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all"
+                            :class="sip.status === 'Active' ? 'bg-emerald-950/60 text-emerald-400 border border-emerald-500/30' : 'bg-amber-950/60 text-amber-400 border border-amber-500/30'">
+                        <span x-text="sip.status === 'Active' ? 'Active' : 'Skipped / Paused'"></span>
+                    </button>
+                    <span class="font-bold text-primary font-mono tabular text-sm" x-text="formatCurrency(sip.monthlyAmount)"></span>
+                    <button @click="openEditSipModal(sip)" class="p-1 rounded-lg text-white/40 hover:text-white hover:bg-white/10 transition-colors" title="Edit SIP Date & Amount">
+                        <span class="material-symbols-outlined text-[15px]">edit</span>
+                    </button>
+                    <button @click="deleteSip(sip.id)" class="text-white/30 hover:text-red-400 p-1" title="Delete SIP">✕</button>
+                </div>
+            </div>
+        </template>
+        <div x-show="sips.length === 0" class="text-center p-6 rounded-2xl text-xs" style="background:#13151f; border:1px solid rgba(255,255,255,0.05); color:#8b8fa8;">
+            No active recurring SIPs or RDs. Tap "+ Add SIP" to set up.
+        </div>
+    </div>
 </section>
 </main>
 
@@ -748,279 +1073,299 @@ Restore from JSON
 </main>
 
 <!-- TAX PAGE -->
-<main x-show="activePage === 'tax'" x-cloak class="pt-24 pb-32 px-container-padding-mobile md:px-container-padding-desktop max-w-7xl mx-auto flex flex-col gap-8">
-<div class="flex flex-col gap-1">
-<h2 class="font-headline-lg text-white">Tax Summary &amp; Capital Gains</h2>
-<p class="text-sm text-on-surface-variant">Financial Year 2024-2025 (AY 2025-2026) — Indian Tax Engine &amp; Capital Gains Calculator</p>
-</div>
+<main x-show="activePage === 'tax'" x-cloak class="pt-24 pb-32 px-container-padding-mobile md:px-container-padding-desktop max-w-7xl mx-auto flex flex-col gap-6">
+    <div class="flex items-center justify-between">
+        <div>
+            <h2 class="font-headline-lg text-white" style="font-family:'Outfit',sans-serif;">Tax Summary &amp; Capital Gains</h2>
+            <p class="text-xs text-on-surface-variant">Financial Year 2024-2025 (AY 2025-2026) · Indian Tax Engine &amp; Regime Optimizer</p>
+        </div>
+        <button @click="activePage = 'more'" class="p-2 rounded-xl text-white/70 hover:text-white transition-colors" style="background:#13151f; border:1px solid rgba(255,255,255,0.06);">
+            <span class="material-symbols-outlined text-sm">arrow_back</span>
+        </button>
+    </div>
 
-<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
-<!-- Card 1: Interest Income -->
-<div class="bg-gradient-to-br from-[#122131] to-[#0d1c2d] rounded-2xl relative overflow-hidden shadow-xl p-6 pl-8 border border-white/5 flex flex-col justify-between">
-<div class="absolute left-0 top-0 bottom-0 w-2 bg-primary"></div>
-<div class="flex items-center justify-between mb-3">
-<span class="font-label-caps text-xs text-on-surface-variant uppercase tracking-wider">Total Interest Income</span>
-<span class="material-symbols-outlined text-primary text-2xl">trending_up</span>
-</div>
-<div class="text-3xl font-bold text-white mb-2" x-text="formatCurrency(totalInterestIncome || 0)"></div>
-<p class="text-xs text-on-surface-variant">Derived from fixed deposits, bonds, and savings accounts.</p>
-</div>
+        <!-- Card 1: Interest Income -->
+        <div class="p-5 rounded-2xl flex flex-col justify-between relative overflow-hidden"
+             style="background:#13151f; border:1px solid rgba(255,255,255,0.06); box-shadow:0 4px 16px rgba(0,0,0,0.3);">
+            <div class="flex items-center justify-between mb-3">
+                <span class="text-[10px] uppercase font-bold tracking-wider" style="color:#8b8fa8;">Total Interest Income</span>
+                <span class="material-symbols-outlined text-primary text-xl">trending_up</span>
+            </div>
+            <div class="text-3xl font-extrabold text-white mb-2 tabular" style="font-family:'Outfit',sans-serif;" x-text="formatCurrency(totalInterestIncome || 0)"></div>
+            <p class="text-xs" style="color:#8b8fa8;">Derived from fixed deposits, bonds, and savings accounts.</p>
+        </div>
 
-<!-- Card 2: Capital Gains (LTCG / STCG) -->
-<div class="bg-gradient-to-br from-[#1c2b3c] to-[#0d1b2a] rounded-2xl relative overflow-hidden shadow-2xl p-6 pl-8 border border-[#FF6B6B]/30 flex flex-col justify-between">
-<div class="absolute left-0 top-0 bottom-0 w-2 bg-[#FF6B6B] shadow-[0_0_15px_rgba(255,107,107,0.5)]"></div>
-<div>
-<div class="flex items-center justify-between mb-2">
-<span class="font-label-caps text-xs text-on-surface-variant uppercase tracking-wider">Capital Gains Tax</span>
-<span class="material-symbols-outlined text-[#FF6B6B] text-2xl">monitoring</span>
-</div>
-<div class="text-3xl font-bold text-white mb-3" x-text="formatCurrency(totalCapitalGainsTax)"></div>
+        <!-- Card 2: Capital Gains (LTCG / STCG) -->
+        <div class="p-5 rounded-2xl flex flex-col justify-between relative overflow-hidden"
+             style="background:#13151f; border:1px solid rgba(255,255,255,0.06); box-shadow:0 4px 16px rgba(0,0,0,0.3);">
+            <div>
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-[10px] uppercase font-bold tracking-wider" style="color:#8b8fa8;">Capital Gains Tax</span>
+                    <span class="material-symbols-outlined text-red-400 text-xl">monitoring</span>
+                </div>
+                <div class="text-3xl font-extrabold text-white mb-3 tabular" style="font-family:'Outfit',sans-serif;" x-text="formatCurrency(totalCapitalGainsTax)"></div>
 
-<div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3 border-t border-white/10 text-xs">
-<div class="p-2.5 rounded-xl bg-surface-container-lowest border border-white/5">
-<span class="text-on-surface-variant text-[11px] block">Equity LTCG (>12m, 12.5%)</span>
-<span class="font-bold text-white" x-text="formatCurrency(equityLTCG ? equityLTCG.totalGains : 0) + ' Gain'"></span>
-<span class="text-[10px] text-emerald-400 block mt-0.5" x-text="'Exempt: ' + formatCurrency(equityLTCG ? equityLTCG.exemptionUsed : 0)"></span>
-<span class="font-semibold text-[#FF6B6B] block mt-0.5" x-text="'Tax: ' + formatCurrency(equityLTCG ? equityLTCG.tax : 0)"></span>
-</div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-3 text-xs" style="border-top:1px solid rgba(255,255,255,0.05);">
+                    <div class="p-2.5 rounded-xl" style="background:#0d0f1a; border:1px solid rgba(255,255,255,0.05);">
+                        <span class="text-[10px] block" style="color:#8b8fa8;">Equity LTCG (&gt;12m, 12.5%)</span>
+                        <span class="font-bold text-white tabular" x-text="formatCurrency(equityLTCG ? equityLTCG.totalGains : 0) + ' Gain'"></span>
+                        <span class="text-[10px] text-emerald-400 block mt-0.5 tabular" x-text="'Exempt: ' + formatCurrency(equityLTCG ? equityLTCG.exemptionUsed : 0)"></span>
+                        <span class="font-semibold text-red-400 block mt-0.5 tabular" x-text="'Tax: ' + formatCurrency(equityLTCG ? equityLTCG.tax : 0)"></span>
+                    </div>
 
-<div class="p-2.5 rounded-xl bg-surface-container-lowest border border-white/5">
-<span class="text-on-surface-variant text-[11px] block">Equity STCG (≤12m, 20%)</span>
-<span class="font-bold text-white" x-text="formatCurrency(equitySTCG ? equitySTCG.totalGains : 0) + ' Gain'"></span>
-<span class="font-semibold text-[#FF6B6B] block mt-1" x-text="'Tax: ' + formatCurrency(equitySTCG ? equitySTCG.tax : 0)"></span>
-</div>
-</div>
-</div>
+                    <div class="p-2.5 rounded-xl" style="background:#0d0f1a; border:1px solid rgba(255,255,255,0.05);">
+                        <span class="text-[10px] block" style="color:#8b8fa8;">Equity STCG (≤12m, 20%)</span>
+                        <span class="font-bold text-white tabular" x-text="formatCurrency(equitySTCG ? equitySTCG.totalGains : 0) + ' Gain'"></span>
+                        <span class="font-semibold text-red-400 block mt-1 tabular" x-text="'Tax: ' + formatCurrency(equitySTCG ? equitySTCG.tax : 0)"></span>
+                    </div>
+                </div>
+            </div>
 
-<div class="mt-4 pt-3 border-t border-white/5 flex items-center justify-between gap-2 text-xs">
-<span class="text-on-surface-variant">Manual Override (₹)</span>
-<input type="number" x-model.number="tax.capitalGainsOverride" placeholder="Auto-calculated" class="w-32 px-3 py-1.5 rounded-lg bg-surface-container-lowest border border-white/10 text-white text-xs outline-none focus:border-primary">
-</div>
-</div>
+            <div class="mt-3 pt-3 flex items-center justify-between gap-2 text-xs" style="border-top:1px solid rgba(255,255,255,0.05);">
+                <span style="color:#8b8fa8;">Manual Override (₹)</span>
+                <input type="number" x-model.number="tax.capitalGainsOverride" placeholder="Auto-calculated" class="w-32 px-3 py-1.5 rounded-lg bg-surface-container-lowest border border-white/10 text-white text-xs outline-none focus:border-primary tabular">
+            </div>
+        </div>
 
-<!-- Card 3: TDS Deducted -->
-<div class="bg-gradient-to-br from-[#122131] to-[#0d1c2d] rounded-2xl relative overflow-hidden shadow-xl p-6 pl-8 border border-white/5 flex flex-col justify-between">
-<div class="absolute left-0 top-0 bottom-0 w-2 bg-[#E0BFB8]"></div>
-<div class="flex items-center justify-between mb-3">
-<span class="font-label-caps text-xs text-on-surface-variant uppercase tracking-wider">TDS Deducted</span>
-<span class="material-symbols-outlined text-[#E0BFB8] text-2xl">receipt</span>
-</div>
-<div class="text-3xl font-bold text-white mb-2" x-text="formatCurrency(totalTds || 0)"></div>
-<p class="text-xs text-on-surface-variant">Tax deducted at source by banks &amp; financial institutions.</p>
-</div>
+        <!-- Card 3: TDS Deducted -->
+        <div class="p-5 rounded-2xl flex flex-col justify-between relative overflow-hidden"
+             style="background:#13151f; border:1px solid rgba(255,255,255,0.06); box-shadow:0 4px 16px rgba(0,0,0,0.3);">
+            <div class="flex items-center justify-between mb-3">
+                <span class="text-[10px] uppercase font-bold tracking-wider" style="color:#8b8fa8;">TDS Deducted</span>
+                <span class="material-symbols-outlined text-amber-300 text-xl">receipt</span>
+            </div>
+            <div class="text-3xl font-extrabold text-white mb-2 tabular" style="font-family:'Outfit',sans-serif;" x-text="formatCurrency(totalTds || 0)"></div>
+            <p class="text-xs" style="color:#8b8fa8;">Tax deducted at source by banks &amp; financial institutions.</p>
+        </div>
 
-<!-- Card 4: Net Tax Payable -->
-<div class="bg-gradient-to-br from-[#1c2b3c] to-[#0d1b2a] rounded-2xl relative overflow-hidden shadow-2xl p-6 pl-8 border border-[#D4AF37]/30 flex flex-col justify-between">
-<div class="absolute left-0 top-0 bottom-0 w-2 bg-[#D4AF37] shadow-[0_0_15px_rgba(212,175,55,0.5)]"></div>
-<div>
-<div class="flex items-center justify-between mb-3">
-<span class="font-label-caps text-xs text-on-surface-variant uppercase tracking-wider">Net Total Tax Payable</span>
-<span class="material-symbols-outlined text-[#D4AF37] text-2xl">account_balance</span>
-</div>
-<div class="text-4xl font-bold text-[#D4AF37] mb-2" x-text="formatCurrency(netTaxPayable || 0)"></div>
-</div>
-<div class="mt-4 flex items-center justify-between pt-3 border-t border-white/10 text-xs">
-<span class="text-on-surface-variant">Optimal Regime Selected</span>
-<span class="font-bold text-white uppercase" x-text="recommendedRegime + ' Regime'"></span>
-</div>
-</div>
+        <!-- Card 4: Net Tax Payable -->
+        <div class="p-5 rounded-2xl flex flex-col justify-between relative overflow-hidden"
+             style="background: linear-gradient(145deg, #13151f 0%, #1c2030 60%, #13151f 100%); border: 1px solid rgba(212,175,55,0.25); box-shadow: 0 4px 16px rgba(0,0,0,0.4);">
+            <div>
+                <div class="flex items-center justify-between mb-3">
+                    <span class="text-[10px] uppercase font-bold tracking-wider" style="color:#8b8fa8;">Net Total Tax Payable</span>
+                    <span class="material-symbols-outlined text-[#d4af37] text-xl">account_balance</span>
+                </div>
+                <div class="text-3xl md:text-4xl font-extrabold text-[#d4af37] mb-2 tabular" style="font-family:'Outfit',sans-serif;" x-text="formatCurrency(netTaxPayable || 0)"></div>
+            </div>
+            <div class="mt-3 flex items-center justify-between pt-3 text-xs" style="border-top:1px solid rgba(255,255,255,0.08);">
+                <span style="color:#8b8fa8;">Optimal Regime Selected</span>
+                <span class="font-bold text-white uppercase" x-text="recommendedRegime + ' Regime'"></span>
+            </div>
+        </div>
 
-</div>
+    </div>
 
-<!-- Regime Comparison & Advance Tax Schedule Grid -->
-<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-2">
+    <!-- Regime Comparison & Advance Tax Schedule Grid -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
-<!-- Regime Comparison -->
-<div class="bg-gradient-to-br from-[#122131] to-[#0d1c2d] border border-white/5 rounded-2xl p-6 shadow-xl space-y-4">
-<div class="flex items-center justify-between pb-3 border-b border-white/10">
-<h3 class="font-semibold text-white">Tax Regime Comparison</h3>
-<span class="text-xs px-3 py-1 rounded-full bg-primary/10 text-primary font-bold border border-primary/30" x-text="'Recommended: ' + recommendedRegime.toUpperCase()"></span>
-</div>
+        <!-- Regime Comparison -->
+        <div class="p-5 rounded-2xl space-y-4"
+             style="background:#13151f; border:1px solid rgba(255,255,255,0.06); box-shadow:0 4px 16px rgba(0,0,0,0.3);">
+            <div class="flex items-center justify-between pb-3" style="border-bottom:1px solid rgba(255,255,255,0.06);">
+                <h3 class="font-semibold text-white text-sm">Tax Regime Comparison</h3>
+                <span class="text-xs px-2.5 py-0.5 rounded-full bg-primary/10 text-primary font-bold border border-primary/30" x-text="'Recommended: ' + recommendedRegime.toUpperCase()"></span>
+            </div>
 
-<div class="grid grid-cols-2 gap-4 text-xs">
-<div class="p-4 rounded-xl bg-surface-container-lowest border" :class="recommendedRegime === 'old' ? 'border-primary' : 'border-white/5'">
-<div class="flex justify-between items-center mb-1">
-<span class="font-bold text-white text-sm">Old Regime</span>
-<span x-show="recommendedRegime === 'old'" class="text-[10px] text-primary font-bold">Best ★</span>
-</div>
-<div class="text-xl font-bold text-white my-2" x-text="formatCurrency(oldRegimeTax.tax)"></div>
-<p class="text-on-surface-variant text-[11px]">Allows 80C, 80D, 80TTB &amp; Home Loan deductions.</p>
-</div>
+            <div class="grid grid-cols-2 gap-3 text-xs">
+                <div class="p-3.5 rounded-xl" style="background:#0d0f1a;" :class="recommendedRegime === 'old' ? 'border border-primary' : 'border border-white/5'">
+                    <div class="flex justify-between items-center mb-1">
+                        <span class="font-bold text-white text-xs">Old Regime</span>
+                        <span x-show="recommendedRegime === 'old'" class="text-[10px] text-primary font-bold">Best ★</span>
+                    </div>
+                    <div class="text-lg font-bold text-white my-1 tabular" x-text="formatCurrency(oldRegimeTax.tax)"></div>
+                    <p class="text-[11px]" style="color:#8b8fa8;">Allows 80C, 80D, 80TTB &amp; Home Loan deductions.</p>
+                </div>
 
-<div class="p-4 rounded-xl bg-surface-container-lowest border" :class="recommendedRegime === 'new' ? 'border-primary' : 'border-white/5'">
-<div class="flex justify-between items-center mb-1">
-<span class="font-bold text-white text-sm">New Regime</span>
-<span x-show="recommendedRegime === 'new'" class="text-[10px] text-primary font-bold">Best ★</span>
-</div>
-<div class="text-xl font-bold text-white my-2" x-text="formatCurrency(newRegimeTax.tax)"></div>
-<p class="text-on-surface-variant text-[11px]">₹75,000 Standard deduction (FY 2024-25), zero tax up to ₹7L.</p>
-</div>
-</div>
-</div>
+                <div class="p-3.5 rounded-xl" style="background:#0d0f1a;" :class="recommendedRegime === 'new' ? 'border border-primary' : 'border border-white/5'">
+                    <div class="flex justify-between items-center mb-1">
+                        <span class="font-bold text-white text-xs">New Regime</span>
+                        <span x-show="recommendedRegime === 'new'" class="text-[10px] text-primary font-bold">Best ★</span>
+                    </div>
+                    <div class="text-lg font-bold text-white my-1 tabular" x-text="formatCurrency(newRegimeTax.tax)"></div>
+                    <p class="text-[11px]" style="color:#8b8fa8;">₹75,000 Standard deduction (FY 2024-25), zero tax up to ₹7L.</p>
+                </div>
+            </div>
+        </div>
 
-<!-- Advance Tax Schedule -->
-<div class="bg-gradient-to-br from-[#122131] to-[#0d1c2d] border border-white/5 rounded-2xl p-6 shadow-xl space-y-4">
-<div class="flex items-center justify-between pb-3 border-b border-white/10">
-<h3 class="font-semibold text-white">Advance Tax Schedule</h3>
-<span class="text-xs text-on-surface-variant">Quarterly Installments</span>
-</div>
+        <!-- Advance Tax Schedule -->
+        <div class="p-5 rounded-2xl space-y-4"
+             style="background:#13151f; border:1px solid rgba(255,255,255,0.06); box-shadow:0 4px 16px rgba(0,0,0,0.3);">
+            <div class="flex items-center justify-between pb-3" style="border-bottom:1px solid rgba(255,255,255,0.06);">
+                <h3 class="font-semibold text-white text-sm">Advance Tax Schedule</h3>
+                <span class="text-xs" style="color:#8b8fa8;">Quarterly Installments</span>
+            </div>
 
-<template x-if="advanceTaxSchedule &amp;&amp; advanceTaxSchedule.length &gt; 0">
-<div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
-<template x-for="item in advanceTaxSchedule" :key="item.due">
-<div class="p-3 rounded-xl bg-surface-container-lowest border border-white/5 text-xs">
-<span class="text-on-surface-variant text-[10px] block" x-text="item.due"></span>
-<span class="font-bold text-primary block my-1" x-text="formatCurrency(item.amount)"></span>
-<span class="text-[10px] text-white/70 block" x-text="item.pct + '% Due'"></span>
-</div>
-</template>
-</div>
-</template>
+            <template x-if="advanceTaxSchedule &amp;&amp; advanceTaxSchedule.length &gt; 0">
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    <template x-for="item in advanceTaxSchedule" :key="item.due">
+                        <div class="p-2.5 rounded-xl text-xs" style="background:#0d0f1a; border:1px solid rgba(255,255,255,0.05);">
+                            <span class="text-[10px] block" style="color:#8b8fa8;" x-text="item.due"></span>
+                            <span class="font-bold text-primary block my-1 tabular" x-text="formatCurrency(item.amount)"></span>
+                            <span class="text-[10px] text-white/70 block tabular" x-text="item.pct + '% Due'"></span>
+                        </div>
+                    </template>
+                </div>
+            </template>
 
-<template x-if="!advanceTaxSchedule || advanceTaxSchedule.length === 0">
-<p class="text-xs text-on-surface-variant text-center py-4">Total annual tax liability is ≤ ₹10,000. Advance tax is not required.</p>
-</template>
-</div>
+            <template x-if="!advanceTaxSchedule || advanceTaxSchedule.length === 0">
+                <p class="text-xs text-center py-4" style="color:#8b8fa8;">Total annual tax liability is ≤ ₹10,000. Advance tax is not required.</p>
+            </template>
+        </div>
 
-</div>
+    </div>
 </main>
 
-<!-- MORE HUB PAGE -->
-<main x-show="activePage === 'more'" x-cloak class="pt-24 pb-32 px-container-padding-mobile md:px-container-padding-desktop max-w-7xl mx-auto flex flex-col gap-8">
-<div class="flex flex-col gap-1">
-<h2 class="font-headline-lg text-white">More Modules</h2>
-<p class="text-sm text-on-surface-variant">Access all secondary financial tools, cash flow trackers, pension, and goals.</p>
-</div>
+<!-- MORE / TOOLS HUB PAGE -->
+<main x-show="activePage === 'more'" x-cloak class="pt-24 pb-32 px-container-padding-mobile md:px-container-padding-desktop max-w-7xl mx-auto flex flex-col gap-6">
+    <div class="flex flex-col gap-1">
+        <h2 class="font-headline-lg text-white" style="font-family:'Outfit',sans-serif;">Financial Tools &amp; Modules</h2>
+        <p class="text-xs text-on-surface-variant">Access tax calculators, bank imports, maturity reminders, and planning tools.</p>
+    </div>
 
-<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-<!-- Regenerative Wealth (Featured AI Card) -->
-<div @click="activePage = 'regen'" class="bg-gradient-to-br from-[#1c2b3c] to-[#0d1b2a] border border-[#d4af37]/40 rounded-2xl p-6 shadow-xl hover:-translate-y-2 transition-all cursor-pointer group flex flex-col justify-between relative overflow-hidden sm:col-span-2 lg:col-span-3">
-<div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-<div class="flex items-center gap-3">
-<div class="w-12 h-12 rounded-xl bg-[#d4af37]/15 text-[#d4af37] flex items-center justify-center border border-[#d4af37]/30 shadow-[0_0_15px_rgba(212,175,55,0.2)] shrink-0">
-<span class="material-symbols-outlined text-2xl">auto_awesome</span>
-</div>
-<div>
-<div class="flex items-center gap-2 flex-wrap">
-<h3 class="font-bold text-white text-lg leading-tight">Regenerative Wealth</h3>
-<span class="px-2.5 py-1 rounded-full text-[10px] font-bold bg-[#d4af37] text-black whitespace-nowrap shrink-0 tracking-wide">AI &amp; Macro Live</span>
-</div>
-<p class="text-xs text-on-surface-variant mt-1">AI-powered daily reinvestment guidance matching your portfolio with live market news &amp; policies.</p>
-</div>
-</div>
-<span class="text-xs text-[#d4af37] font-semibold group-hover:translate-x-1 transition-transform flex items-center gap-1">Analyse Portfolio →</span>
-</div>
-</div>
+    <!-- Regenerative Wealth AI (Featured Card) -->
+    <div @click="activePage = 'regen'" class="p-6 rounded-3xl cursor-pointer group flex flex-col justify-between relative overflow-hidden transition-all hover:border-[#d4af37]/40"
+         style="background: linear-gradient(145deg, #13151f 0%, #1c2030 60%, #13151f 100%); border: 1px solid rgba(212,175,55,0.25); box-shadow: 0 8px 32px rgba(0,0,0,0.6);">
+        <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div class="flex items-center gap-3.5">
+                <div class="w-12 h-12 rounded-2xl flex items-center justify-center shrink-0"
+                     style="background:rgba(212,175,55,0.12); border:1px solid rgba(212,175,55,0.3); color:#d4af37;">
+                    <span class="material-symbols-outlined text-2xl">auto_awesome</span>
+                </div>
+                <div>
+                    <div class="flex items-center gap-2 flex-wrap">
+                        <h3 class="font-bold text-white text-base">Regenerative Wealth AI</h3>
+                        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold text-black" style="background:#d4af37;">AI Engine</span>
+                    </div>
+                    <p class="text-xs mt-1" style="color:#8b8fa8;">Intelligent daily reinvestment strategy synthesized from your live holdings and macro trends.</p>
+                </div>
+            </div>
+            <span class="text-xs font-semibold group-hover:translate-x-1 transition-transform flex items-center gap-1 shrink-0" style="color:#d4af37;">
+                Analyse Portfolio →
+            </span>
+        </div>
+    </div>
 
-<!-- Cash Flow -->
-<div @click="activePage = 'cashflow'" class="bg-gradient-to-br from-[#122131] to-[#0d1c2d] border border-white/5 rounded-2xl p-6 shadow-xl hover:-translate-y-2 transition-all cursor-pointer group flex flex-col justify-between">
-<div class="flex items-center justify-between mb-4">
-<div class="w-12 h-12 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
-<span class="material-symbols-outlined text-2xl">swap_horiz</span>
-</div>
-<span class="text-xs text-primary font-semibold group-hover:translate-x-1 transition-transform">Open →</span>
-</div>
-<div>
-<h3 class="font-bold text-white text-lg">Cash Flow</h3>
-<p class="text-xs text-on-surface-variant mt-1">Track monthly pension, project income, and essential household expenses.</p>
-</div>
-<div class="mt-4 pt-4 border-t border-white/5 flex justify-between text-xs">
-<span class="text-on-surface-variant">Surplus</span>
-<span class="font-bold" :class="monthlySurplus >= 0 ? 'text-primary' : 'text-red-400'" x-text="formatCurrency(monthlySurplus)"></span>
-</div>
-</div>
+    <!-- Tools Grid -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
 
-<!-- Net Worth -->
-<div @click="activePage = 'networth'" class="bg-gradient-to-br from-[#122131] to-[#0d1c2d] border border-white/5 rounded-2xl p-6 shadow-xl hover:-translate-y-2 transition-all cursor-pointer group flex flex-col justify-between">
-<div class="flex items-center justify-between mb-4">
-<div class="w-12 h-12 rounded-xl bg-[#d4af37]/10 text-[#d4af37] flex items-center justify-center">
-<span class="material-symbols-outlined text-2xl">account_balance</span>
-</div>
-<span class="text-xs text-[#d4af37] font-semibold group-hover:translate-x-1 transition-transform">Open →</span>
-</div>
-<div>
-<h3 class="font-bold text-white text-lg">Net Worth Breakdown</h3>
-<p class="text-xs text-on-surface-variant mt-1">Detailed audit of bank deposits, properties, cash on hand, and debts.</p>
-</div>
-<div class="mt-4 pt-4 border-t border-white/5 flex justify-between text-xs">
-<span class="text-on-surface-variant">Net Total</span>
-<span class="font-bold text-white" x-text="formatCurrency(netWorthTotal)"></span>
-</div>
-</div>
+        <!-- Tax Planning -->
+        <div @click="activePage = 'tax'" class="p-5 rounded-2xl cursor-pointer group flex flex-col justify-between transition-all hover:border-white/20"
+             style="background:#13151f; border:1px solid rgba(255,255,255,0.06); box-shadow:0 4px 16px rgba(0,0,0,0.3);">
+            <div class="flex items-center justify-between mb-3">
+                <div class="w-10 h-10 rounded-xl flex items-center justify-center text-primary" style="background:rgba(68,229,194,0.1);">
+                    <span class="material-symbols-outlined text-xl">receipt_long</span>
+                </div>
+                <span class="text-xs text-primary font-semibold group-hover:translate-x-1 transition-transform">Open →</span>
+            </div>
+            <div>
+                <h3 class="font-bold text-white text-sm">Tax Planning &amp; LTCG</h3>
+                <p class="text-xs mt-1" style="color:#8b8fa8;">Old vs New regime calculator with Section 80C, 80D, standard deduction and advance tax schedule.</p>
+            </div>
+            <div class="mt-4 pt-3 flex justify-between text-xs" style="border-top:1px solid rgba(255,255,255,0.05);">
+                <span style="color:#8b8fa8;">Optimal Regime</span>
+                <span class="font-bold text-primary" x-text="optimalRegime"></span>
+            </div>
+        </div>
 
-<!-- My Pension -->
-<div @click="activePage = 'pension'" class="bg-gradient-to-br from-[#122131] to-[#0d1c2d] border border-white/5 rounded-2xl p-6 shadow-xl hover:-translate-y-2 transition-all cursor-pointer group flex flex-col justify-between">
-<div class="flex items-center justify-between mb-4">
-<div class="w-12 h-12 rounded-xl bg-purple-500/10 text-purple-400 flex items-center justify-center">
-<span class="material-symbols-outlined text-2xl leading-none">savings</span>
-</div>
-<span class="text-xs text-purple-400 font-semibold group-hover:translate-x-1 transition-transform">Open →</span>
-</div>
-<div>
-<h3 class="font-bold text-white text-lg">My Pension</h3>
-<p class="text-xs text-on-surface-variant mt-1">Single source of truth for pension income, category badges, and revisions.</p>
-</div>
-<div class="mt-4 pt-4 border-t border-white/5 flex justify-between text-xs">
-<span class="text-on-surface-variant">Monthly</span>
-<span class="font-bold text-white" x-text="formatCurrency(pension.monthlyAmount)"></span>
-</div>
-</div>
+        <!-- Statement Import -->
+        <div @click="activePage = 'import'" class="p-5 rounded-2xl cursor-pointer group flex flex-col justify-between transition-all hover:border-white/20"
+             style="background:#13151f; border:1px solid rgba(255,255,255,0.06); box-shadow:0 4px 16px rgba(0,0,0,0.3);">
+            <div class="flex items-center justify-between mb-3">
+                <div class="w-10 h-10 rounded-xl flex items-center justify-center text-[#d4af37]" style="background:rgba(212,175,55,0.1);">
+                    <span class="material-symbols-outlined text-xl">upload_file</span>
+                </div>
+                <span class="text-xs text-[#d4af37] font-semibold group-hover:translate-x-1 transition-transform">Open →</span>
+            </div>
+            <div>
+                <h3 class="font-bold text-white text-sm">Statement &amp; CAS Import</h3>
+                <p class="text-xs mt-1" style="color:#8b8fa8;">Parse bank statements, CAMS/KFintech CAS PDFs, and INDMoney screenshots automatically.</p>
+            </div>
+            <div class="mt-4 pt-3 flex justify-between text-xs" style="border-top:1px solid rgba(255,255,255,0.05);">
+                <span style="color:#8b8fa8;">AI Parser</span>
+                <span class="font-bold text-white">Gemini Flash</span>
+            </div>
+        </div>
 
-<!-- Emergency Fund -->
-<div @click="activePage = 'emergency'" class="bg-gradient-to-br from-[#122131] to-[#0d1c2d] border border-white/5 rounded-2xl p-6 shadow-xl hover:-translate-y-2 transition-all cursor-pointer group flex flex-col justify-between">
-<div class="flex items-center justify-between mb-4">
-<div class="w-12 h-12 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center">
-<span class="material-symbols-outlined text-2xl">shield_locked</span>
-</div>
-<span class="text-xs text-emerald-400 font-semibold group-hover:translate-x-1 transition-transform">Open →</span>
-</div>
-<div>
-<h3 class="font-bold text-white text-lg">Emergency Fund</h3>
-<p class="text-xs text-on-surface-variant mt-1">Target months of safety buffer, current savings progress, and gap analysis.</p>
-</div>
-<div class="mt-4 pt-4 border-t border-white/5 flex justify-between text-xs">
-<span class="text-on-surface-variant">Progress</span>
-<span class="font-bold text-emerald-400" x-text="efProgress + '%'"></span>
-</div>
-</div>
+        <!-- Maturity Calendar -->
+        <div @click="activePage = 'maturity'" class="p-5 rounded-2xl cursor-pointer group flex flex-col justify-between transition-all hover:border-white/20"
+             style="background:#13151f; border:1px solid rgba(255,255,255,0.06); box-shadow:0 4px 16px rgba(0,0,0,0.3);">
+            <div class="flex items-center justify-between mb-3">
+                <div class="w-10 h-10 rounded-xl flex items-center justify-center text-blue-400" style="background:rgba(96,165,250,0.1);">
+                    <span class="material-symbols-outlined text-xl">calendar_month</span>
+                </div>
+                <span class="text-xs text-blue-400 font-semibold group-hover:translate-x-1 transition-transform">Open →</span>
+            </div>
+            <div>
+                <h3 class="font-bold text-white text-sm">Maturity Calendar</h3>
+                <p class="text-xs mt-1" style="color:#8b8fa8;">Chronological timeline of FD, Bond, and SGB maturity dates with urgency badges.</p>
+            </div>
+            <div class="mt-4 pt-3 flex justify-between text-xs" style="border-top:1px solid rgba(255,255,255,0.05);">
+                <span style="color:#8b8fa8;">Maturing Assets</span>
+                <span class="font-bold text-blue-400 tabular" x-text="maturingInvestments.length"></span>
+            </div>
+        </div>
 
-<!-- My Goals -->
-<div @click="activePage = 'goals'" class="bg-gradient-to-br from-[#122131] to-[#0d1c2d] border border-white/5 rounded-2xl p-6 shadow-xl hover:-translate-y-2 transition-all cursor-pointer group flex flex-col justify-between">
-<div class="flex items-center justify-between mb-4">
-<div class="w-12 h-12 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center">
-<span class="material-symbols-outlined text-2xl">track_changes</span>
-</div>
-<span class="text-xs text-amber-400 font-semibold group-hover:translate-x-1 transition-transform">Open →</span>
-</div>
-<div>
-<h3 class="font-bold text-white text-lg">My Goals</h3>
-<p class="text-xs text-on-surface-variant mt-1">Set financial targets (car, house, travel) and calculate monthly savings needed.</p>
-</div>
-<div class="mt-4 pt-4 border-t border-white/5 flex justify-between text-xs">
-<span class="text-on-surface-variant">Active Goals</span>
-<span class="font-bold text-white" x-text="goals.length"></span>
-</div>
-</div>
+        <!-- Net Worth Breakdown -->
+        <div @click="activePage = 'networth'" class="p-5 rounded-2xl cursor-pointer group flex flex-col justify-between transition-all hover:border-white/20"
+             style="background:#13151f; border:1px solid rgba(255,255,255,0.06); box-shadow:0 4px 16px rgba(0,0,0,0.3);">
+            <div class="flex items-center justify-between mb-3">
+                <div class="w-10 h-10 rounded-xl flex items-center justify-center text-[#d4af37]" style="background:rgba(212,175,55,0.1);">
+                    <span class="material-symbols-outlined text-xl">account_balance</span>
+                </div>
+                <span class="text-xs text-[#d4af37] font-semibold group-hover:translate-x-1 transition-transform">Open →</span>
+            </div>
+            <div>
+                <h3 class="font-bold text-white text-sm">Net Worth Audit</h3>
+                <p class="text-xs mt-1" style="color:#8b8fa8;">Full audit of bank accounts, properties, physical cash, and active liabilities.</p>
+            </div>
+            <div class="mt-4 pt-3 flex justify-between text-xs" style="border-top:1px solid rgba(255,255,255,0.05);">
+                <span style="color:#8b8fa8;">Total Net Worth</span>
+                <span class="font-bold text-white tabular" x-text="formatCurrency(netWorthTotal)"></span>
+            </div>
+        </div>
 
-<!-- Maturity Calendar -->
-<div @click="activePage = 'maturity'" class="bg-gradient-to-br from-[#122131] to-[#0d1c2d] border border-white/5 rounded-2xl p-6 shadow-xl hover:-translate-y-2 transition-all cursor-pointer group flex flex-col justify-between">
-<div class="flex items-center justify-between mb-4">
-<div class="w-12 h-12 rounded-xl bg-blue-500/10 text-blue-400 flex items-center justify-center">
-<span class="material-symbols-outlined text-2xl">calendar_month</span>
-</div>
-<span class="text-xs text-blue-400 font-semibold group-hover:translate-x-1 transition-transform">Open →</span>
-</div>
-<div>
-<h3 class="font-bold text-white text-lg">Maturity Calendar</h3>
-<p class="text-xs text-on-surface-variant mt-1">Chronological schedule of FD and Bond maturity dates with urgency badges.</p>
-</div>
-<div class="mt-4 pt-4 border-t border-white/5 flex justify-between text-xs">
-<span class="text-on-surface-variant">Maturing Assets</span>
-<span class="font-bold text-blue-400" x-text="maturingInvestments.length"></span>
-</div>
-</div>
-</div>
+        <!-- Cash Flow Management -->
+        <div @click="activePage = 'cashflow'" class="p-5 rounded-2xl cursor-pointer group flex flex-col justify-between transition-all hover:border-white/20"
+             style="background:#13151f; border:1px solid rgba(255,255,255,0.06); box-shadow:0 4px 16px rgba(0,0,0,0.3);">
+            <div class="flex items-center justify-between mb-3">
+                <div class="w-10 h-10 rounded-xl flex items-center justify-center text-primary" style="background:rgba(68,229,194,0.1);">
+                    <span class="material-symbols-outlined text-xl">swap_horiz</span>
+                </div>
+                <span class="text-xs text-primary font-semibold group-hover:translate-x-1 transition-transform">Open →</span>
+            </div>
+            <div>
+                <h3 class="font-bold text-white text-sm">Cash Flow Tracker</h3>
+                <p class="text-xs mt-1" style="color:#8b8fa8;">Monthly inflow from pension and consulting vs household expenditures and SIPs.</p>
+            </div>
+            <div class="mt-4 pt-3 flex justify-between text-xs" style="border-top:1px solid rgba(255,255,255,0.05);">
+                <span style="color:#8b8fa8;">Monthly Surplus</span>
+                <span class="font-bold tabular" :class="monthlySurplus >= 0 ? 'text-primary' : 'text-red-400'" x-text="formatCurrency(monthlySurplus)"></span>
+            </div>
+        </div>
+
+        <!-- Pension Details -->
+        <div @click="activePage = 'pension'" class="p-5 rounded-2xl cursor-pointer group flex flex-col justify-between transition-all hover:border-white/20"
+             style="background:#13151f; border:1px solid rgba(255,255,255,0.06); box-shadow:0 4px 16px rgba(0,0,0,0.3);">
+            <div class="flex items-center justify-between mb-3">
+                <div class="w-10 h-10 rounded-xl flex items-center justify-center text-purple-400" style="background:rgba(168,85,247,0.1);">
+                    <span class="material-symbols-outlined text-xl">savings</span>
+                </div>
+                <span class="text-xs text-purple-400 font-semibold group-hover:translate-x-1 transition-transform">Open →</span>
+            </div>
+            <div>
+                <h3 class="font-bold text-white text-sm">Pension Profile</h3>
+                <p class="text-xs mt-1" style="color:#8b8fa8;">Pension disbursements, revision records, DA arrears, and tax exemptions.</p>
+            </div>
+            <div class="mt-4 pt-3 flex justify-between text-xs" style="border-top:1px solid rgba(255,255,255,0.05);">
+                <span style="color:#8b8fa8;">Monthly Disbursal</span>
+                <span class="font-bold text-white tabular" x-text="formatCurrency(pension.monthlyAmount)"></span>
+            </div>
+        </div>
+
+    </div>
 </main>
 
 <!-- REGENERATIVE WEALTH PAGE -->
@@ -1199,12 +1544,13 @@ Restore from JSON
             <div>
                 <label class="block text-[11px] font-semibold text-on-surface-variant mb-1">Active Model (OpenRouter / OpenAI)</label>
                 <select x-model="regenWealth.model" @change="saveRegenApiKey()" class="w-full px-3 py-2 rounded-xl bg-surface-container-lowest border border-white/10 text-white text-xs outline-none focus:border-[#d4af37]">
-                    <option value="google/gemini-2.0-flash-exp:free">✨ Gemini 2.0 Flash (Free Tier — google/gemini-2.0-flash-exp:free)</option>
-                    <option value="google/gemini-2.0-flash-001">Gemini 2.0 Flash Paid (google/gemini-2.0-flash-001)</option>
-                    <option value="meta-llama/llama-3.3-70b-instruct:free">🦙 Llama 3.3 70B (Free — meta-llama/llama-3.3-70b-instruct:free)</option>
-                    <option value="deepseek/deepseek-r1:free">🐋 DeepSeek R1 (Free — deepseek/deepseek-r1:free)</option>
-                    <option value="openai/gpt-4o-mini">⚡ GPT-4o Mini (openai/gpt-4o-mini)</option>
+                    <option value="deepseek/deepseek-r1">🐋 DeepSeek R1 (Reasoning — deepseek/deepseek-r1)</option>
+                    <option value="deepseek/deepseek-chat">⚡ DeepSeek V3 (Chat — deepseek/deepseek-chat)</option>
+                    <option value="google/gemini-2.0-flash-001">✨ Gemini 2.0 Flash (google/gemini-2.0-flash-001)</option>
                     <option value="anthropic/claude-3.5-sonnet">🧠 Claude 3.5 Sonnet (anthropic/claude-3.5-sonnet)</option>
+                    <option value="openai/gpt-4o-mini">🚀 GPT-4o Mini (openai/gpt-4o-mini)</option>
+                    <option value="meta-llama/llama-3.3-70b-instruct">🦙 Llama 3.3 70B (meta-llama/llama-3.3-70b-instruct)</option>
+                    <option value="qwen/qwen-2.5-72b-instruct">🌐 Qwen 2.5 72B (qwen/qwen-2.5-72b-instruct)</option>
                     <option value="custom">⚙️ Custom Model String...</option>
                 </select>
             </div>
@@ -1357,104 +1703,217 @@ Reads: <span class="text-white font-medium">ET Markets</span> · <span class="te
 </main>
 
 <!-- 1. CASH FLOW PAGE -->
-<main x-show="activePage === 'cashflow'" x-cloak class="pt-24 pb-32 px-container-padding-mobile md:px-container-padding-desktop max-w-7xl mx-auto flex flex-col gap-8">
-<div class="flex items-center gap-3">
-<button @click="activePage = 'more'" class="p-2 rounded-lg bg-surface-container-high text-white hover:bg-surface-bright transition-colors">
-<span class="material-symbols-outlined text-sm">arrow_back</span>
-</button>
-<div>
-<h2 class="font-headline-lg text-white">Cash Flow Management</h2>
-<p class="text-xs text-on-surface-variant">Monitor monthly inflow streams vs essential household expenditures.</p>
-</div>
-</div>
+<main x-show="activePage === 'cashflow'" x-cloak class="pt-24 pb-32 px-container-padding-mobile md:px-container-padding-desktop max-w-7xl mx-auto flex flex-col gap-6">
+    <!-- Plan Tab Sub-Navigation -->
+    <div class="flex items-center gap-1.5 p-1 rounded-2xl overflow-x-auto" style="background:#13151f; border:1px solid rgba(255,255,255,0.06);">
+        <button @click="activePage = 'cashflow'" class="px-4 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all bg-primary text-on-primary shadow-md">
+            Cash Flow
+        </button>
+        <button @click="activePage = 'pension'" class="px-4 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all text-on-surface-variant hover:text-white">
+            Pension
+        </button>
+        <button @click="activePage = 'emergency'" class="px-4 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all text-on-surface-variant hover:text-white">
+            Emergency Fund
+        </button>
+        <button @click="activePage = 'goals'" class="px-4 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all text-on-surface-variant hover:text-white">
+            Goals
+        </button>
+    </div>
 
-<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-<!-- Income Breakdown -->
-<div class="bg-gradient-to-br from-[#122131] to-[#0d1c2d] border border-white/5 rounded-2xl p-6 shadow-xl flex flex-col gap-4">
-<div class="flex items-center justify-between pb-3 border-b border-white/10">
-<h3 class="font-semibold text-primary flex items-center gap-2">
-<span class="material-symbols-outlined">south_west</span> Monthly Income
-</h3>
-<span class="font-bold text-white text-lg" x-text="formatCurrency(totalIncome)"></span>
-</div>
-<div class="space-y-4">
-<div>
-<label class="block text-xs font-medium text-on-surface-variant mb-1">Pension (Single Source of Truth)</label>
-<div class="flex items-center justify-between px-3 py-2 rounded-lg bg-surface-container-lowest border border-white/10">
-<span class="font-bold text-white" x-text="formatCurrency(pension.monthlyAmount)"></span>
-<button @click="activePage = 'pension'" class="text-xs text-primary hover:underline">Edit Pension →</button>
-</div>
-</div>
-<div>
-<label class="block text-xs font-medium text-on-surface-variant mb-1">Project / Consulting Income (₹)</label>
-<input type="number" x-model.number="cashflow.project" class="w-full px-3 py-2 rounded-lg bg-surface-container-lowest border border-white/10 text-white focus:border-primary outline-none text-sm">
-</div>
-<div>
-<label class="block text-xs font-medium text-on-surface-variant mb-1">Other Income (₹)</label>
-<input type="number" x-model.number="cashflow.otherIncome" class="w-full px-3 py-2 rounded-lg bg-surface-container-lowest border border-white/10 text-white focus:border-primary outline-none text-sm">
-</div>
-</div>
-</div>
+    <!-- Header & Salary Cycle Banner -->
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+            <h2 class="font-headline-lg text-white" style="font-family:'Outfit',sans-serif;">Cash Flow Management</h2>
+            <p class="text-xs text-on-surface-variant">Track your inflow cycles vs essential living expenses &amp; investments.</p>
+        </div>
 
-<!-- Expense Breakdown -->
-<div class="bg-gradient-to-br from-[#122131] to-[#0d1c2d] border border-white/5 rounded-2xl p-6 shadow-xl flex flex-col gap-4">
-<div class="flex items-center justify-between pb-3 border-b border-white/10">
-<h3 class="font-semibold text-red-400 flex items-center gap-2">
-<span class="material-symbols-outlined">north_east</span> Monthly Expenses
-</h3>
-<span class="font-bold text-white text-lg" x-text="formatCurrency(totalExpense)"></span>
-</div>
-<div class="space-y-3">
-<div>
-<label class="block text-xs font-medium text-on-surface-variant mb-1">Housing &amp; Utilities (₹)</label>
-<input type="number" x-model.number="cashflow.housing" class="w-full px-3 py-2 rounded-lg bg-surface-container-lowest border border-white/10 text-white focus:border-primary outline-none text-sm">
-</div>
-<div>
-<label class="block text-xs font-medium text-on-surface-variant mb-1">Food &amp; Household (₹)</label>
-<input type="number" x-model.number="cashflow.food" class="w-full px-3 py-2 rounded-lg bg-surface-container-lowest border border-white/10 text-white focus:border-primary outline-none text-sm">
-</div>
-<div>
-<label class="block text-xs font-medium text-on-surface-variant mb-1">Medical &amp; Insurance (₹)</label>
-<input type="number" x-model.number="cashflow.medical" class="w-full px-3 py-2 rounded-lg bg-surface-container-lowest border border-white/10 text-white focus:border-primary outline-none text-sm">
-</div>
-<div>
-<label class="block text-xs font-medium text-on-surface-variant mb-1">Other Expenses (₹)</label>
-<input type="number" x-model.number="cashflow.otherExpense" class="w-full px-3 py-2 rounded-lg bg-surface-container-lowest border border-white/10 text-white focus:border-primary outline-none text-sm">
-</div>
-<div class="pt-2 border-t border-white/5 flex justify-between text-xs text-on-surface-variant">
-<span>SIP &amp; RD Outflows (Auto)</span>
-<span class="font-bold text-primary" x-text="formatCurrency(totalMonthlySipOutflow)"></span>
-</div>
-</div>
-</div>
+        <!-- Salary Cycle Info Pill -->
+        <div class="px-4 py-2.5 rounded-2xl flex items-center gap-3 shrink-0"
+             style="background:#13151f; border:1px solid rgba(255,255,255,0.08); box-shadow:0 4px 16px rgba(0,0,0,0.3);">
+            <div class="flex items-center gap-2">
+                <span class="material-symbols-outlined text-primary text-base">event_repeat</span>
+                <div>
+                    <div class="flex items-center gap-1.5">
+                        <span class="text-[10px] text-white/50">Salary Cycle:</span>
+                        <span class="text-xs font-bold text-white font-mono" x-text="cashflowCycleInfo.cycleLabel"></span>
+                    </div>
+                    <span class="text-[10px] text-emerald-400 font-medium" x-text="cashflowCycleInfo.daysRemaining + ' days until salary reset'"></span>
+                </div>
+            </div>
+            <div class="pl-2 border-l border-white/10 flex items-center gap-1.5">
+                <span class="text-[10px] text-white/50">Pay Day:</span>
+                <input type="number" min="1" max="31" x-model.number="cashflow.salaryDay" @change="saveData()"
+                       class="w-10 px-1.5 py-0.5 rounded text-center text-xs font-mono font-bold text-[#d4af37] bg-white/5 border border-white/10 outline-none focus:border-primary tabular">
+            </div>
+        </div>
+    </div>
 
-<!-- Summary Card -->
-<div class="bg-gradient-to-br from-[#1c2b3c] to-[#0d1b2a] border border-white/10 rounded-2xl p-6 shadow-2xl flex flex-col justify-between">
-<div>
-<h3 class="font-semibold text-white mb-4">Cash Flow Summary</h3>
-<div class="flex justify-between items-center mb-3">
-<span class="text-xs text-on-surface-variant">Total Income</span>
-<span class="font-semibold text-primary" x-text="formatCurrency(totalIncome)"></span>
-</div>
-<div class="flex justify-between items-center mb-3">
-<span class="text-xs text-on-surface-variant">Total Expenses</span>
-<span class="font-semibold text-red-400" x-text="formatCurrency(totalExpense)"></span>
-</div>
-<hr class="border-white/10 my-4">
-<div class="flex justify-between items-center">
-<span class="text-sm font-medium text-white">Monthly Surplus</span>
-<span class="text-2xl font-bold" :class="monthlySurplus >= 0 ? 'text-primary' : 'text-red-400'" x-text="formatCurrency(monthlySurplus)"></span>
-</div>
-</div>
-<div class="mt-6 bg-surface-container-lowest p-4 rounded-xl border border-white/5">
-<span class="block text-xs text-on-surface-variant mb-1">Savings Rate</span>
-<div class="flex items-center justify-between">
-<span class="text-2xl font-bold text-[#d4af37]" x-text="savingsRate + '%'"></span>
-<span class="text-xs text-on-surface-variant">(Target: 20%+)</span>
-</div>
-</div>
-</div>
-</div>
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+
+        <!-- 1. Monthly Income Breakdown (Dynamic Multi-Stream) -->
+        <div class="p-5 rounded-2xl flex flex-col gap-4" style="background:#13151f; border:1px solid rgba(255,255,255,0.06); box-shadow:0 4px 16px rgba(0,0,0,0.3);">
+            <div class="flex items-center justify-between pb-3" style="border-bottom:1px solid rgba(255,255,255,0.06);">
+                <h3 class="font-semibold text-primary flex items-center gap-2 text-sm">
+                    <span class="material-symbols-outlined text-base">south_west</span>
+                    <span>Monthly Inflow</span>
+                </h3>
+                <span class="font-bold text-white text-base tabular" style="font-family:'Outfit',sans-serif;" x-text="formatCurrency(totalIncome)"></span>
+            </div>
+
+            <!-- Incomes List -->
+            <div class="space-y-3">
+                <template x-for="inc in (cashflow.incomes || [])" :key="inc.id">
+                    <div class="p-3 rounded-xl flex flex-col gap-2" style="background:#0d0f1a; border:1px solid rgba(255,255,255,0.05);">
+                        <div class="flex items-center justify-between gap-2">
+                            <input type="text" x-model="inc.name" @change="saveData()" placeholder="Income stream name"
+                                   class="bg-transparent text-white font-medium text-xs outline-none focus:text-primary w-full">
+                            <button @click="deleteIncomeStream(inc.id)" class="text-white/30 hover:text-red-400 p-0.5 text-xs transition-colors shrink-0">
+                                <span class="material-symbols-outlined text-sm">close</span>
+                            </button>
+                        </div>
+                        <div class="flex items-center justify-between gap-2 pt-1 text-xs" style="border-top:1px solid rgba(255,255,255,0.04);">
+                            <div class="flex items-center gap-1.5">
+                                <span class="text-[10px] text-white/40">Credit Day:</span>
+                                <input type="number" min="1" max="31" x-model.number="inc.creditDay" @change="saveData()" placeholder="1"
+                                       class="w-10 px-1.5 py-0.5 rounded text-center font-mono text-[11px] text-white/80 bg-white/5 border border-white/10 outline-none focus:border-primary tabular">
+                            </div>
+                            <div class="flex items-center gap-1">
+                                <span class="text-[10px] text-white/40">₹</span>
+                                <input type="number" x-model.number="inc.amount" @change="saveData()" placeholder="0"
+                                       class="w-28 px-2 py-1 rounded-lg text-right font-mono font-bold text-white text-xs outline-none focus:border-primary tabular"
+                                       style="background:#13151f; border:1px solid rgba(255,255,255,0.08);">
+                            </div>
+                        </div>
+                    </div>
+                </template>
+
+                <button @click="addIncomeStream('Monthly Salary', 0, 'Salary', 1)"
+                        class="w-full py-2.5 rounded-xl border border-dashed text-xs font-semibold text-primary hover:bg-primary/5 transition-all flex items-center justify-center gap-1.5"
+                        style="border-color:rgba(68,229,194,0.3);">
+                    <span class="material-symbols-outlined text-sm">add</span>
+                    <span>+ Add Income Stream</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- 2. Monthly Expense Breakdown (Dynamic Items + SIP Controls) -->
+        <div class="p-5 rounded-2xl flex flex-col gap-4" style="background:#13151f; border:1px solid rgba(255,255,255,0.06); box-shadow:0 4px 16px rgba(0,0,0,0.3);">
+            <div class="flex items-center justify-between pb-3" style="border-bottom:1px solid rgba(255,255,255,0.06);">
+                <h3 class="font-semibold text-red-400 flex items-center gap-2 text-sm">
+                    <span class="material-symbols-outlined text-base">north_east</span>
+                    <span>Monthly Expenses</span>
+                </h3>
+                <span class="font-bold text-white text-base tabular" style="font-family:'Outfit',sans-serif;" x-text="formatCurrency(totalExpense)"></span>
+            </div>
+
+            <!-- Expenses List -->
+            <div class="space-y-3">
+                <template x-for="exp in (cashflow.expenses || [])" :key="exp.id">
+                    <div class="p-3 rounded-xl flex flex-col gap-2" style="background:#0d0f1a; border:1px solid rgba(255,255,255,0.05);">
+                        <div class="flex items-center justify-between gap-2">
+                            <input type="text" x-model="exp.name" @change="saveData()" placeholder="Expense name"
+                                   class="bg-transparent text-white font-medium text-xs outline-none focus:text-red-400 w-full">
+                            <button @click="deleteExpenseItem(exp.id)" class="text-white/30 hover:text-red-400 p-0.5 text-xs transition-colors shrink-0">
+                                <span class="material-symbols-outlined text-sm">close</span>
+                            </button>
+                        </div>
+                        <div class="flex items-center justify-between gap-2 pt-1" style="border-top:1px solid rgba(255,255,255,0.04);">
+                            <span class="text-[10px] text-white/40">Amount (₹)</span>
+                            <input type="number" x-model.number="exp.amount" @change="saveData()" placeholder="0"
+                                   class="w-32 px-2.5 py-1 rounded-lg text-right font-mono font-bold text-white text-xs outline-none focus:border-red-400 tabular"
+                                   style="background:#13151f; border:1px solid rgba(255,255,255,0.08);">
+                        </div>
+                    </div>
+                </template>
+
+                <button @click="addExpenseItem('New Expense Item', 0, 'General')"
+                        class="w-full py-2.5 rounded-xl border border-dashed text-xs font-semibold text-red-400/80 hover:bg-red-400/5 transition-all flex items-center justify-center gap-1.5"
+                        style="border-color:rgba(248,113,113,0.3);">
+                    <span class="material-symbols-outlined text-sm">add</span>
+                    <span>+ Add Expense Category</span>
+                </button>
+
+                <!-- SIP Outflows & Skip/Pause Controls -->
+                <div class="pt-3 mt-2" style="border-top:1px solid rgba(255,255,255,0.06);">
+                    <div class="flex items-center justify-between mb-2">
+                        <div>
+                            <span class="text-[11px] font-bold text-white block">SIP &amp; RD Outflows</span>
+                            <span class="text-[10px]" style="color:#8b8fa8;" x-text="activeSipCount + ' Active · ' + (sips.length - activeSipCount) + ' Paused/Skipped'"></span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span class="font-bold text-primary font-mono tabular text-xs" x-text="formatCurrency(effectiveMonthlySipOutflow)"></span>
+                            <button @click="addingSip = true" class="text-[10px] px-2 py-0.5 rounded border border-primary/30 text-primary hover:bg-primary/10 transition-all">+ Add</button>
+                        </div>
+                    </div>
+
+                    <!-- Individual SIP Skip Toggles -->
+                    <div class="space-y-2 mt-2">
+                        <template x-for="sip in sips" :key="sip.id">
+                            <div class="p-2.5 rounded-xl flex items-center justify-between gap-2" style="background:#0d0f1a; border:1px solid rgba(255,255,255,0.04);">
+                                <div class="min-w-0 cursor-pointer" @click="openEditSipModal(sip)">
+                                    <div class="flex items-center gap-1.5">
+                                        <span class="font-semibold text-white text-xs truncate" x-text="sip.name"></span>
+                                        <span class="text-[9px] px-1.5 py-0.2 rounded font-mono text-[#d4af37]" style="background:rgba(212,175,55,0.12);" x-text="'₹' + sip.monthlyAmount"></span>
+                                    </div>
+                                    <span class="text-[10px] block mt-0.5" style="color:#8b8fa8;" x-text="'Debit on ' + (sip.dayOfMonth || 3) + 'th of month'"></span>
+                                </div>
+                                <div class="flex items-center gap-1.5 shrink-0">
+                                    <button @click="toggleSipStatus(sip); saveData()"
+                                            class="px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all"
+                                            :class="sip.status === 'Active' ? 'bg-emerald-950/60 text-emerald-400 border border-emerald-500/30 hover:brightness-125' : 'bg-amber-950/60 text-amber-400 border border-amber-500/30 hover:brightness-125'">
+                                        <span x-text="sip.status === 'Active' ? 'Active' : 'Skipped / Paused'"></span>
+                                    </button>
+                                    <button @click="openEditSipModal(sip)" class="p-1 rounded text-white/40 hover:text-white" title="Edit Debit Date">
+                                        <span class="material-symbols-outlined text-[14px]">edit</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </template>
+                        <div x-show="sips.length === 0" class="text-center py-2 text-[11px] text-white/40">
+                            No SIPs configured. Tap "+ Add" to link an SIP.
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 3. Summary & Savings Rate Card -->
+        <div class="p-5 rounded-2xl flex flex-col justify-between"
+             style="background: linear-gradient(145deg, #13151f 0%, #1c2030 60%, #13151f 100%); border: 1px solid rgba(255,255,255,0.08); box-shadow: 0 4px 16px rgba(0,0,0,0.4);">
+            <div>
+                <h3 class="font-semibold text-white mb-4 text-sm" style="font-family:'Outfit',sans-serif;">Cash Flow Summary</h3>
+                <div class="flex justify-between items-center mb-2.5 text-xs">
+                    <span style="color:#8b8fa8;">Total Inflow</span>
+                    <span class="font-bold text-primary font-mono tabular" x-text="formatCurrency(totalIncome)"></span>
+                </div>
+                <div class="flex justify-between items-center mb-2.5 text-xs">
+                    <span style="color:#8b8fa8;">Total Outflow</span>
+                    <span class="font-bold text-red-400 font-mono tabular" x-text="formatCurrency(totalExpense)"></span>
+                </div>
+                <div class="flex justify-between items-center mb-3 text-xs pl-2" style="border-left:2px solid rgba(255,255,255,0.1);">
+                    <span style="color:#8b8fa8;">└ Includes Active SIPs</span>
+                    <span class="font-medium text-white/70 font-mono tabular text-[11px]" x-text="formatCurrency(effectiveMonthlySipOutflow)"></span>
+                </div>
+
+                <div class="pt-3 my-3 flex justify-between items-center" style="border-top:1px solid rgba(255,255,255,0.08);">
+                    <span class="text-xs font-semibold text-white">Monthly Surplus</span>
+                    <span class="text-xl font-extrabold font-mono tabular"
+                          :class="monthlySurplus >= 0 ? 'text-primary' : 'text-red-400'"
+                          style="font-family:'Outfit',sans-serif;"
+                          x-text="(monthlySurplus >= 0 ? '+' : '') + formatCurrency(monthlySurplus)"></span>
+                </div>
+            </div>
+
+            <div class="mt-4 p-4 rounded-xl" style="background:#0d0f1a; border:1px solid rgba(255,255,255,0.06);">
+                <span class="block text-[10px] uppercase font-bold tracking-wider mb-1" style="color:#8b8fa8;">Savings Rate</span>
+                <div class="flex items-center justify-between">
+                    <span class="text-2xl font-extrabold text-[#d4af37] font-mono tabular" style="font-family:'Outfit',sans-serif;" x-text="savingsRate + '%'"></span>
+                    <span class="text-[11px]" :class="Number(savingsRate) >= 20 ? 'text-emerald-400' : 'text-amber-400'" x-text="Number(savingsRate) >= 20 ? '★ Healthy' : 'Target: 20%+'"></span>
+                </div>
+            </div>
+        </div>
+
+    </div>
 </main>
 
 <!-- 2. NET WORTH PAGE -->
@@ -1529,11 +1988,27 @@ Reads: <span class="text-white font-medium">ET Markets</span> · <span class="te
 </main>
 
 <!-- 3. MY PENSION PAGE -->
-<main x-show="activePage === 'pension'" x-cloak class="pt-24 pb-32 px-container-padding-mobile md:px-container-padding-desktop max-w-7xl mx-auto flex flex-col gap-8">
-<div class="flex items-center gap-3">
-<button @click="activePage = 'more'" class="p-2 rounded-lg bg-surface-container-high text-white hover:bg-surface-bright transition-colors">
-<span class="material-symbols-outlined text-sm">arrow_back</span>
-</button>
+<main x-show="activePage === 'pension'" x-cloak class="pt-24 pb-32 px-container-padding-mobile md:px-container-padding-desktop max-w-7xl mx-auto flex flex-col gap-6">
+    <!-- Plan Tab Sub-Navigation -->
+    <div class="flex items-center gap-1.5 p-1 rounded-2xl overflow-x-auto" style="background:#13151f; border:1px solid rgba(255,255,255,0.06);">
+        <button @click="activePage = 'cashflow'" class="px-4 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all text-on-surface-variant hover:text-white">
+            Cash Flow
+        </button>
+        <button @click="activePage = 'pension'" class="px-4 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all bg-primary text-on-primary shadow-md">
+            Pension
+        </button>
+        <button @click="activePage = 'emergency'" class="px-4 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all text-on-surface-variant hover:text-white">
+            Emergency Fund
+        </button>
+        <button @click="activePage = 'goals'" class="px-4 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all text-on-surface-variant hover:text-white">
+            Goals
+        </button>
+    </div>
+
+    <div>
+        <h2 class="font-headline-lg text-white" style="font-family:'Outfit',sans-serif;">Pension Profile</h2>
+        <p class="text-xs text-on-surface-variant">Pension disbursements, revision history, and tax exemption settings.</p>
+    </div>
 <div>
 <h2 class="font-headline-lg text-white">My Pension</h2>
 <p class="text-xs text-on-surface-variant">Single source of truth for pension income. Changes update Cash Flow &amp; Tax automatically.</p>
@@ -1615,16 +2090,27 @@ Reads: <span class="text-white font-medium">ET Markets</span> · <span class="te
 </main>
 
 <!-- 4. EMERGENCY FUND PAGE -->
-<main x-show="activePage === 'emergency'" x-cloak class="pt-24 pb-32 px-container-padding-mobile md:px-container-padding-desktop max-w-7xl mx-auto flex flex-col gap-8">
-<div class="flex items-center gap-3">
-<button @click="activePage = 'more'" class="p-2 rounded-lg bg-surface-container-high text-white hover:bg-surface-bright transition-colors">
-<span class="material-symbols-outlined text-sm">arrow_back</span>
-</button>
-<div>
-<h2 class="font-headline-lg text-white">Emergency Fund Safety Buffer</h2>
-<p class="text-xs text-on-surface-variant">Calculate and track your essential safety net for unexpected events.</p>
-</div>
-</div>
+<main x-show="activePage === 'emergency'" x-cloak class="pt-24 pb-32 px-container-padding-mobile md:px-container-padding-desktop max-w-7xl mx-auto flex flex-col gap-6">
+    <!-- Plan Tab Sub-Navigation -->
+    <div class="flex items-center gap-1.5 p-1 rounded-2xl overflow-x-auto" style="background:#13151f; border:1px solid rgba(255,255,255,0.06);">
+        <button @click="activePage = 'cashflow'" class="px-4 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all text-on-surface-variant hover:text-white">
+            Cash Flow
+        </button>
+        <button @click="activePage = 'pension'" class="px-4 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all text-on-surface-variant hover:text-white">
+            Pension
+        </button>
+        <button @click="activePage = 'emergency'" class="px-4 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all bg-primary text-on-primary shadow-md">
+            Emergency Fund
+        </button>
+        <button @click="activePage = 'goals'" class="px-4 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all text-on-surface-variant hover:text-white">
+            Goals
+        </button>
+    </div>
+
+    <div>
+        <h2 class="font-headline-lg text-white" style="font-family:'Outfit',sans-serif;">Emergency Fund Safety Buffer</h2>
+        <p class="text-xs text-on-surface-variant">Calculate and track your essential safety net for unexpected events.</p>
+    </div>
 
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
 <!-- Inputs -->
@@ -1678,22 +2164,31 @@ With your current monthly surplus, you could reach full funding in ~<span class=
 </main>
 
 <!-- 5. MY GOALS PAGE -->
-<main x-show="activePage === 'goals'" x-cloak class="pt-24 pb-32 px-container-padding-mobile md:px-container-padding-desktop max-w-7xl mx-auto flex flex-col gap-8">
-<div class="flex items-center justify-between">
-<div class="flex items-center gap-3">
-<button @click="activePage = 'more'" class="p-2 rounded-lg bg-surface-container-high text-white hover:bg-surface-bright transition-colors">
-<span class="material-symbols-outlined text-sm">arrow_back</span>
-</button>
-<div>
-<h2 class="font-headline-lg text-white">My Goals</h2>
-<p class="text-xs text-on-surface-variant">Set financial targets and track required monthly savings.</p>
-</div>
-</div>
-</div>
+<main x-show="activePage === 'goals'" x-cloak class="pt-24 pb-32 px-container-padding-mobile md:px-container-padding-desktop max-w-7xl mx-auto flex flex-col gap-6">
+    <!-- Plan Tab Sub-Navigation -->
+    <div class="flex items-center gap-1.5 p-1 rounded-2xl overflow-x-auto" style="background:#13151f; border:1px solid rgba(255,255,255,0.06);">
+        <button @click="activePage = 'cashflow'" class="px-4 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all text-on-surface-variant hover:text-white">
+            Cash Flow
+        </button>
+        <button @click="activePage = 'pension'" class="px-4 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all text-on-surface-variant hover:text-white">
+            Pension
+        </button>
+        <button @click="activePage = 'emergency'" class="px-4 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all text-on-surface-variant hover:text-white">
+            Emergency Fund
+        </button>
+        <button @click="activePage = 'goals'" class="px-4 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all bg-primary text-on-primary shadow-md">
+            Goals
+        </button>
+    </div>
 
-<!-- Add Goal Form -->
-<div class="bg-gradient-to-br from-[#122131] to-[#0d1c2d] border border-white/5 rounded-2xl p-6 shadow-xl">
-<h3 class="font-semibold text-white mb-4">Add New Goal</h3>
+    <div>
+        <h2 class="font-headline-lg text-white" style="font-family:'Outfit',sans-serif;">Financial Goals</h2>
+        <p class="text-xs text-on-surface-variant">Set financial targets (retirement, car, house, travel) and compute required monthly savings.</p>
+    </div>
+
+    <!-- Add Goal Form -->
+    <div class="p-5 rounded-2xl" style="background:#13151f; border:1px solid rgba(255,255,255,0.06); box-shadow:0 4px 16px rgba(0,0,0,0.3);">
+        <h3 class="font-semibold text-white text-sm mb-3">Add New Financial Goal</h3>
 <form @submit.prevent="addGoal()" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
 <input type="text" x-model="newGoal.name" placeholder="Goal name (e.g. New Car)" required class="px-3 py-2 rounded-lg bg-surface-container-lowest border border-white/10 text-white focus:border-primary outline-none text-sm">
 <select x-model="newGoal.type" class="px-3 py-2 rounded-lg bg-surface-container-lowest border border-white/10 text-white focus:border-primary outline-none text-sm">
@@ -1813,41 +2308,631 @@ No financial goals added yet. Use the form above to add your first goal!
 </div>
 </main>
 
-<!-- FAB -->
-<button @click="addingInv = true; activePage = 'investments'" class="fixed bottom-24 right-6 w-14 h-14 bg-primary text-on-primary-container rounded-2xl shadow-xl flex items-center justify-center hover:-translate-y-2 transition-all duration-200 z-40 border border-primary-fixed">
-<span class="material-symbols-outlined text-[28px]" style="font-variation-settings: 'FILL' 1;">add</span>
-</button>
+<!-- 7. DEDICATED STOCKS LIVE TRACKER PAGE -->
+<main x-show="activePage === 'stocks'" x-cloak class="pt-24 pb-32 px-container-padding-mobile md:px-container-padding-desktop max-w-7xl mx-auto flex flex-col gap-8">
+    <!-- Header Row -->
+    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div class="flex items-center gap-3">
+            <button @click="activePage = 'home'" class="p-2 rounded-xl bg-surface-container-high text-white hover:bg-surface-bright transition-colors">
+                <span class="material-symbols-outlined text-sm">arrow_back</span>
+            </button>
+            <div>
+                <h2 class="font-headline-lg text-white flex items-center gap-2">
+                    <span>Stock Tracker</span>
+                    <span class="text-xs px-2 py-0.5 rounded-full bg-emerald-950/60 text-emerald-400 border border-emerald-500/30 font-mono">Live Sync</span>
+                </h2>
+                <p class="text-xs text-on-surface-variant">Live tracking of your Indian (NSE/BSE) and US (NASDAQ/NYSE) stocks</p>
+            </div>
+        </div>
 
-<!-- Mobile Bottom Navigation Bar -->
-<nav class="fixed bottom-0 w-full z-50 flex justify-around items-center px-4 py-3 pb-safe bg-gradient-to-t from-[#0d1c2d] to-[#122131] border-t border-white/5 shadow-2xl rounded-t-xl md:hidden">
-<button @click="activePage = 'home'" :class="activePage === 'home' ? 'bg-primary-container text-on-primary-container -translate-y-1 shadow-md' : 'text-on-surface-variant hover:text-[#d4af37]'" class="flex flex-col items-center justify-center rounded-xl p-2 transition-all duration-200 w-16 h-16">
-<span class="material-symbols-outlined mb-1" style="font-variation-settings: 'FILL' 1;">dashboard</span>
-<span class="font-label-caps text-[10px] leading-tight">Dashboard</span>
-</button>
-<button @click="activePage = 'investments'" :class="activePage === 'investments' ? 'bg-primary-container text-on-primary-container -translate-y-1 shadow-md' : 'text-on-surface-variant hover:text-[#d4af37]'" class="flex flex-col items-center justify-center p-2 transition-all duration-200 rounded-xl w-16 h-16">
-<span class="material-symbols-outlined mb-1" style="font-variation-settings: 'FILL' 0;">account_balance_wallet</span>
-<span class="font-label-caps text-[10px] leading-tight">Investments</span>
-</button>
-<button @click="activePage = 'import'" :class="activePage === 'import' ? 'bg-primary-container text-on-primary-container -translate-y-1 shadow-md' : 'text-on-surface-variant hover:text-[#d4af37]'" class="flex flex-col items-center justify-center p-2 transition-all duration-200 rounded-xl w-16 h-16">
-<span class="material-symbols-outlined mb-1" style="font-variation-settings: 'FILL' 0;">upload_file</span>
-<span class="font-label-caps text-[10px] leading-tight">Import</span>
-</button>
-<button @click="activePage = 'tax'" :class="activePage === 'tax' ? 'bg-primary-container text-on-primary-container -translate-y-1 shadow-md' : 'text-on-surface-variant hover:text-[#d4af37]'" class="flex flex-col items-center justify-center p-2 transition-all duration-200 rounded-xl w-16 h-16">
-<span class="material-symbols-outlined mb-1" style="font-variation-settings: 'FILL' 0;">receipt_long</span>
-<span class="font-label-caps text-[10px] leading-tight">Tax</span>
-</button>
-<button @click="activePage = 'more'" :class="['cashflow','networth','pension','emergency','goals','maturity','more'].includes(activePage) ? 'bg-primary-container text-on-primary-container -translate-y-1 shadow-md' : 'text-on-surface-variant hover:text-[#d4af37]'" class="flex flex-col items-center justify-center p-2 transition-all duration-200 rounded-xl w-16 h-16">
-<span class="material-symbols-outlined mb-1" style="font-variation-settings: 'FILL' 0;">grid_view</span>
-<span class="font-label-caps text-[10px] leading-tight">More</span>
-</button>
+        <div class="flex items-center gap-2">
+            <button type="button" @click="fetchAllPrices()" :disabled="navFetchState === 'fetching'"
+                    class="text-xs font-semibold px-3.5 py-2 rounded-xl bg-[#d4af37]/20 text-[#d4af37] border border-[#d4af37]/30 hover:bg-[#d4af37]/30 transition-all flex items-center gap-1.5 disabled:opacity-50 shadow-sm">
+                <span class="material-symbols-outlined text-sm" :class="navFetchState === 'fetching' ? 'animate-spin' : ''">sync</span>
+                <span x-text="navFetchState === 'fetching' ? 'Syncing Prices...' : 'Sync Stock Prices'"></span>
+            </button>
+            <button @click="openAddStockModal('Stock (IND)')" class="text-xs font-semibold px-4 py-2 rounded-xl bg-primary text-on-primary hover:brightness-110 transition-all shadow-md flex items-center gap-1">
+                <span class="material-symbols-outlined text-sm">add</span>
+                <span>+ Add Stock</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Summary Metrics Cards -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <!-- Total Stock Portfolio -->
+        <div class="p-4 rounded-2xl flex flex-col justify-between" style="background:#13151f; border:1px solid rgba(255,255,255,0.06); box-shadow:0 4px 16px rgba(0,0,0,0.3);">
+            <div class="flex justify-between items-center text-[10px] uppercase font-bold tracking-wider" style="color:#8b8fa8;">
+                <span>Total Stocks Value</span>
+                <span class="material-symbols-outlined text-primary text-base">show_chart</span>
+            </div>
+            <div class="mt-2">
+                <span class="text-2xl font-extrabold text-white tabular" style="font-family:'Outfit',sans-serif;" x-text="formatCurrency(totalStockValuation)"></span>
+                <div class="flex items-center gap-1 mt-1 text-xs tabular font-bold" :class="Number(totalStockPnL) >= 0 ? 'text-emerald-400' : 'text-red-400'">
+                    <span x-text="(Number(totalStockPnL) >= 0 ? '▲ +' : '▼ ') + formatCurrency(totalStockPnL) + ' (' + totalStockPnLPct + '%)'"></span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Indian Stocks Total -->
+        <div class="p-4 rounded-2xl flex flex-col justify-between" style="background:#13151f; border:1px solid rgba(255,255,255,0.06); box-shadow:0 4px 16px rgba(0,0,0,0.3);">
+            <div class="flex justify-between items-center text-[10px] uppercase font-bold tracking-wider" style="color:#8b8fa8;">
+                <span>🇮🇳 Indian Stocks</span>
+            </div>
+            <div class="mt-2">
+                <span class="text-xl font-bold text-white tabular" x-text="formatCurrency(totalIndStockValuation)"></span>
+                <p class="text-[11px] mt-1 tabular" style="color:#8b8fa8;" x-text="stockInvestments.filter(i => ['Stock (IND)', 'ETF (IND)', 'Stock'].includes(i.type) || !i.type.includes('US')).length + ' Stock(s)'"></p>
+            </div>
+        </div>
+
+        <!-- US Stocks Total -->
+        <div class="p-4 rounded-2xl flex flex-col justify-between" style="background:#13151f; border:1px solid rgba(255,255,255,0.06); box-shadow:0 4px 16px rgba(0,0,0,0.3);">
+            <div class="flex justify-between items-center text-[10px] uppercase font-bold tracking-wider" style="color:#8b8fa8;">
+                <span>🇺🇸 US Stocks (USD)</span>
+            </div>
+            <div class="mt-2">
+                <div class="flex items-baseline gap-2">
+                    <span class="text-xl font-bold text-[#d4af37] font-mono tabular" x-text="'$' + totalUsStockUSD.toFixed(2)"></span>
+                    <span class="text-xs font-mono tabular" style="color:#8b8fa8;" x-text="'(' + formatCurrency(totalUsStockValuation) + ')'"></span>
+                </div>
+                <p class="text-[11px] mt-1 tabular" style="color:#8b8fa8;" x-text="'USD/INR: ₹' + (usdInrRate||95.74).toFixed(2)"></p>
+            </div>
+        </div>
+
+        <!-- Quick Add Buttons Card -->
+        <div class="p-4 rounded-2xl flex flex-col justify-between" style="background:#13151f; border:1px solid rgba(255,255,255,0.06); box-shadow:0 4px 16px rgba(0,0,0,0.3);">
+            <span class="text-[10px] uppercase font-bold tracking-wider" style="color:#8b8fa8;">Quick Actions</span>
+            <div class="grid grid-cols-2 gap-2 mt-2">
+                <button @click="openAddStockModal('Stock (IND)')" class="px-2.5 py-2 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] text-xs font-semibold text-white border border-white/10 flex items-center justify-center gap-1 transition-colors">
+                    <span>🇮🇳 + IND</span>
+                </button>
+                <button @click="openAddStockModal('Stock (US)')" class="px-2.5 py-2 rounded-xl text-xs font-semibold text-[#d4af37] border flex items-center justify-center gap-1 transition-colors"
+                        style="background:rgba(212,175,55,0.1); border-color:rgba(212,175,55,0.25);">
+                    <span>🇺🇸 + US</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filter Tabs: All | Indian | US -->
+    <div class="flex items-center justify-between border-b pb-3" style="border-color:rgba(255,255,255,0.06);">
+        <div class="flex items-center gap-2">
+            <button @click="stockFilter = 'all'" class="px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all"
+                    :class="stockFilter === 'all' ? 'bg-primary text-on-primary shadow-md' : 'bg-white/[0.05] text-white/70 hover:text-white'">
+                All Stocks (<span x-text="stockInvestments.length"></span>)
+            </button>
+            <button @click="stockFilter = 'ind'" class="px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all"
+                    :class="stockFilter === 'ind' ? 'bg-primary text-on-primary shadow-md' : 'bg-white/[0.05] text-white/70 hover:text-white'">
+                🇮🇳 Indian Stocks
+            </button>
+            <button @click="stockFilter = 'us'" class="px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all"
+                    :class="stockFilter === 'us' ? 'bg-[#d4af37] text-black font-bold shadow-md' : 'bg-white/[0.05] text-white/70 hover:text-white'">
+                🇺🇸 US Stocks
+            </button>
+        </div>
+    </div>
+
+    <!-- Stock Cards Grid (If stocks exist) -->
+    <template x-if="filteredStockInvestments.length > 0">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <template x-for="inv in filteredStockInvestments" :key="inv.id">
+                <div class="p-4 rounded-2xl transition-all hover:border-white/20 relative group"
+                     style="background:#13151f; border:1px solid rgba(255,255,255,0.06); box-shadow:0 4px 16px rgba(0,0,0,0.3);">
+                    <div class="flex justify-between items-start mb-3">
+                        <div class="flex items-center gap-2.5 min-w-0">
+                            <span class="px-2 py-1 rounded-lg text-xs font-mono font-bold shrink-0"
+                                  :style="['Stock (US)', 'ETF (US)'].includes(inv.type) ? 'background:rgba(212,175,55,0.12); color:#d4af37; border:1px solid rgba(212,175,55,0.3);' : 'background:rgba(68,229,194,0.12); color:#44e5c2; border:1px solid rgba(68,229,194,0.3);'"
+                                  x-text="inv.ticker ? inv.ticker.toUpperCase() : inv.type"></span>
+                            <div class="min-w-0">
+                                <h3 class="font-semibold text-white text-[13px] truncate" x-text="inv.name"></h3>
+                                <span class="text-[11px] block" style="color:#8b8fa8;"
+                                      x-text="['Stock (US)', 'ETF (US)'].includes(inv.type) ? 'US Market (NASDAQ/NYSE)' : 'Indian Market (NSE/BSE)'"></span>
+                            </div>
+                        </div>
+
+                        <!-- Card Action Menu -->
+                        <div class="flex items-center gap-1 shrink-0 ml-2">
+                            <button @click.stop="openEditModal(inv)" class="p-1 rounded-lg text-white/40 hover:text-white hover:bg-white/10 text-xs">
+                                <span class="material-symbols-outlined text-[16px]">edit</span>
+                            </button>
+                            <button @click.stop="deleteInvestment(inv.id)" class="p-1 rounded-lg text-white/30 hover:text-red-400 hover:bg-red-950/30 text-xs">
+                                <span class="material-symbols-outlined text-[16px]">delete</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Metrics Details Grid -->
+                    <div class="grid grid-cols-2 sm:grid-cols-3 gap-2.5 pt-2.5 text-xs" style="border-top:1px solid rgba(255,255,255,0.05);">
+                        <div>
+                            <span class="text-[9px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">Shares / Units</span>
+                            <span class="font-semibold text-white font-mono tabular" x-text="inv.units || '—'"></span>
+                        </div>
+                        <div>
+                            <span class="text-[9px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">Avg Buy Price</span>
+                            <span class="font-semibold text-white font-mono tabular"
+                                  x-text="['Stock (US)', 'ETF (US)'].includes(inv.type) ? ('$' + Number(inv.buyPrice || 0).toFixed(2)) : formatCurrency(inv.buyPrice || 0)"></span>
+                        </div>
+                        <div>
+                            <span class="text-[9px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">Live Price</span>
+                            <span class="font-bold text-primary font-mono tabular"
+                                  x-text="inv.currentPrice ? (['Stock (US)', 'ETF (US)'].includes(inv.type) ? ('$' + Number(inv.currentPrice).toFixed(2)) : ('₹' + Number(inv.currentPrice).toFixed(2))) : 'Syncing...'"></span>
+                        </div>
+                        <div>
+                            <span class="text-[9px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">Total Value (INR)</span>
+                            <span class="font-bold text-white font-mono tabular" x-text="formatCurrency(getInvCurrentValue(inv))"></span>
+                        </div>
+                        <div>
+                            <span class="text-[9px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">P&amp;L</span>
+                            <span class="font-bold font-mono tabular"
+                                  :class="getInvPnL(inv) >= 0 ? 'text-emerald-400' : 'text-red-400'"
+                                  x-text="(getInvPnL(inv) >= 0 ? '+' : '') + formatCurrency(getInvPnL(inv)) + ' (' + getInvPnLPct(inv) + '%)'"></span>
+                        </div>
+                        <div>
+                            <span class="text-[9px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">Last Sync</span>
+                            <span class="text-[10px] tabular" style="color:#8b8fa8;" x-text="inv.lastNavUpdate ? formatDate(inv.lastNavUpdate) : 'Not synced'"></span>
+                        </div>
+                    </div>
+                </div>
+            </template>
+        </div>
+    </template>
+
+    <!-- Empty State -->
+    <template x-if="filteredStockInvestments.length === 0">
+        <div class="p-10 rounded-2xl text-center flex flex-col items-center justify-center" style="background:#13151f; border:1px solid rgba(255,255,255,0.06);">
+            <div class="w-14 h-14 rounded-full flex items-center justify-center text-primary mb-3" style="background:rgba(68,229,194,0.1);">
+                <span class="material-symbols-outlined text-2xl">show_chart</span>
+            </div>
+            <h3 class="text-base font-bold text-white mb-1">No Stock Holdings Added Yet</h3>
+            <p class="text-xs max-w-md mb-5 leading-relaxed" style="color:#8b8fa8;">
+                Add Indian stocks (NSE/BSE e.g. RELIANCE, INFY) or US stocks (NASDAQ/NYSE e.g. NVDA, AAPL) to track live prices and P&amp;L in real-time.
+            </p>
+            <div class="flex flex-col sm:flex-row items-center gap-3">
+                <button @click="openAddStockModal('Stock (IND)')" class="px-4 py-2 rounded-xl bg-primary text-on-primary font-bold text-xs hover:brightness-110 transition-all shadow-md">
+                    <span>🇮🇳 Add Indian Stock</span>
+                </button>
+                <button @click="openAddStockModal('Stock (US)')" class="px-4 py-2 rounded-xl text-black font-bold text-xs hover:brightness-110 transition-all shadow-md" style="background:#d4af37;">
+                    <span>🇺🇸 Add US Stock</span>
+                </button>
+            </div>
+        </div>
+    </template>
+</main>
+
+<!-- 8. DEDICATED MUTUAL FUNDS LIVE TRACKER PAGE -->
+<main x-show="activePage === 'mutualfunds'" x-cloak class="pt-24 pb-32 px-container-padding-mobile md:px-container-padding-desktop max-w-7xl mx-auto flex flex-col gap-8">
+    <!-- Header Row -->
+    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div class="flex items-center gap-3">
+            <button @click="activePage = 'home'" class="p-2 rounded-xl bg-surface-container-high text-white hover:bg-surface-bright transition-colors">
+                <span class="material-symbols-outlined text-sm">arrow_back</span>
+            </button>
+            <div>
+                <h2 class="font-headline-lg text-white flex items-center gap-2">
+                    <span>Mutual Funds Tracker</span>
+                    <span class="text-xs px-2 py-0.5 rounded-full bg-emerald-950/60 text-emerald-400 border border-emerald-500/30 font-mono">AMFI Live NAV</span>
+                </h2>
+                <p class="text-xs text-on-surface-variant">Real-time NAV tracking &amp; SIP performance for Indian Mutual Funds</p>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-2">
+            <button type="button" @click="fetchAllPrices()" :disabled="navFetchState === 'fetching'"
+                    class="text-xs font-semibold px-3.5 py-2 rounded-xl bg-[#d4af37]/20 text-[#d4af37] border border-[#d4af37]/30 hover:bg-[#d4af37]/30 transition-all flex items-center gap-1.5 disabled:opacity-50 shadow-sm">
+                <span class="material-symbols-outlined text-sm" :class="navFetchState === 'fetching' ? 'animate-spin' : ''">sync</span>
+                <span x-text="navFetchState === 'fetching' ? 'Syncing NAVs...' : 'Sync Live NAVs'"></span>
+            </button>
+            <button @click="openAddMfModal()" class="text-xs font-semibold px-4 py-2 rounded-xl bg-primary text-on-primary hover:brightness-110 transition-all shadow-md flex items-center gap-1.5">
+                <span class="material-symbols-outlined text-sm">add</span>
+                <span>Add Mutual Fund</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Summary Metrics Cards -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <!-- Total MF Valuation -->
+        <div class="p-4 rounded-2xl flex flex-col justify-between" style="background:#13151f; border:1px solid rgba(255,255,255,0.06); box-shadow:0 4px 16px rgba(0,0,0,0.3);">
+            <div class="flex justify-between items-center text-[10px] uppercase font-bold tracking-wider" style="color:#8b8fa8;">
+                <span>Total MF Value</span>
+                <span class="material-symbols-outlined text-[#d4af37] text-base">pie_chart</span>
+            </div>
+            <div class="mt-2">
+                <span class="text-2xl font-extrabold text-white tabular" style="font-family:'Outfit',sans-serif;" x-text="formatCurrency(totalMfValuation)"></span>
+                <div class="flex items-center gap-1 mt-1 text-xs tabular font-bold" :class="Number(totalMfPnL) >= 0 ? 'text-emerald-400' : 'text-red-400'">
+                    <span x-text="(Number(totalMfPnL) >= 0 ? '▲ +' : '▼ ') + formatCurrency(totalMfPnL) + ' (' + totalMfPnLPct + '%)'"></span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Total Invested Amount -->
+        <div class="p-4 rounded-2xl flex flex-col justify-between" style="background:#13151f; border:1px solid rgba(255,255,255,0.06); box-shadow:0 4px 16px rgba(0,0,0,0.3);">
+            <div class="flex justify-between items-center text-[10px] uppercase font-bold tracking-wider" style="color:#8b8fa8;">
+                <span>Invested Principal</span>
+            </div>
+            <div class="mt-2">
+                <span class="text-xl font-bold text-white tabular" x-text="formatCurrency(totalMfCost)"></span>
+                <p class="text-[11px] mt-1 tabular" style="color:#8b8fa8;" x-text="mfInvestments.length + ' Scheme(s) Holding'"></p>
+            </div>
+        </div>
+
+        <!-- Active SIPs Stream -->
+        <div class="p-4 rounded-2xl flex flex-col justify-between" style="background:#13151f; border:1px solid rgba(255,255,255,0.06); box-shadow:0 4px 16px rgba(0,0,0,0.3);">
+            <div class="flex justify-between items-center text-[10px] uppercase font-bold tracking-wider" style="color:#8b8fa8;">
+                <span>Active SIP Outflow</span>
+            </div>
+            <div class="mt-2">
+                <span class="text-xl font-bold text-primary font-mono tabular" x-text="formatCurrency(totalMonthlySipOutflow) + '/mo'"></span>
+                <p class="text-[11px] mt-1 tabular" style="color:#8b8fa8;" x-text="sips.filter(s => s.status === 'Active').length + ' Active Mandate(s)'"></p>
+            </div>
+        </div>
+
+        <!-- Quick Action & Restore Portfolio Card -->
+        <div class="p-4 rounded-2xl flex flex-col justify-between" style="background:#13151f; border:1px solid rgba(255,255,255,0.06); box-shadow:0 4px 16px rgba(0,0,0,0.3);">
+            <span class="text-[10px] uppercase font-bold tracking-wider" style="color:#8b8fa8;">Portfolio Controls</span>
+            <div class="mt-2">
+                <button @click="loadActualPortfolio()" class="w-full px-3 py-2 rounded-xl text-xs font-semibold text-[#d4af37] border flex items-center justify-center gap-1.5 transition-colors"
+                        style="background:rgba(212,175,55,0.1); border-color:rgba(212,175,55,0.25);">
+                    <span class="material-symbols-outlined text-sm">download</span>
+                    <span>Restore Actual Holdings</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filter Tabs -->
+    <div class="flex items-center justify-between border-b pb-3" style="border-color:rgba(255,255,255,0.06);">
+        <div class="flex items-center gap-2">
+            <button @click="mfFilter = 'all'" class="px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all"
+                    :class="mfFilter === 'all' ? 'bg-primary text-on-primary shadow-md' : 'bg-white/[0.05] text-white/70 hover:text-white'">
+                All Mutual Funds (<span x-text="mfInvestments.length"></span>)
+            </button>
+            <button @click="mfFilter = 'equity'" class="px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all"
+                    :class="mfFilter === 'equity' ? 'bg-primary text-on-primary shadow-md' : 'bg-white/[0.05] text-white/70 hover:text-white'">
+                Equity Funds
+            </button>
+            <button @click="mfFilter = 'debt'" class="px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all"
+                    :class="mfFilter === 'debt' ? 'bg-primary text-on-primary shadow-md' : 'bg-white/[0.05] text-white/70 hover:text-white'">
+                Debt &amp; Liquid
+            </button>
+        </div>
+    </div>
+
+    <!-- MF Cards Grid -->
+    <template x-if="filteredMfInvestments.length > 0">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <template x-for="inv in filteredMfInvestments" :key="inv.id">
+                <div class="p-4 rounded-2xl transition-all hover:border-white/20 relative group"
+                     style="background:#13151f; border:1px solid rgba(255,255,255,0.06); box-shadow:0 4px 16px rgba(0,0,0,0.3);">
+                    <div class="flex justify-between items-start mb-3">
+                        <div class="flex items-center gap-2.5 min-w-0">
+                            <span class="px-2 py-1 rounded-lg text-xs font-mono font-bold text-[#d4af37] shrink-0"
+                                  style="background:rgba(212,175,55,0.12); border:1px solid rgba(212,175,55,0.3);"
+                                  x-text="inv.schemeCode ? ('AMFI ' + inv.schemeCode) : 'MF'"></span>
+                            <div class="min-w-0">
+                                <h3 class="font-semibold text-white text-[13px] truncate" x-text="inv.name"></h3>
+                                <span class="text-[11px] block" style="color:#8b8fa8;">Indian Mutual Fund (Growth)</span>
+                            </div>
+                        </div>
+
+                        <!-- Card Action Menu -->
+                        <div class="flex items-center gap-1 shrink-0 ml-2">
+                            <button @click.stop="openEditModal(inv)" class="p-1 rounded-lg text-white/40 hover:text-white hover:bg-white/10 text-xs">
+                                <span class="material-symbols-outlined text-[16px]">edit</span>
+                            </button>
+                            <button @click.stop="deleteInvestment(inv.id)" class="p-1 rounded-lg text-white/30 hover:text-red-400 hover:bg-red-950/30 text-xs">
+                                <span class="material-symbols-outlined text-[16px]">delete</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Metrics Grid -->
+                    <div class="grid grid-cols-2 sm:grid-cols-3 gap-2.5 pt-2.5 text-xs" style="border-top:1px solid rgba(255,255,255,0.05);">
+                        <div>
+                            <span class="text-[9px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">Units Held</span>
+                            <span class="font-semibold text-white font-mono tabular" x-text="inv.units || '—'"></span>
+                        </div>
+                        <div>
+                            <span class="text-[9px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">Avg Buy NAV</span>
+                            <span class="font-semibold text-white font-mono tabular" x-text="formatCurrency(inv.buyPrice || 0)"></span>
+                        </div>
+                        <div>
+                            <span class="text-[9px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">Live NAV</span>
+                            <span class="font-bold text-primary font-mono tabular" x-text="inv.currentPrice ? ('₹' + Number(inv.currentPrice).toFixed(2)) : 'Syncing...'"></span>
+                        </div>
+                        <div>
+                            <span class="text-[9px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">Current Value</span>
+                            <span class="font-bold text-white font-mono tabular" x-text="formatCurrency(getInvCurrentValue(inv))"></span>
+                        </div>
+                        <div>
+                            <span class="text-[9px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">P&amp;L</span>
+                            <span class="font-bold font-mono tabular"
+                                  :class="getInvPnL(inv) >= 0 ? 'text-emerald-400' : 'text-red-400'"
+                                  x-text="(getInvPnL(inv) >= 0 ? '+' : '') + formatCurrency(getInvPnL(inv)) + ' (' + getInvPnLPct(inv) + '%)'"></span>
+                        </div>
+                        <div>
+                            <span class="text-[9px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">Last Sync</span>
+                            <span class="text-[10px] tabular" style="color:#8b8fa8;" x-text="inv.lastNavUpdate ? formatDate(inv.lastNavUpdate) : 'Not synced'"></span>
+                        </div>
+                    </div>
+                </div>
+            </template>
+        </div>
+    </template>
+
+    <!-- Empty State -->
+    <template x-if="filteredMfInvestments.length === 0">
+        <div class="p-10 rounded-2xl text-center flex flex-col items-center justify-center" style="background:#13151f; border:1px solid rgba(255,255,255,0.06);">
+            <div class="w-14 h-14 rounded-full flex items-center justify-center text-[#d4af37] mb-3" style="background:rgba(212,175,55,0.1);">
+                <span class="material-symbols-outlined text-2xl">pie_chart</span>
+            </div>
+            <h3 class="text-base font-bold text-white mb-1">No Mutual Fund Holdings Added Yet</h3>
+            <p class="text-xs max-w-md mb-5 leading-relaxed" style="color:#8b8fa8;">
+                Add your Indian Mutual Funds (Quant Small Cap, Invesco Mid Cap) to track live AMFI NAV updates and SIP compounding automatically.
+            </p>
+            <div class="flex flex-col sm:flex-row items-center gap-3">
+                <button @click="openAddMfModal()" class="px-4 py-2 rounded-xl bg-primary text-on-primary font-bold text-xs hover:brightness-110 transition-all shadow-md">
+                    <span>Add Mutual Fund</span>
+                </button>
+                <button @click="loadActualPortfolio()" class="px-4 py-2 rounded-xl text-[#d4af37] border font-bold text-xs transition-all shadow-md"
+                        style="background:rgba(212,175,55,0.1); border-color:rgba(212,175,55,0.25);">
+                    <span>Restore Actual Holdings</span>
+                </button>
+            </div>
+        </div>
+    </template>
+</main>
+
+<!-- 9. DEDICATED GOLD LIVE TRACKER PAGE -->
+<main x-show="activePage === 'gold'" x-cloak class="pt-24 pb-32 px-container-padding-mobile md:px-container-padding-desktop max-w-7xl mx-auto flex flex-col gap-8">
+    <!-- Header Row -->
+    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div class="flex items-center gap-3">
+            <button @click="activePage = 'home'" class="p-2 rounded-xl bg-surface-container-high text-white hover:bg-surface-bright transition-colors">
+                <span class="material-symbols-outlined text-sm">arrow_back</span>
+            </button>
+            <div>
+                <h2 class="font-headline-lg text-white flex items-center gap-2">
+                    <span>Gold Asset Tracker</span>
+                    <span class="text-xs px-2 py-0.5 rounded-full bg-[#d4af37]/20 text-[#d4af37] border border-[#d4af37]/40 font-mono">Live Rate</span>
+                </h2>
+                <p class="text-xs text-on-surface-variant">Tracking Physical Gold, Sovereign Gold Bonds (SGB), and Gold ETFs</p>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-2">
+            <button type="button" @click="fetchAllPrices()" :disabled="navFetchState === 'fetching'"
+                    class="text-xs font-semibold px-3.5 py-2 rounded-xl bg-[#d4af37]/20 text-[#d4af37] border border-[#d4af37]/30 hover:bg-[#d4af37]/30 transition-all flex items-center gap-1.5 disabled:opacity-50 shadow-sm">
+                <span class="material-symbols-outlined text-sm" :class="navFetchState === 'fetching' ? 'animate-spin' : ''">sync</span>
+                <span x-text="navFetchState === 'fetching' ? 'Syncing Gold...' : 'Sync Gold Rate'"></span>
+            </button>
+            <button @click="openAddGoldModal('Gold ETF / Digital Gold')" class="text-xs font-semibold px-4 py-2 rounded-xl bg-[#d4af37] text-black font-bold hover:brightness-110 transition-all shadow-md flex items-center gap-1">
+                <span class="material-symbols-outlined text-sm">add</span>
+                <span>+ Add Gold Asset</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Summary Metrics Cards -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <!-- Total Gold Valuation -->
+        <div class="p-4 rounded-2xl flex flex-col justify-between" style="background:#13151f; border:1px solid rgba(255,255,255,0.06); box-shadow:0 4px 16px rgba(0,0,0,0.3);">
+            <div class="flex justify-between items-center text-[10px] uppercase font-bold tracking-wider" style="color:#8b8fa8;">
+                <span>Total Gold Value</span>
+                <span class="material-symbols-outlined text-[#d4af37] text-base">diamond</span>
+            </div>
+            <div class="mt-2">
+                <span class="text-2xl font-extrabold text-white tabular" style="font-family:'Outfit',sans-serif;" x-text="formatCurrency(totalGoldValuation)"></span>
+                <div class="flex items-center gap-1 mt-1 text-xs tabular font-bold" :class="Number(totalGoldPnL) >= 0 ? 'text-emerald-400' : 'text-red-400'">
+                    <span x-text="(Number(totalGoldPnL) >= 0 ? '▲ +' : '▼ ') + formatCurrency(totalGoldPnL) + ' (' + totalGoldPnLPct + '%)'"></span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Total Gold Weight -->
+        <div class="p-4 rounded-2xl flex flex-col justify-between" style="background:#13151f; border:1px solid rgba(255,255,255,0.06); box-shadow:0 4px 16px rgba(0,0,0,0.3);">
+            <div class="flex justify-between items-center text-[10px] uppercase font-bold tracking-wider" style="color:#8b8fa8;">
+                <span>Total Units / Weight</span>
+            </div>
+            <div class="mt-2">
+                <span class="text-xl font-bold text-[#d4af37] tabular" x-text="totalGoldGrams.toFixed(2) + ' Units/g'"></span>
+                <p class="text-[11px] mt-1 tabular" style="color:#8b8fa8;" x-text="goldInvestments.length + ' Asset(s)'"></p>
+            </div>
+        </div>
+
+        <!-- Invested Principal -->
+        <div class="p-4 rounded-2xl flex flex-col justify-between" style="background:#13151f; border:1px solid rgba(255,255,255,0.06); box-shadow:0 4px 16px rgba(0,0,0,0.3);">
+            <div class="flex justify-between items-center text-[10px] uppercase font-bold tracking-wider" style="color:#8b8fa8;">
+                <span>Invested Principal</span>
+            </div>
+            <div class="mt-2">
+                <span class="text-xl font-bold text-white tabular" x-text="formatCurrency(totalGoldCost)"></span>
+                <p class="text-[11px] mt-1 tabular" style="color:#8b8fa8;">Purchase cost basis</p>
+            </div>
+        </div>
+
+        <!-- Quick Action Card -->
+        <div class="p-4 rounded-2xl flex flex-col justify-between" style="background:#13151f; border:1px solid rgba(255,255,255,0.06); box-shadow:0 4px 16px rgba(0,0,0,0.3);">
+            <span class="text-[10px] uppercase font-bold tracking-wider" style="color:#8b8fa8;">Quick Actions</span>
+            <div class="grid grid-cols-2 gap-2 mt-2">
+                <button @click="openAddGoldModal('Sovereign Gold Bond (SGB)')" class="px-2.5 py-2 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] text-xs font-semibold text-white border border-white/10 flex items-center justify-center gap-1 transition-colors">
+                    <span>+ SGB</span>
+                </button>
+                <button @click="openAddGoldModal('Gold ETF / Digital Gold')" class="px-2.5 py-2 rounded-xl text-xs font-semibold text-[#d4af37] border flex items-center justify-center gap-1 transition-colors"
+                        style="background:rgba(212,175,55,0.1); border-color:rgba(212,175,55,0.25);">
+                    <span>+ ETF</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filter Tabs -->
+    <div class="flex items-center justify-between border-b pb-3" style="border-color:rgba(255,255,255,0.06);">
+        <div class="flex items-center gap-2">
+            <button @click="goldFilter = 'all'" class="px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all"
+                    :class="goldFilter === 'all' ? 'bg-[#d4af37] text-black font-bold shadow-md' : 'bg-white/[0.05] text-white/70 hover:text-white'">
+                All Gold (<span x-text="goldInvestments.length"></span>)
+            </button>
+            <button @click="goldFilter = 'physical'" class="px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all"
+                    :class="goldFilter === 'physical' ? 'bg-[#d4af37] text-black font-bold shadow-md' : 'bg-white/[0.05] text-white/70 hover:text-white'">
+                Physical Gold
+            </button>
+            <button @click="goldFilter = 'sgb'" class="px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all"
+                    :class="goldFilter === 'sgb' ? 'bg-[#d4af37] text-black font-bold shadow-md' : 'bg-white/[0.05] text-white/70 hover:text-white'">
+                SGB (2.5%)
+            </button>
+            <button @click="goldFilter = 'etf'" class="px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all"
+                    :class="goldFilter === 'etf' ? 'bg-[#d4af37] text-black font-bold shadow-md' : 'bg-white/[0.05] text-white/70 hover:text-white'">
+                Gold ETFs
+            </button>
+        </div>
+    </div>
+
+    <!-- Gold Cards Grid -->
+    <template x-if="filteredGoldInvestments.length > 0">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <template x-for="inv in filteredGoldInvestments" :key="inv.id">
+                <div class="p-4 rounded-2xl transition-all hover:border-white/20 relative group"
+                     style="background:#13151f; border:1px solid rgba(255,255,255,0.06); box-shadow:0 4px 16px rgba(0,0,0,0.3);">
+                    <div class="flex justify-between items-start mb-3">
+                        <div class="flex items-center gap-2.5 min-w-0">
+                            <span class="px-2 py-1 rounded-lg text-xs font-mono font-bold text-[#d4af37] shrink-0"
+                                  style="background:rgba(212,175,55,0.12); border:1px solid rgba(212,175,55,0.3);"
+                                  x-text="inv.ticker || 'GOLD'"></span>
+                            <div class="min-w-0">
+                                <h3 class="font-semibold text-white text-[13px] truncate" x-text="inv.name"></h3>
+                                <span class="text-[11px] block" style="color:#8b8fa8;" x-text="inv.type"></span>
+                            </div>
+                        </div>
+
+                        <!-- Card Action Menu -->
+                        <div class="flex items-center gap-1 shrink-0 ml-2">
+                            <button @click.stop="openEditModal(inv)" class="p-1 rounded-lg text-white/40 hover:text-white hover:bg-white/10 text-xs">
+                                <span class="material-symbols-outlined text-[16px]">edit</span>
+                            </button>
+                            <button @click.stop="deleteInvestment(inv.id)" class="p-1 rounded-lg text-white/30 hover:text-red-400 hover:bg-red-950/30 text-xs">
+                                <span class="material-symbols-outlined text-[16px]">delete</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Metrics Grid -->
+                    <div class="grid grid-cols-2 sm:grid-cols-3 gap-2.5 pt-2.5 text-xs" style="border-top:1px solid rgba(255,255,255,0.05);">
+                        <div>
+                            <span class="text-[9px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">Weight / Units</span>
+                            <span class="font-semibold text-white font-mono tabular" x-text="(inv.units || '—') + ' g/units'"></span>
+                        </div>
+                        <div>
+                            <span class="text-[9px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">Buy Rate</span>
+                            <span class="font-semibold text-white font-mono tabular" x-text="formatCurrency(inv.buyPrice || 0)"></span>
+                        </div>
+                        <div>
+                            <span class="text-[9px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">Live Rate</span>
+                            <span class="font-bold text-[#d4af37] font-mono tabular" x-text="inv.currentPrice ? ('₹' + Number(inv.currentPrice).toFixed(2)) : 'Syncing...'"></span>
+                        </div>
+                        <div>
+                            <span class="text-[9px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">Total Valuation</span>
+                            <span class="font-bold text-white font-mono tabular" x-text="formatCurrency(getInvCurrentValue(inv))"></span>
+                        </div>
+                        <div>
+                            <span class="text-[9px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">P&amp;L</span>
+                            <span class="font-bold font-mono tabular"
+                                  :class="getInvPnL(inv) >= 0 ? 'text-emerald-400' : 'text-red-400'"
+                                  x-text="(getInvPnL(inv) >= 0 ? '+' : '') + formatCurrency(getInvPnL(inv)) + ' (' + getInvPnLPct(inv) + '%)'"></span>
+                        </div>
+                        <div>
+                            <span class="text-[9px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">Last Sync</span>
+                            <span class="text-[10px] tabular" style="color:#8b8fa8;" x-text="inv.lastNavUpdate ? formatDate(inv.lastNavUpdate) : 'Not synced'"></span>
+                        </div>
+                    </div>
+                </div>
+            </template>
+        </div>
+    </template>
+
+    <!-- Empty State -->
+    <template x-if="filteredGoldInvestments.length === 0">
+        <div class="p-10 rounded-2xl text-center flex flex-col items-center justify-center" style="background:#13151f; border:1px solid rgba(255,255,255,0.06);">
+            <div class="w-14 h-14 rounded-full flex items-center justify-center text-[#d4af37] mb-3" style="background:rgba(212,175,55,0.1);">
+                <span class="material-symbols-outlined text-2xl">diamond</span>
+            </div>
+            <h3 class="text-base font-bold text-white mb-1">No Gold Holdings Added Yet</h3>
+            <p class="text-xs max-w-md mb-5 leading-relaxed" style="color:#8b8fa8;">
+                Add Physical Gold, Sovereign Gold Bonds (SGB with 2.5% annual coupon), or Gold ETFs (`GOLDBEES`) to track market value and portfolio hedge ratio.
+            </p>
+            <div class="flex flex-col sm:flex-row items-center gap-3">
+                <button @click="openAddGoldModal('Sovereign Gold Bond (SGB)')" class="px-4 py-2 rounded-xl text-black font-bold text-xs hover:brightness-110 transition-all shadow-md" style="background:#d4af37;">
+                    <span>+ Add SGB Bond</span>
+                </button>
+                <button @click="openAddGoldModal('Gold ETF / Digital Gold')" class="px-4 py-2 rounded-xl bg-white/[0.05] text-white font-bold text-xs hover:bg-white/[0.1] transition-all shadow-md border border-white/10">
+                    <span>+ Add Gold ETF</span>
+                </button>
+            </div>
+        </div>
+    </template>
+</main>
+
+<!-- ═══════════ MOBILE BOTTOM NAV — 4-tab CRED-style ═══════════ -->
+<nav class="fixed bottom-0 w-full z-50 md:hidden pb-safe"
+     style="background:#0d0f1a; border-top:1px solid rgba(255,255,255,0.07); box-shadow:0 -8px 32px rgba(0,0,0,0.5);">
+    <div class="flex justify-around items-center px-2 pt-3 pb-2">
+
+        <!-- Home -->
+        <button @click="activePage = 'home'"
+                class="flex flex-col items-center justify-center gap-1 px-4 py-1 transition-all duration-200 relative"
+                :class="activePage === 'home' ? 'text-primary' : 'text-on-surface-variant'">
+            <span class="material-symbols-outlined text-[22px]" :style="activePage === 'home' ? 'font-variation-settings: FILL 1' : 'font-variation-settings: FILL 0'">home</span>
+            <span class="text-[10px] font-semibold">Overview</span>
+            <!-- Active indicator -->
+            <span x-show="activePage === 'home'" class="absolute -bottom-2 left-1/2 -translate-x-1/2 w-5 h-0.5 rounded-full bg-primary"></span>
+        </button>
+
+        <!-- Portfolio -->
+        <button @click="activePage = 'investments'"
+                class="flex flex-col items-center justify-center gap-1 px-4 py-1 transition-all duration-200 relative"
+                :class="['investments','stocks','mutualfunds','gold'].includes(activePage) ? 'text-primary' : 'text-on-surface-variant'">
+            <span class="material-symbols-outlined text-[22px]" :style="['investments','stocks','mutualfunds','gold'].includes(activePage) ? 'font-variation-settings: FILL 1' : 'font-variation-settings: FILL 0'">account_balance_wallet</span>
+            <span class="text-[10px] font-semibold">Portfolio</span>
+            <span x-show="['investments','stocks','mutualfunds','gold'].includes(activePage)" class="absolute -bottom-2 left-1/2 -translate-x-1/2 w-5 h-0.5 rounded-full bg-primary"></span>
+        </button>
+
+        <!-- Plan (cashflow, pension, emergency, goals) -->
+        <button @click="activePage = 'cashflow'"
+                class="flex flex-col items-center justify-center gap-1 px-4 py-1 transition-all duration-200 relative"
+                :class="['cashflow','pension','emergency','goals'].includes(activePage) ? 'text-primary' : 'text-on-surface-variant'">
+            <span class="material-symbols-outlined text-[22px]" :style="['cashflow','pension','emergency','goals'].includes(activePage) ? 'font-variation-settings: FILL 1' : 'font-variation-settings: FILL 0'">bar_chart_4_bars</span>
+            <span class="text-[10px] font-semibold">Planning</span>
+            <span x-show="['cashflow','pension','emergency','goals'].includes(activePage)" class="absolute -bottom-2 left-1/2 -translate-x-1/2 w-5 h-0.5 rounded-full bg-primary"></span>
+        </button>
+
+        <!-- Tools (tax, import, maturity, more) -->
+        <button @click="activePage = 'more'"
+                class="flex flex-col items-center justify-center gap-1 px-4 py-1 transition-all duration-200 relative"
+                :class="['more','tax','import','maturity','networth','regen'].includes(activePage) ? 'text-primary' : 'text-on-surface-variant'">
+            <span class="material-symbols-outlined text-[22px]" :style="['more','tax','import','maturity','networth','regen'].includes(activePage) ? 'font-variation-settings: FILL 1' : 'font-variation-settings: FILL 0'">apps</span>
+            <span class="text-[10px] font-semibold">More</span>
+            <span x-show="['more','tax','import','maturity','networth','regen'].includes(activePage)" class="absolute -bottom-2 left-1/2 -translate-x-1/2 w-5 h-0.5 rounded-full bg-primary"></span>
+        </button>
+
+    </div>
 </nav>
 
-<!-- Add Investment Modal -->
-<div x-show="addingInv" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" x-cloak>
-    <div class="bg-[#051424] border border-white/10 rounded-2xl shadow-2xl w-full max-w-2xl p-6 text-white relative">
-        <button @click="addingInv = false" class="absolute top-4 right-4 text-white/50 hover:text-white">✕</button>
-        <h3 class="text-lg font-bold text-white mb-4">Add New Investment</h3>
-        
+<!-- Add Investment Modal — bottom sheet style -->
+<div x-show="addingInv" class="fixed inset-0 z-50 flex items-end justify-center bg-black/70 backdrop-blur-sm" x-cloak
+     @click.self="addingInv = false">
+    <div class="w-full max-w-2xl text-white relative rounded-t-3xl overflow-hidden"
+         style="background:#13151f; border-top:1px solid rgba(255,255,255,0.1); box-shadow:0 -20px 60px rgba(0,0,0,0.8); max-height:90vh; overflow-y:auto;">
+        <!-- Handle bar -->
+        <div class="flex justify-center pt-3 pb-2">
+            <div class="w-10 h-1 rounded-full" style="background:rgba(255,255,255,0.2);"></div>
+        </div>
+        <div class="px-6 pb-2 flex items-center justify-between">
+            <h3 class="text-lg font-bold text-white">Add New Investment</h3>
+            <button @click="addingInv = false" class="p-2 rounded-full hover:bg-white/10 text-white/60 hover:text-white transition-colors">
+                <span class="material-symbols-outlined text-[20px]">close</span>
+            </button>
+        </div>
+        <div class="px-6 pb-8">
         <form @submit.prevent="addInvestment" class="space-y-4">
             <!-- Basic Info Row -->
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1979,6 +3064,7 @@ No financial goals added yet. Use the form above to add your first goal!
                 </button>
             </div>
         </form>
+        </div><!-- /px-6 pb-8 -->
     </div>
 </div>
 
@@ -2273,6 +3359,77 @@ No financial goals added yet. Use the form above to add your first goal!
             <button @click="saveGoalEdit()" class="flex-1 bg-primary text-on-primary font-medium py-2.5 rounded-lg hover:brightness-110 transition-colors text-sm">Save</button>
             <button @click="cancelGoalEdit()" class="flex-1 bg-surface-container-high text-white font-medium py-2.5 rounded-lg hover:bg-surface-bright transition-colors text-sm">Cancel</button>
         </div>
+    </div>
+</div>
+
+<!-- Edit SIP / Recurring Modal -->
+<div x-show="editingSip"
+     class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+     x-transition:enter="transition ease-out duration-200"
+     x-transition:enter-start="opacity-0"
+     x-transition:enter-end="opacity-100"
+     x-transition:leave="transition ease-in duration-150"
+     x-transition:leave-start="opacity-100"
+     x-transition:leave-end="opacity-0"
+     x-cloak
+     style="display:none">
+    <div class="bg-[#13151f] border border-white/10 rounded-2xl shadow-2xl w-full max-w-md p-6 text-white"
+         x-transition:enter="transition ease-out duration-200"
+         x-transition:enter-start="opacity-0 scale-95"
+         x-transition:enter-end="opacity-100 scale-100">
+        <div class="flex justify-between items-center mb-5 pb-3 border-b border-white/10">
+            <h3 class="text-base font-bold text-white flex items-center gap-2">
+                <span class="material-symbols-outlined text-primary text-base">savings</span>
+                <span>Edit Recurring SIP Plan</span>
+            </h3>
+            <button @click="cancelSipEdit()" class="text-white/40 hover:text-white p-1">✕</button>
+        </div>
+
+        <form @submit.prevent="saveSipEdit()" class="space-y-4">
+            <div>
+                <label class="block text-xs font-semibold text-white/70 mb-1">Plan / Fund Name</label>
+                <input type="text" x-model="editSipForm.name" required
+                       class="w-full px-3 py-2.5 rounded-xl bg-surface-container-lowest border border-white/10 text-white focus:border-primary outline-none text-xs">
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-xs font-semibold text-white/70 mb-1">Monthly Amount (₹)</label>
+                    <input type="number" x-model.number="editSipForm.monthlyAmount" required min="1"
+                           class="w-full px-3 py-2.5 rounded-xl bg-surface-container-lowest border border-white/10 text-white font-mono font-bold focus:border-primary outline-none text-xs tabular">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-[#d4af37] mb-1">Debit Day (1-31)</label>
+                    <input type="number" x-model.number="editSipForm.dayOfMonth" min="1" max="31" required
+                           class="w-full px-3 py-2.5 rounded-xl bg-surface-container-lowest border border-[#d4af37]/30 text-white font-mono font-bold focus:border-[#d4af37] outline-none text-xs tabular">
+                </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-xs font-semibold text-white/70 mb-1">Status</label>
+                    <select x-model="editSipForm.status"
+                            class="w-full px-3 py-2.5 rounded-xl bg-surface-container-lowest border border-white/10 text-white focus:border-primary outline-none text-xs">
+                        <option value="Active">Active (Auto-Debit)</option>
+                        <option value="Paused">Paused / Skipped</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-white/70 mb-1">AMFI Scheme Code</label>
+                    <input type="text" x-model="editSipForm.schemeCode" placeholder="e.g. 120828"
+                           class="w-full px-3 py-2.5 rounded-xl bg-surface-container-lowest border border-white/10 text-white font-mono focus:border-primary outline-none text-xs">
+                </div>
+            </div>
+
+            <div class="flex space-x-3 pt-3">
+                <button type="submit" class="flex-1 bg-primary text-on-primary font-bold py-2.5 rounded-xl transition-all text-xs hover:brightness-110 shadow-md">
+                    Save SIP Settings
+                </button>
+                <button type="button" @click="cancelSipEdit()" class="flex-1 bg-surface-container-high hover:bg-surface-bright text-white font-medium py-2.5 rounded-xl transition-all text-xs">
+                    Cancel
+                </button>
+            </div>
+        </form>
     </div>
 </div>
 

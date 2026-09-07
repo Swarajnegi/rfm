@@ -248,38 +248,66 @@ ${hasNews
 
         // 1. OpenRouter API Call
         if (provider === 'openrouter') {
-            const model = options.model || 'google/gemini-2.0-flash-exp:free';
-            const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-                method:  'POST',
-                headers: {
-                    'Content-Type':  'application/json',
-                    'Authorization': `Bearer ${key}`,
-                    'HTTP-Referer':  'https://github.com/Swarajnegi/dadfinanceapp',
-                    'X-Title':       'RFM Portfolio Advisor'
-                },
-                body: JSON.stringify({
-                    model: model,
-                    messages: [
-                        { role: 'system', content: 'You are an expert Indian financial advisor. Output ONLY valid JSON.' },
-                        { role: 'user', content: prompt }
-                    ],
-                    response_format: { type: 'json_object' },
-                    temperature: temperature
-                })
-            });
+            const rawModel = options.model || 'google/gemini-2.0-flash-001';
+            
+            async function doOpenRouterCall(modelSlug) {
+                const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+                    method:  'POST',
+                    headers: {
+                        'Content-Type':  'application/json',
+                        'Authorization': `Bearer ${key}`,
+                        'HTTP-Referer':  'https://github.com/Swarajnegi/dadfinanceapp',
+                        'X-Title':       'RFM Portfolio Advisor'
+                    },
+                    body: JSON.stringify({
+                        model: modelSlug,
+                        messages: [
+                            { role: 'system', content: 'You are an expert Indian financial advisor. Output ONLY valid JSON.' },
+                            { role: 'user', content: prompt }
+                        ],
+                        response_format: { type: 'json_object' },
+                        temperature: temperature
+                    })
+                });
 
-            if (!res.ok) {
-                const errBody = await res.json().catch(() => ({}));
-                const msg = errBody?.error?.message || `HTTP ${res.status}`;
-                if (res.status === 401) throw new Error('Invalid OpenRouter API key. Check key at openrouter.ai/keys');
-                if (res.status === 402) throw new Error('OpenRouter credits depleted. Please top up your account.');
-                if (res.status === 429) throw new Error('OpenRouter rate limit hit. Please retry in 30 seconds.');
-                throw new Error(`OpenRouter API error: ${msg}`);
+                if (!res.ok) {
+                    const errBody = await res.json().catch(() => ({}));
+                    const msg = errBody?.error?.message || `HTTP ${res.status}`;
+
+                    // Auto-fix 1: If error suggests a specific paid slug, retry automatically with suggested slug
+                    if (msg.includes('use this slug instead:')) {
+                        const match = msg.match(/use this slug instead:\s*([a-zA-Z0-9\/\.\:\_-]+)/i);
+                        if (match && match[1] && match[1] !== modelSlug) {
+                            console.warn(`[RegenWealth] Retrying OpenRouter with suggested slug: ${match[1]}`);
+                            return await doOpenRouterCall(match[1].trim());
+                        }
+                    }
+
+                    // Auto-fix 2: If model slug ends with :free, strip :free and retry
+                    if (modelSlug.endsWith(':free')) {
+                        const cleanSlug = modelSlug.replace(':free', '');
+                        console.warn(`[RegenWealth] Retrying OpenRouter with clean slug: ${cleanSlug}`);
+                        return await doOpenRouterCall(cleanSlug);
+                    }
+
+                    // Auto-fix 3: Fallback retry with google/gemini-2.0-flash-001
+                    if (modelSlug !== 'google/gemini-2.0-flash-001') {
+                        console.warn('[RegenWealth] Retrying OpenRouter with fallback model google/gemini-2.0-flash-001');
+                        return await doOpenRouterCall('google/gemini-2.0-flash-001');
+                    }
+
+                    if (res.status === 401) throw new Error('Invalid OpenRouter API key. Check key at openrouter.ai/keys');
+                    if (res.status === 402) throw new Error('OpenRouter credits depleted. Please top up your account.');
+                    if (res.status === 429) throw new Error('OpenRouter rate limit hit. Please retry in 30 seconds.');
+                    throw new Error(`OpenRouter API error: ${msg}`);
+                }
+
+                const data = await res.json();
+                const text = data.choices?.[0]?.message?.content;
+                return parseJSONResponse(text);
             }
 
-            const data = await res.json();
-            const text = data.choices?.[0]?.message?.content;
-            return parseJSONResponse(text);
+            return await doOpenRouterCall(rawModel);
         }
 
         // 2. OpenAI API Call

@@ -8,6 +8,9 @@ document.addEventListener('alpine:init', () => {
         // ── Data Stores ─────────────────────────────────────────────
         investments: [],
 
+        // ── Net Worth History (weekly snapshots for real chart) ──────
+        nwHistory: [],   // [{ date: 'YYYY-MM-DD', value: number }]
+
         // Pension is the single source of truth for pension income
         // (Engineering Principle #008: No Data Duplication)
         pension: {
@@ -17,7 +20,17 @@ document.addEventListener('alpine:init', () => {
         },
 
         cashflow: {
-            // NOTE: cashflow.pension is REMOVED. Income now flows from pension.monthlyAmount
+            incomes: [
+                { id: 'inc_salary', name: 'Monthly Salary', amount: 0, category: 'Salary' },
+                { id: 'inc_consulting', name: 'Consulting / Freelance', amount: 0, category: 'Projects' }
+            ],
+            expenses: [
+                { id: 'exp_housing', name: 'Rent & Housing', amount: 0, category: 'Housing' },
+                { id: 'exp_food', name: 'Food & Groceries', amount: 0, category: 'Food' },
+                { id: 'exp_personal', name: 'Personal & Lifestyle', amount: 0, category: 'Personal' }
+            ],
+            sipOverride: null, // Custom monthly SIP outflow override if desired
+            // Legacy fallbacks
             project: 0,
             otherIncome: 0,
             housing: 0,
@@ -158,21 +171,72 @@ document.addEventListener('alpine:init', () => {
             thresholdReached: false
         },
 
-        // ── Phase 14: US & Global Stocks Exchange Rate Support ───────
-        usdInrRate: 86.5,
+        // ── Phase 14: Real-Time US & Global Stocks Live FX Engine ─────
+        usdInrRate: 95.74,
         async fetchUsdInrRate() {
+            // Restore latest cached rate from storage if available
+            const cachedRate = localStorage.getItem('rfm_usd_inr_rate');
+            if (cachedRate && Number(cachedRate) > 50 && Number(cachedRate) < 150) {
+                this.usdInrRate = Number(Number(cachedRate).toFixed(2));
+            }
+
+            // 1. Try Open Exchange Rates API (CORS-enabled, real-time)
+            try {
+                const res = await fetch('https://open.er-api.com/v6/latest/USD');
+                if (res.ok) {
+                    const data = await res.json();
+                    const rate = data.rates?.INR;
+                    if (rate && rate > 50 && rate < 150) {
+                        this.usdInrRate = Number(rate.toFixed(2));
+                        localStorage.setItem('rfm_usd_inr_rate', this.usdInrRate);
+                        return this.usdInrRate;
+                    }
+                }
+            } catch (e) {}
+
+            // 2. Fallback: Frankfurter FX API
+            try {
+                const res = await fetch('https://api.frankfurter.app/latest?from=USD&to=INR');
+                if (res.ok) {
+                    const data = await res.json();
+                    const rate = data.rates?.INR;
+                    if (rate && rate > 50 && rate < 150) {
+                        this.usdInrRate = Number(rate.toFixed(2));
+                        localStorage.setItem('rfm_usd_inr_rate', this.usdInrRate);
+                        return this.usdInrRate;
+                    }
+                }
+            } catch (e) {}
+
+            // 3. Fallback: ExchangeRate-API
+            try {
+                const res = await fetch('https://api.exchangerate-api.com/v4/latest/USD');
+                if (res.ok) {
+                    const data = await res.json();
+                    const rate = data.rates?.INR;
+                    if (rate && rate > 50 && rate < 150) {
+                        this.usdInrRate = Number(rate.toFixed(2));
+                        localStorage.setItem('rfm_usd_inr_rate', this.usdInrRate);
+                        return this.usdInrRate;
+                    }
+                }
+            } catch (e) {}
+
+            // 4. Fallback: Yahoo Finance Live FX
             try {
                 const res = await fetch('https://query1.finance.yahoo.com/v8/finance/chart/INR=X');
                 if (res.ok) {
                     const data = await res.json();
                     const rate = data.chart?.result?.[0]?.meta?.regularMarketPrice;
                     if (rate && rate > 50 && rate < 150) {
-                        this.usdInrRate = rate;
+                        this.usdInrRate = Number(rate.toFixed(2));
+                        localStorage.setItem('rfm_usd_inr_rate', this.usdInrRate);
+                        return this.usdInrRate;
                     }
                 }
-            } catch (e) {
-                console.warn('Using default fallback USD/INR exchange rate (86.5)');
-            }
+            } catch (e) {}
+
+            return this.usdInrRate;
         },
 
         // ════════════════════════════════════════════════════════════
@@ -208,6 +272,171 @@ document.addEventListener('alpine:init', () => {
 
             // Mobile Pull-to-Refresh touch gesture listener initialization
             this.initPullToRefresh();
+
+            // ── Save weekly NW snapshot & render chart after prices settle ──
+            setTimeout(() => {
+                this.saveNwSnapshot();
+                this.renderNwChart();
+            }, 1500);
+        },
+
+        // ════════════════════════════════════════════════════════════
+        //  NET WORTH HISTORY — Weekly snapshot engine
+        // ════════════════════════════════════════════════════════════
+
+        /** Save today's net worth if not already recorded this week */
+        saveNwSnapshot() {
+            try {
+                const today = new Date().toISOString().slice(0, 10);
+                const nw = this.netWorthTotal;
+                if (!nw || nw <= 0) return;
+
+                const raw = localStorage.getItem('rfm_nw_history');
+                let history = raw ? JSON.parse(raw) : [];
+
+                // Only store one point per calendar week (Monday-keyed)
+                const monday = (() => {
+                    const d = new Date(today);
+                    const day = d.getDay();
+                    const diff = (day === 0 ? -6 : 1 - day);
+                    d.setDate(d.getDate() + diff);
+                    return d.toISOString().slice(0, 10);
+                })();
+
+                // Replace existing point for this week, or append
+                const idx = history.findIndex(p => p.date === monday);
+                const point = { date: monday, value: Math.round(nw) };
+                if (idx >= 0) history[idx] = point;
+                else history.push(point);
+
+                // Keep 104 weeks (2 years max)
+                history = history.sort((a, b) => a.date.localeCompare(b.date)).slice(-104);
+                localStorage.setItem('rfm_nw_history', JSON.stringify(history));
+                this.nwHistory = history;
+            } catch (e) {
+                console.warn('[NW Snapshot]', e);
+            }
+        },
+
+        /** Load NW history from localStorage into reactive state */
+        loadNwHistory() {
+            try {
+                const raw = localStorage.getItem('rfm_nw_history');
+                this.nwHistory = raw ? JSON.parse(raw) : [];
+            } catch (e) {
+                this.nwHistory = [];
+            }
+        },
+
+        /** Active chart time range: '1M' | '3M' | '6M' | '1Y' | 'ALL' */
+        nwChartRange: '1M',
+
+        /** Get filtered history based on selected range */
+        get nwChartData() {
+            const all = this.nwHistory || [];
+            if (!all.length) return [];
+            const now = new Date();
+            const cutoff = {
+                '1M':  new Date(now.getFullYear(), now.getMonth() - 1,  now.getDate()),
+                '3M':  new Date(now.getFullYear(), now.getMonth() - 3,  now.getDate()),
+                '6M':  new Date(now.getFullYear(), now.getMonth() - 6,  now.getDate()),
+                '1Y':  new Date(now.getFullYear() - 1, now.getMonth(), now.getDate()),
+                'ALL': new Date(0),
+            }[this.nwChartRange] || new Date(0);
+            return all.filter(p => new Date(p.date) >= cutoff);
+        },
+
+        /** Render or update the Chart.js net worth chart */
+        renderNwChart() {
+            const canvas = document.getElementById('nwChartCanvas');
+            if (!canvas || typeof Chart === 'undefined') return;
+
+            this.loadNwHistory();
+
+            // If only 1 point, duplicate to show a flat line
+            let data = [...(this.nwChartData.length ? this.nwChartData : this.nwHistory)];
+            if (data.length === 0) {
+                // Seed with today's value so chart is never empty
+                const today = new Date().toISOString().slice(0, 10);
+                data = [{ date: today, value: Math.round(this.netWorthTotal) }];
+            }
+            if (data.length === 1) data = [data[0], data[0]];
+
+            const labels = data.map(p => {
+                const d = new Date(p.date);
+                return d.toLocaleDateString('en-IN', { month: 'short', day: 'numeric' });
+            });
+            const values = data.map(p => p.value);
+
+            const minVal = Math.min(...values);
+            const maxVal = Math.max(...values);
+            const trend  = values[values.length - 1] >= values[0];
+
+            // Destroy existing chart instance if present
+            if (window._rfmNwChart) {
+                window._rfmNwChart.destroy();
+                window._rfmNwChart = null;
+            }
+
+            const ctx = canvas.getContext('2d');
+            const gradient = ctx.createLinearGradient(0, 0, 0, 200);
+            gradient.addColorStop(0, trend ? 'rgba(167,184,255,0.35)' : 'rgba(248,113,113,0.35)');
+            gradient.addColorStop(1, 'rgba(0,0,0,0)');
+
+            window._rfmNwChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels,
+                    datasets: [{
+                        data: values,
+                        borderColor: trend ? '#a7b8ff' : '#f87171',
+                        borderWidth: 2.5,
+                        backgroundColor: gradient,
+                        fill: true,
+                        tension: 0.45,
+                        pointRadius: 0,
+                        pointHoverRadius: 5,
+                        pointHoverBackgroundColor: trend ? '#a7b8ff' : '#f87171',
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: { duration: 600, easing: 'easeInOutQuart' },
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: 'rgba(10,10,10,0.9)',
+                            borderColor: trend ? '#a7b8ff' : '#f87171',
+                            borderWidth: 1,
+                            titleColor: 'rgba(255,255,255,0.5)',
+                            bodyColor: '#ffffff',
+                            bodyFont: { family: 'Manrope', size: 14, weight: 'bold' },
+                            callbacks: {
+                                label: (ctx) => {
+                                    const v = ctx.raw;
+                                    if (v >= 10000000) return '₹' + (v/10000000).toFixed(2) + ' Cr';
+                                    if (v >= 100000)   return '₹' + (v/100000).toFixed(2) + ' L';
+                                    return '₹' + v.toLocaleString('en-IN');
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            display: false,
+                            grid: { display: false }
+                        },
+                        y: {
+                            display: false,
+                            min: Math.max(0, minVal * 0.95),
+                            max: maxVal * 1.05,
+                            grid: { display: false }
+                        }
+                    }
+                }
+            });
         },
 
         async initCapacitor() {
@@ -222,7 +451,7 @@ document.addEventListener('alpine:init', () => {
             // Match status bar to our dark background color
             try { 
                 await StatusBar.setStyle({ style: Style.Dark });
-                await StatusBar.setBackgroundColor({ color: '#051424' });
+                await StatusBar.setBackgroundColor({ color: '#0a0a0a' });
             } catch (e) {}
 
             // Phase 12: Register Android notification channels (required on Android 8+ / API 26+)
@@ -396,80 +625,219 @@ document.addEventListener('alpine:init', () => {
             // ── Load V1 format ──
             let saved = localStorage.getItem('rfm_v1');
             if (saved) {
-                const p = JSON.parse(saved);
-                this.investments = p.investments || [];
-                this.goals       = p.goals       || [];
-                this.sips        = p.sips        || [];
+                try {
+                    const p = JSON.parse(saved);
+                    this.investments = p.investments || [];
+                    this.goals       = p.goals       || [];
+                    this.sips        = p.sips        || [];
 
-                // Pension: migrate old cashflow.pension if pension module not yet saved
-                if (p.pension) {
-                    this.pension = { ...this.pension, ...p.pension };
-                } else if (p.cashflow && p.cashflow.pension) {
-                    this.pension.monthlyAmount = Number(p.cashflow.pension) || 56000;
+                    if (p.pension) {
+                        this.pension = { ...this.pension, ...p.pension };
+                    } else if (p.cashflow && p.cashflow.pension) {
+                        this.pension.monthlyAmount = Number(p.cashflow.pension) || 56000;
+                    }
+
+                    if (p.cashflow) {
+                        const { pension: _removed, ...rest } = p.cashflow;
+                        this.cashflow = { ...this.cashflow, ...rest };
+                    }
+
+                    this.networth  = { ...this.networth,  ...(p.networth  || {}) };
+                    this.emergency = { ...this.emergency, ...(p.emergency || {}) };
+
+                    if (p.tax) {
+                        const { taxIncome: _ti, taxOther, taxDeduction, ...taxRest } = p.tax;
+                        this.tax = {
+                            ...this.tax,
+                            ...taxRest,
+                            otherIncome:    taxRest.otherIncome    ?? (taxOther    || 0),
+                            deduction80C:   taxRest.deduction80C   ?? (taxDeduction || 0),
+                        };
+                    }
+                } catch (e) {
+                    console.error('Failed to parse saved RFM data:', e);
                 }
 
-                // Cashflow: drop old .pension key if it exists
-                if (p.cashflow) {
-                    const { pension: _removed, ...rest } = p.cashflow;
-                    this.cashflow = { ...this.cashflow, ...rest };
+                // ── Auto-Migration Pass: Calibrate exact INDMoney holdings ──
+                let hasDram = false;
+
+                this.investments = (this.investments || []).map(inv => {
+                    // 1. EPF: Exact INDMoney ledger balance
+                    if ((inv.name || '').includes('EPF') || (inv.id || '').includes('epf')) {
+                        return {
+                            ...inv,
+                            name: 'Employees Provident Fund (EPF)',
+                            type: 'Government Scheme',
+                            issuer: 'EPFO (Government of India)',
+                            amount: 25274,
+                            rate: 8.25,
+                            payout: 'Annual',
+                            maturityDate: '2058-03-31',
+                            lastNavUpdate: '2026-08-23'
+                        };
+                    }
+                    // 2. AVGO: Broadcom
+                    if (inv.ticker === 'AVGO' || (inv.name || '').includes('Broadcom')) {
+                        return {
+                            ...inv,
+                            name: 'Broadcom Inc (AVGO)',
+                            type: 'Stock (US)',
+                            ticker: 'AVGO',
+                            currency: 'USD',
+                            units: 1.164141,
+                            buyPrice: 389.51,
+                            currentPrice: inv.currentPrice || 369.00,
+                            lastNavUpdate: '2026-08-23'
+                        };
+                    }
+                    // 3. NVDA: NVIDIA
+                    if (inv.ticker === 'NVDA' || (inv.name || '').includes('NVIDIA')) {
+                        return {
+                            ...inv,
+                            name: 'NVIDIA Corp (NVDA)',
+                            type: 'Stock (US)',
+                            ticker: 'NVDA',
+                            currency: 'USD',
+                            units: 1.895487,
+                            buyPrice: 218.21,
+                            currentPrice: inv.currentPrice || 215.38,
+                            lastNavUpdate: '2026-08-23'
+                        };
+                    }
+                    // 4. MRVL: Marvell
+                    if (inv.ticker === 'MRVL' || (inv.name || '').includes('Marvell')) {
+                        return {
+                            ...inv,
+                            name: 'Marvell Technology Inc. (MRVL)',
+                            type: 'Stock (US)',
+                            ticker: 'MRVL',
+                            currency: 'USD',
+                            units: 0.609916,
+                            buyPrice: 287.57,
+                            currentPrice: inv.currentPrice || 236.21,
+                            lastNavUpdate: '2026-08-23'
+                        };
+                    }
+                    // 5. DRAM: Replace legacy NBIS with Roundhill Memory ETF
+                    if (inv.ticker === 'NBIS' || inv.ticker === 'DRAM' || (inv.name || '').includes('Roundhill') || (inv.name || '').includes('Nebius')) {
+                        hasDram = true;
+                        return {
+                            ...inv,
+                            id: inv.id || ('inv_dram_' + Date.now()),
+                            name: 'Roundhill Memory ETF (DRAM)',
+                            type: 'Stock (US)',
+                            ticker: 'DRAM',
+                            currency: 'USD',
+                            units: 1.960246,
+                            buyPrice: 54.99,
+                            currentPrice: inv.currentPrice || 57.65,
+                            lastNavUpdate: '2026-08-23'
+                        };
+                    }
+                    // 6. Invesco Midcap: Fix scheme code + correct unit count from INDMoney
+                    if ((inv.name || '').includes('Invesco') || inv.schemeCode === '119775' || inv.schemeCode === '120403') {
+                        return {
+                            ...inv,
+                            name: 'Invesco India Midcap Fund - Direct Plan - Growth',
+                            type: 'Mutual Fund',
+                            schemeCode: '120403',
+                            // INDMoney verified: ₹28k invested, ₹32.03k current, +14.41%
+                            units: 131.34,
+                            buyPrice: 213.22,
+                            currentPrice: inv.currentPrice || 243.87,
+                            lastNavUpdate: '2026-08-23'
+                        };
+                    }
+                    // 7. Quant Small Cap — correct unit count from INDMoney
+                    if ((inv.name || '').includes('Quant') || inv.schemeCode === '120828') {
+                        return {
+                            ...inv,
+                            name: 'Quant Small Cap Fund - Direct Plan - Growth',
+                            type: 'Mutual Fund',
+                            schemeCode: '120828',
+                            // INDMoney verified: ₹17.99k invested, ₹20.72k current, +15.09%
+                            units: 65.33,
+                            buyPrice: 275.44,
+                            currentPrice: inv.currentPrice || 317.10,
+                            lastNavUpdate: '2026-08-23'
+                        };
+                    }
+                    return inv;
+                });
+
+                // Ensure DRAM is present if missing
+                if (!hasDram && (this.investments || []).length > 0) {
+                    const hasDramAlready = this.investments.some(i => i.ticker === 'DRAM');
+                    if (!hasDramAlready) {
+                        this.investments.push({
+                            id: 'inv_dram_' + Date.now(),
+                            name: 'Roundhill Memory ETF (DRAM)',
+                            type: 'Stock (US)',
+                            ticker: 'DRAM',
+                            currency: 'USD',
+                            units: 1.960246,
+                            buyPrice: 54.99,
+                            currentPrice: 57.65,
+                            lastNavUpdate: '2026-08-23'
+                        });
+                    }
                 }
 
-                this.networth  = { ...this.networth,  ...(p.networth  || {}) };
-                this.emergency = { ...this.emergency, ...(p.emergency  || {}) };
+                // Ensure bank balance matches INDMoney cash
+                if (!this.networth.bank || this.networth.bank === 25000) {
+                    this.networth.bank = 11108;
+                }
 
-                if (p.tax) {
-                    // Migrate old keys: taxOther → otherIncome, taxDeduction → deduction80C
-                    const { taxIncome: _ti, taxOther, taxDeduction, ...taxRest } = p.tax;
-                    this.tax = {
-                        ...this.tax,
-                        ...taxRest,
-                        // Map legacy fields to new names if new keys not present
-                        otherIncome:    taxRest.otherIncome    ?? (taxOther    || 0),
-                        deduction80C:   taxRest.deduction80C   ?? (taxDeduction || 0),
-                    };
+                // Update SIP scheme codes and debit days (Actual user debit date: 3rd)
+                (this.sips || []).forEach(sip => {
+                    if ((sip.name || '').includes('Invesco') || sip.schemeCode === '119775' || sip.schemeCode === '120403') {
+                        sip.schemeCode = '120403';
+                        if (sip.dayOfMonth === 10 || !sip.dayOfMonth) sip.dayOfMonth = 3;
+                    }
+                    if ((sip.name || '').includes('Quant') || sip.schemeCode === '120828') {
+                        if (sip.dayOfMonth === 5 || !sip.dayOfMonth) sip.dayOfMonth = 3;
+                    }
+                });
+
+                if (!this.cashflow.salaryDay) this.cashflow.salaryDay = 1;
+
+                // Ensure dynamic cashflow streams exist
+                if (!this.cashflow.incomes || !Array.isArray(this.cashflow.incomes) || this.cashflow.incomes.length === 0) {
+                    this.cashflow.incomes = [
+                        { id: 'inc_salary', name: 'Monthly Salary', amount: Number(this.cashflow.project || 0) || 0, category: 'Salary', creditDay: 1 }
+                    ];
+                    if (this.pension && Number(this.pension.monthlyAmount) > 0) {
+                        this.cashflow.incomes.push({ id: 'inc_pension', name: 'Pension Income', amount: Number(this.pension.monthlyAmount), category: 'Pension', creditDay: 1 });
+                    }
+                    if (Number(this.cashflow.otherIncome) > 0) {
+                        this.cashflow.incomes.push({ id: 'inc_other', name: 'Other Income', amount: Number(this.cashflow.otherIncome), category: 'Other', creditDay: 5 });
+                    }
+                }
+
+                if (!this.cashflow.expenses || !Array.isArray(this.cashflow.expenses) || this.cashflow.expenses.length === 0) {
+                    this.cashflow.expenses = [
+                        { id: 'exp_housing', name: 'Housing & Utilities', amount: Number(this.cashflow.housing) || 11500, category: 'Housing' },
+                        { id: 'exp_food', name: 'Food & Household', amount: Number(this.cashflow.food) || 5000, category: 'Food' },
+                        { id: 'exp_personal', name: 'Other Expenses', amount: Number(this.cashflow.otherExpense) || 10000, category: 'Personal' }
+                    ];
+                    if (Number(this.cashflow.medical) > 0) {
+                        this.cashflow.expenses.push({ id: 'exp_medical', name: 'Medical & Insurance', amount: Number(this.cashflow.medical), category: 'Medical' });
+                    }
+                }
+
+                // Self-healing check: If investments list is empty or net worth is 0, auto-seed actual portfolio
+                if (!this.investments || this.investments.length === 0 || Number(this.totalAssets) === 0) {
+                    console.log('[RFM Boot] Empty or zero-state detected. Auto-seeding actual ₹1.94L portfolio...');
+                    this.loadActualPortfolio();
+                } else {
+                    this.saveData();
+                    this.checkSipDebits();
                 }
                 return;
             }
 
-            // ── Fallback: Migrate MVP 0.3 (rfm03) data ──
-            let legacy = localStorage.getItem('rfm03');
-            if (legacy) {
-                try {
-                    const p = JSON.parse(legacy);
-                    this.investments = p.i || [];
-                    this.pension.monthlyAmount = Number(p.pension) || 56000;
-                    this.cashflow = {
-                        project:      Number(p.project)      || 0,
-                        otherIncome:  Number(p.otherIncome)  || 0,
-                        housing:      Number(p.housing)      || 0,
-                        food:         Number(p.food)         || 0,
-                        medical:      Number(p.medical)      || 0,
-                        otherExpense: Number(p.otherExpense) || 0
-                    };
-                    this.networth = {
-                        bank:         Number(p.bank)         || 0,
-                        cash:         Number(p.cash)         || 0,
-                        property:     Number(p.property)     || 0,
-                        otherAsset:   Number(p.otherAsset)   || 0,
-                        homeLoan:     Number(p.homeLoan)     || 0,
-                        personalLoan: Number(p.personalLoan) || 0,
-                        credit:       Number(p.credit)       || 0,
-                        otherDebt:    Number(p.otherDebt)    || 0
-                    };
-                    this.emergency = {
-                        efMonthly: Number(p.efMonthly) || 50000,
-                        efMonths:  Number(p.efMonths)  || 12,
-                        efCurrent: Number(p.efCurrent) || 0
-                    };
-                    this.tax = {
-                        taxOther:     Number(p.taxOther)     || 0,
-                        taxDeduction: Number(p.taxDeduction) || 0
-                    };
-                    this.saveData();
-                } catch (e) {
-                    console.error('Migration from rfm03 failed', e);
-                }
-            }
+            // If no saved data exists, seed actual real-world portfolio from JARVIS memory
+            this.loadActualPortfolio();
         },
 
         saveData() {
@@ -491,26 +859,101 @@ document.addEventListener('alpine:init', () => {
         },
 
         // ════════════════════════════════════════════════════════════
-        //  COMPUTED PROPERTIES — CASH FLOW
+        //  COMPUTED PROPERTIES — CASH FLOW (Dynamic Multi-Stream Engine)
         // ════════════════════════════════════════════════════════════
 
-        // Single source of truth: pension.monthlyAmount feeds totalIncome
         get totalIncome() {
-            return Number(this.pension.monthlyAmount)
-                 + Number(this.cashflow.project)
-                 + Number(this.cashflow.otherIncome);
+            if (this.cashflow.incomes && Array.isArray(this.cashflow.incomes) && this.cashflow.incomes.length > 0) {
+                return this.cashflow.incomes.reduce((sum, inc) => sum + (Number(inc.amount) || 0), 0);
+            }
+            return Number(this.pension?.monthlyAmount || 0)
+                 + Number(this.cashflow.project || 0)
+                 + Number(this.cashflow.otherIncome || 0);
         },
         get totalExpense() {
-            return Number(this.cashflow.housing)
-                 + Number(this.cashflow.food)
-                 + Number(this.cashflow.medical)
-                 + Number(this.cashflow.otherExpense)
-                 + this.totalMonthlySipOutflow;  // Phase 9: SIP outflows are real expenses
+            let base = 0;
+            if (this.cashflow.expenses && Array.isArray(this.cashflow.expenses) && this.cashflow.expenses.length > 0) {
+                base = this.cashflow.expenses.reduce((sum, exp) => sum + (Number(exp.amount) || 0), 0);
+            } else {
+                base = Number(this.cashflow.housing || 0)
+                     + Number(this.cashflow.food || 0)
+                     + Number(this.cashflow.medical || 0)
+                     + Number(this.cashflow.otherExpense || 0);
+            }
+            return base + this.effectiveMonthlySipOutflow;
+        },
+        get effectiveMonthlySipOutflow() {
+            if (this.cashflow.sipOverride !== null && this.cashflow.sipOverride !== undefined && this.cashflow.sipOverride !== '') {
+                return Number(this.cashflow.sipOverride) || 0;
+            }
+            return this.totalMonthlySipOutflow;
         },
         get monthlySurplus() { return this.totalIncome - this.totalExpense; },
         get savingsRate() {
             if (this.totalIncome <= 0) return 0;
             return ((this.monthlySurplus / this.totalIncome) * 100).toFixed(1);
+        },
+        get cashflowCycleInfo() {
+            const now = new Date();
+            const salaryDay = Number(this.cashflow.salaryDay) || 1;
+            const currentDay = now.getDate();
+            
+            let cycleStart, cycleEnd;
+            if (currentDay >= salaryDay) {
+                cycleStart = new Date(now.getFullYear(), now.getMonth(), salaryDay);
+                cycleEnd = new Date(now.getFullYear(), now.getMonth() + 1, salaryDay - 1);
+            } else {
+                cycleStart = new Date(now.getFullYear(), now.getMonth() - 1, salaryDay);
+                cycleEnd = new Date(now.getFullYear(), now.getMonth(), salaryDay - 1);
+            }
+
+            const daysTotal = Math.max(1, Math.round((cycleEnd - cycleStart) / (1000 * 60 * 60 * 24)) + 1);
+            const daysPassed = Math.max(0, Math.round((now - cycleStart) / (1000 * 60 * 60 * 24)));
+            const daysRemaining = Math.max(0, daysTotal - daysPassed);
+
+            const startStr = cycleStart.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+            const endStr = cycleEnd.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+
+            return {
+                salaryDay,
+                cycleLabel: `${startStr} – ${endStr}`,
+                daysRemaining,
+                daysPassed,
+                progressPct: Math.min(100, Math.round((daysPassed / daysTotal) * 100))
+            };
+        },
+
+        // Dynamic Income & Expense Item Helpers
+        addIncomeStream(name = 'New Income Source', amount = 0, category = 'Salary', creditDay = 1) {
+            if (!this.cashflow.incomes) this.cashflow.incomes = [];
+            this.cashflow.incomes.push({
+                id: 'inc_' + Date.now(),
+                name: name,
+                amount: Number(amount) || 0,
+                category: category,
+                creditDay: Number(creditDay) || 1
+            });
+            this.saveData();
+        },
+        deleteIncomeStream(id) {
+            if (!this.cashflow.incomes) return;
+            this.cashflow.incomes = this.cashflow.incomes.filter(inc => inc.id !== id);
+            this.saveData();
+        },
+        addExpenseItem(name = 'New Expense Item', amount = 0, category = 'General') {
+            if (!this.cashflow.expenses) this.cashflow.expenses = [];
+            this.cashflow.expenses.push({
+                id: 'exp_' + Date.now(),
+                name: name,
+                amount: Number(amount) || 0,
+                category: category
+            });
+            this.saveData();
+        },
+        deleteExpenseItem(id) {
+            if (!this.cashflow.expenses) return;
+            this.cashflow.expenses = this.cashflow.expenses.filter(exp => exp.id !== id);
+            this.saveData();
         },
 
         // ════════════════════════════════════════════════════════════
@@ -550,59 +993,418 @@ document.addEventListener('alpine:init', () => {
         //  VALUATION & P&L HELPERS (Phase 8: Dynamic Equity Engine)
         // ════════════════════════════════════════════════════════════
         getInvCurrentValue(inv) {
+            if (!inv) return 0;
             const units = Number(inv.units) || 0;
-            const currentPrice = Number(inv.currentPrice) || Number(inv.nav) || Number(inv.buyPrice) || 0;
-            if (units > 0 && currentPrice > 0) {
-                return units * currentPrice;
+            // For US stocks/ETFs: always use units × price × FX rate. Never fall back to `amount`.
+            const isUsd = inv.currency === 'USD' || ['Stock (US)', 'ETF (US)'].includes(inv.type);
+            const rate = isUsd ? (this.usdInrRate || 95.74) : 1;
+            if (units > 0) {
+                const currentPrice = Number(inv.currentPrice) || Number(inv.nav) || Number(inv.buyPrice) || 0;
+                const val = units * currentPrice * rate;
+                return isNaN(val) ? 0 : val;
             }
-            return Number(inv.currentValue) || Number(inv.amount) || 0;
+            // For non-unit assets (FDs, EPF, bonds): use currentValue or amount in INR
+            const fallback = Number(inv.currentValue) || Number(inv.amount) || 0;
+            const val = fallback * (isUsd ? rate : 1);
+            return isNaN(val) ? 0 : val;
         },
 
         getInvInvestedCost(inv) {
+            if (!inv) return 0;
             const units = Number(inv.units) || 0;
-            const buyPrice = Number(inv.buyPrice) || Number(inv.nav) || 0;
-            if (units > 0 && buyPrice > 0) {
-                return units * buyPrice;
+            const isUsd = inv.currency === 'USD' || ['Stock (US)', 'ETF (US)'].includes(inv.type);
+            const rate = isUsd ? (this.usdInrRate || 95.74) : 1;
+            if (units > 0) {
+                const buyPrice = Number(inv.buyPrice) || Number(inv.nav) || 0;
+                const val = units * buyPrice * rate;
+                return isNaN(val) ? 0 : val;
             }
-            return Number(inv.amount) || 0;
+            const val = (Number(inv.amount) || 0) * (isUsd ? rate : 1);
+            return isNaN(val) ? 0 : val;
         },
 
         getInvPnL(inv) {
-            return this.getInvCurrentValue(inv) - this.getInvInvestedCost(inv);
+            const pnl = this.getInvCurrentValue(inv) - this.getInvInvestedCost(inv);
+            return isNaN(pnl) ? 0 : pnl;
         },
 
         getInvPnLPct(inv) {
             const cost = this.getInvInvestedCost(inv);
             if (cost <= 0) return '0.00';
-            return ((this.getInvPnL(inv) / cost) * 100).toFixed(2);
+            const pct = ((this.getInvPnL(inv) / cost) * 100);
+            return isNaN(pct) ? '0.00' : pct.toFixed(2);
         },
 
         // ════════════════════════════════════════════════════════════
         //  COMPUTED PROPERTIES — NET WORTH
         // ════════════════════════════════════════════════════════════
         get totalAssets() {
-            const invTotal = this.investments.reduce((s, i) => s + this.getInvCurrentValue(i), 0);
-            return Number(this.networth.bank)
-                 + Number(this.networth.cash)
-                 + Number(this.networth.property)
-                 + Number(this.networth.otherAsset)
-                 + invTotal;
+            const invTotal = (this.investments || []).reduce((s, i) => s + (this.getInvCurrentValue(i) || 0), 0);
+            const bank = Number(this.networth?.bank) || 0;
+            const cash = Number(this.networth?.cash) || 0;
+            const property = Number(this.networth?.property) || 0;
+            const other = Number(this.networth?.otherAsset) || 0;
+            return bank + cash + property + other + invTotal;
         },
         get totalLiabilities() {
-            return Number(this.networth.homeLoan)
-                 + Number(this.networth.personalLoan)
-                 + Number(this.networth.credit)
-                 + Number(this.networth.otherDebt);
+            const hl = Number(this.networth?.homeLoan) || 0;
+            const pl = Number(this.networth?.personalLoan) || 0;
+            const cc = Number(this.networth?.creditCard) || Number(this.networth?.credit) || 0;
+            const od = Number(this.networth?.otherLiability) || Number(this.networth?.otherDebt) || 0;
+            return hl + pl + cc + od;
         },
-        get netWorthTotal()  { return this.totalAssets - this.totalLiabilities; },
+        get netWorthTotal() {
+            const val = this.totalAssets - this.totalLiabilities;
+            return isNaN(val) ? 0 : val;
+        },
         get debtRatio() {
-            if (this.totalAssets <= 0) return 0;
-            return ((this.totalLiabilities / this.totalAssets) * 100).toFixed(1);
+            if (!this.totalAssets || this.totalAssets <= 0) return 0;
+            const ratio = (this.totalLiabilities / this.totalAssets) * 100;
+            return isNaN(ratio) ? 0 : ratio.toFixed(1);
+        },
+
+        stockFilter: 'all', // 'all' | 'ind' | 'us'
+
+        get stockInvestments() {
+            return (this.investments || []).filter(i =>
+                ['Stock', 'Stock (IND)', 'Stock (US)', 'ETF', 'ETF (IND)', 'ETF (US)'].includes(i.type) ||
+                (i.type || '').toLowerCase().includes('stock') ||
+                (i.type || '').toLowerCase().includes('etf')
+            );
+        },
+
+        get filteredStockInvestments() {
+            if (this.stockFilter === 'ind') {
+                return this.stockInvestments.filter(i => ['Stock (IND)', 'ETF (IND)', 'Stock'].includes(i.type) || !i.type.includes('US'));
+            }
+            if (this.stockFilter === 'us') {
+                return this.stockInvestments.filter(i => ['Stock (US)', 'ETF (US)'].includes(i.type) || (i.currency === 'USD'));
+            }
+            return this.stockInvestments;
+        },
+
+        get totalStockValuation() {
+            return this.stockInvestments.reduce((sum, i) => sum + this.getInvCurrentValue(i), 0);
+        },
+
+        get totalStockCost() {
+            return this.stockInvestments.reduce((sum, i) => sum + this.getInvInvestedCost(i), 0);
+        },
+
+        get totalStockPnL() {
+            return this.totalStockValuation - this.totalStockCost;
+        },
+
+        get totalStockPnLPct() {
+            if (this.totalStockCost <= 0) return '0.00';
+            return ((this.totalStockPnL / this.totalStockCost) * 100).toFixed(2);
+        },
+
+        get totalIndStockValuation() {
+            return this.stockInvestments
+                .filter(i => ['Stock (IND)', 'ETF (IND)', 'Stock'].includes(i.type) || !i.type.includes('US'))
+                .reduce((sum, i) => sum + this.getInvCurrentValue(i), 0);
+        },
+
+        get totalUsStockValuation() {
+            return this.stockInvestments
+                .filter(i => ['Stock (US)', 'ETF (US)'].includes(i.type) || (i.currency === 'USD'))
+                .reduce((sum, i) => sum + this.getInvCurrentValue(i), 0);
+        },
+
+        get totalUsStockUSD() {
+            const usdRate = this.usdInrRate || 86.5;
+            return this.totalUsStockValuation / usdRate;
+        },
+
+        invFilter: 'all', // 'all' | 'mf' | 'stocks' | 'debt'
+        get filteredInvestments() {
+            if (this.invFilter === 'mf') {
+                return (this.investments || []).filter(i => (i.type || '').toLowerCase().includes('mutual'));
+            }
+            if (this.invFilter === 'stocks') {
+                return (this.investments || []).filter(i => (i.type || '').toLowerCase().includes('stock') || (i.type || '').toLowerCase().includes('etf'));
+            }
+            if (this.invFilter === 'debt') {
+                return (this.investments || []).filter(i => (i.type || '').toLowerCase().includes('government') || (i.type || '').toLowerCase().includes('bond') || (i.name || '').toLowerCase().includes('epf') || (i.type || '').toLowerCase().includes('fd'));
+            }
+            return this.investments || [];
+        },
+
+        get usStockList() {
+            return (this.investments || []).filter(i => ['Stock (US)', 'ETF (US)'].includes(i.type) || (i.currency === 'USD'));
+        },
+        get indStockList() {
+            return (this.investments || []).filter(i => (['Stock (IND)', 'ETF (IND)', 'Stock', 'ETF'].includes(i.type) || (i.type || '').toLowerCase().includes('stock')) && !['Stock (US)', 'ETF (US)'].includes(i.type) && i.currency !== 'USD');
+        },
+        get mutualFundList() {
+            return (this.investments || []).filter(i => i.type === 'Mutual Fund' || (i.type || '').toLowerCase().includes('mutual'));
+        },
+        get debtAndEpfList() {
+            return (this.investments || []).filter(i =>
+                ['Government Scheme', 'Bond', 'Fixed Deposit', 'Gold'].includes(i.type) ||
+                (i.type || '').toLowerCase().includes('government') ||
+                (i.type || '').toLowerCase().includes('bond') ||
+                (i.type || '').toLowerCase().includes('epf') ||
+                (i.name || '').toLowerCase().includes('epf')
+            );
+        },
+
+        // ── Mutual Funds Portfolio Computed Properties ────────────────
+        mfFilter: 'all', // 'all' | 'equity' | 'debt'
+
+        get mfInvestments() {
+            return (this.investments || []).filter(i =>
+                i.type === 'Mutual Fund' || (i.type || '').toLowerCase().includes('mutual')
+            );
+        },
+
+        get filteredMfInvestments() {
+            if (this.mfFilter === 'equity') {
+                return this.mfInvestments.filter(i => !(i.name || '').toLowerCase().includes('debt') && !(i.name || '').toLowerCase().includes('liquid'));
+            }
+            if (this.mfFilter === 'debt') {
+                return this.mfInvestments.filter(i => (i.name || '').toLowerCase().includes('debt') || (i.name || '').toLowerCase().includes('liquid'));
+            }
+            return this.mfInvestments;
+        },
+
+        get totalMfValuation() {
+            return this.mfInvestments.reduce((sum, i) => sum + this.getInvCurrentValue(i), 0);
+        },
+
+        get totalMfCost() {
+            return this.mfInvestments.reduce((sum, i) => sum + this.getInvInvestedCost(i), 0);
+        },
+
+        get totalMfPnL() {
+            return this.totalMfValuation - this.totalMfCost;
+        },
+
+        get totalMfPnLPct() {
+            if (this.totalMfCost <= 0) return '0.00';
+            return ((this.totalMfPnL / this.totalMfCost) * 100).toFixed(2);
+        },
+
+        openAddMfModal() {
+            this.newInv = {
+                name: '', type: 'Mutual Fund', issuer: '', amount: '',
+                rate: '', payout: 'Monthly', rating: '', maturityDate: '',
+                ticker: '', units: '', buyPrice: '', currentPrice: '', schemeCode: ''
+            };
+            this.addingInv = true;
+        },
+
+        // ── Gold Portfolio Computed Properties ────────────────────────
+        goldFilter: 'all', // 'all' | 'physical' | 'sgb' | 'etf'
+
+        get goldInvestments() {
+            return (this.investments || []).filter(i =>
+                ['Gold', 'Physical Gold', 'Sovereign Gold Bond (SGB)', 'Gold ETF / Digital Gold'].includes(i.type) ||
+                (i.type || '').toLowerCase().includes('gold') ||
+                (i.name || '').toLowerCase().includes('gold') ||
+                (i.ticker || '').toUpperCase() === 'GOLDBEES.NS'
+            );
+        },
+
+        get filteredGoldInvestments() {
+            if (this.goldFilter === 'physical') {
+                return this.goldInvestments.filter(i => (i.type || '').includes('Physical') || (i.name || '').toLowerCase().includes('physical'));
+            }
+            if (this.goldFilter === 'sgb') {
+                return this.goldInvestments.filter(i => (i.type || '').includes('SGB') || (i.type || '').includes('Sovereign') || (i.name || '').toLowerCase().includes('sgb'));
+            }
+            if (this.goldFilter === 'etf') {
+                return this.goldInvestments.filter(i => (i.type || '').includes('ETF') || (i.type || '').includes('Digital') || (i.name || '').toLowerCase().includes('etf'));
+            }
+            return this.goldInvestments;
+        },
+
+        get totalGoldValuation() {
+            return this.goldInvestments.reduce((sum, i) => sum + this.getInvCurrentValue(i), 0);
+        },
+
+        get totalGoldCost() {
+            return this.goldInvestments.reduce((sum, i) => sum + this.getInvInvestedCost(i), 0);
+        },
+
+        get totalGoldPnL() {
+            return this.totalGoldValuation - this.totalGoldCost;
+        },
+
+        get totalGoldPnLPct() {
+            if (this.totalGoldCost <= 0) return '0.00';
+            return ((this.totalGoldPnL / this.totalGoldCost) * 100).toFixed(2);
+        },
+
+        get totalGoldGrams() {
+            return this.goldInvestments.reduce((sum, i) => sum + Number(i.units || 0), 0);
+        },
+
+        openAddGoldModal(presetType = 'Gold ETF / Digital Gold') {
+            this.newInv = {
+                name: '', type: presetType, issuer: '', amount: '',
+                rate: '', payout: 'Annual', rating: '', maturityDate: '',
+                ticker: 'GOLDBEES.NS', units: '', buyPrice: '', currentPrice: '', schemeCode: ''
+            };
+            this.addingInv = true;
+        },
+
+        // ── Seed Actual User Portfolio (from JARVIS Strategy Memory) ─────
+        loadActualPortfolio() {
+            const now = Date.now();
+            // NOTE: US stocks use only units+buyPrice+currentPrice. No `amount` field.
+            // getInvCurrentValue always computes: units × currentPrice × usdInrRate
+            this.investments = [
+                {
+                    id: 'inv_avgo_' + now,
+                    name: 'Broadcom Inc (AVGO)',
+                    type: 'Stock (US)',
+                    ticker: 'AVGO',
+                    currency: 'USD',
+                    units: 1.164141,
+                    buyPrice: 389.51,
+                    currentPrice: 369.00,
+                    lastNavUpdate: '2026-08-23'
+                },
+                {
+                    id: 'inv_nvda_' + (now + 1),
+                    name: 'NVIDIA Corp (NVDA)',
+                    type: 'Stock (US)',
+                    ticker: 'NVDA',
+                    currency: 'USD',
+                    units: 1.895487,
+                    buyPrice: 218.21,
+                    currentPrice: 215.38,
+                    lastNavUpdate: '2026-08-23'
+                },
+                {
+                    id: 'inv_mrvl_' + (now + 2),
+                    name: 'Marvell Technology Inc. (MRVL)',
+                    type: 'Stock (US)',
+                    ticker: 'MRVL',
+                    currency: 'USD',
+                    units: 0.609916,
+                    buyPrice: 287.57,
+                    currentPrice: 236.21,
+                    lastNavUpdate: '2026-08-23'
+                },
+                {
+                    id: 'inv_dram_' + (now + 3),
+                    name: 'Roundhill Memory ETF (DRAM)',
+                    type: 'Stock (US)',
+                    ticker: 'DRAM',
+                    currency: 'USD',
+                    units: 1.960246,
+                    buyPrice: 54.99,
+                    currentPrice: 57.65,
+                    lastNavUpdate: '2026-08-23'
+                },
+                {
+                    id: 'inv_invesco_' + (now + 4),
+                    name: 'Invesco India Midcap Fund - Direct Plan - Growth',
+                    type: 'Mutual Fund',
+                    schemeCode: '120403',
+                    // INDMoney verified: invested ₹28,000 | current ₹32,030 | +14.41%
+                    units: 131.34,
+                    buyPrice: 213.22,
+                    currentPrice: 243.87,
+                    lastNavUpdate: '2026-08-23'
+                },
+                {
+                    id: 'inv_quant_' + (now + 5),
+                    name: 'Quant Small Cap Fund - Direct Plan - Growth',
+                    type: 'Mutual Fund',
+                    schemeCode: '120828',
+                    // INDMoney verified: invested ₹17,990 | current ₹20,717 | +15.09%
+                    units: 65.33,
+                    buyPrice: 275.44,
+                    currentPrice: 317.10,
+                    lastNavUpdate: '2026-08-23'
+                },
+                {
+                    id: 'inv_epf_' + (now + 6),
+                    name: 'Employees Provident Fund (EPF)',
+                    type: 'Government Scheme',
+                    issuer: 'EPFO (Government of India)',
+                    amount: 25274,
+                    rate: 8.25,
+                    payout: 'Annual',
+                    maturityDate: '2058-03-31',
+                    lastNavUpdate: '2026-08-23'
+                }
+            ];
+
+            // Also seed active SIPs (Actual debit date: 3rd of every month)
+            this.sips = [
+                {
+                    id: 'sip_quant_' + now,
+                    name: 'Quant Small Cap SIP',
+                    type: 'SIP',
+                    monthlyAmount: 5000,
+                    dayOfMonth: 3,
+                    startDate: '2026-01-03',
+                    status: 'Active',
+                    schemeCode: '120828',
+                    linkedInvestmentId: 'inv_quant_' + (now + 5)
+                },
+                {
+                    id: 'sip_invesco_' + (now + 1),
+                    name: 'Invesco Mid Cap SIP',
+                    type: 'SIP',
+                    monthlyAmount: 5000,
+                    dayOfMonth: 3,
+                    startDate: '2026-01-03',
+                    status: 'Active',
+                    schemeCode: '120403',
+                    linkedInvestmentId: 'inv_invesco_' + (now + 4)
+                }
+            ];
+
+            this.cashflow = {
+                salaryDay: 1, // Salary credit day (1-31)
+                incomes: [
+                    { id: 'inc_salary', name: 'Monthly Salary', amount: 0, category: 'Salary', creditDay: 1 },
+                    { id: 'inc_consulting', name: 'Consulting / Freelance', amount: 0, category: 'Projects', creditDay: 5 }
+                ],
+                expenses: [
+                    { id: 'exp_housing', name: 'Housing & Utilities', amount: 15000, category: 'Housing' },
+                    { id: 'exp_food', name: 'Food & Household', amount: 12000, category: 'Food' },
+                    { id: 'exp_personal', name: 'Other Expenses', amount: 8000, category: 'Personal' }
+                ],
+                sipOverride: null,
+                project: 0,
+                otherIncome: 0,
+                housing: 15000,
+                food: 12000,
+                medical: 0,
+                otherExpense: 8000
+            };
+            this.networth = {
+                bank: 11108,
+                cash: 0,
+                property: 0,
+                otherAsset: 0,
+                homeLoan: 0,
+                carLoan: 0,
+                personalLoan: 0,
+                creditCard: 0,
+                otherLiability: 0
+            };
+            // emergency must match schema: { efMonthly, efMonths, efCurrent }
+            this.emergency = {
+                efMonthly: 50000,
+                efMonths: 6,
+                efCurrent: 150000
+            };
+
+            this.saveData();
+            this.fetchAllPrices();
         },
 
         getAssetTotal(type) {
             return this.investments
-                .filter(i => i.type === type)
+                .filter(i => i.type === type || (type === 'Stock' && (i.type || '').includes('Stock')) || (type === 'ETF' && (i.type || '').includes('ETF')))
                 .reduce((sum, i) => sum + this.getInvCurrentValue(i), 0);
         },
 
@@ -624,9 +1426,11 @@ document.addEventListener('alpine:init', () => {
         //  COMPUTED PROPERTIES — INVESTMENTS
         // ════════════════════════════════════════════════════════════
         get monthlyInvestmentIncome() {
-            return this.investments.reduce((sum, inv) => {
+            return (this.investments || []).reduce((sum, inv) => {
                 if (inv.payout === 'Cumulative') return sum;
-                const yearly = Number(inv.amount) * (Number(inv.rate) / 100);
+                const rate = Number(inv.rate) || 0;
+                if (rate <= 0) return sum;
+                const yearly = Number(inv.amount || 0) * (rate / 100);
                 return sum + (yearly / 12);
             }, 0);
         },
@@ -675,7 +1479,15 @@ document.addEventListener('alpine:init', () => {
         },
 
         get totalInvested() {
-            return this.investments.reduce((s, i) => s + Number(i.amount), 0);
+            // ── Single-source-of-truth: units×avgBuyPrice×FX, fallback amount ──
+            const rate = this.usdInrRate || 95.74;
+            return (this.investments || []).reduce((sum, inv) => {
+                if (inv.units > 0 && inv.buyPrice > 0) {
+                    const cost = inv.units * inv.buyPrice;
+                    return sum + (inv.currency === 'USD' ? cost * rate : cost);
+                }
+                return sum + (Number(inv.amount) || 0);
+            }, 0);
         },
 
         // ════════════════════════════════════════════════════════════
@@ -1444,18 +2256,18 @@ document.addEventListener('alpine:init', () => {
                             datasets: [{
                                 data:            Object.values(alloc),
                                 backgroundColor: [
-                                    '#00c9a7','#38debb','#5ffbd6',
-                                    '#d4af37','#f3d87f','#b8c8de'
+                                    '#8298f5','#a7b8ff','#c7d0ff',
+                                    '#e2b97d','#f0d2a1','#9da5b6'
                                 ],
                                 borderWidth: 2,
-                                borderColor: '#122131'
+                                borderColor: '#1a1d23'
                             }]
                         },
                         options: {
                             responsive: true,
                             cutout: '65%',
                             plugins: {
-                                legend: { position: 'bottom', labels: { color: '#bacac3', padding: 16, font: { size: 13 } } },
+                                legend: { position: 'bottom', labels: { color: '#a7acb8', padding: 16, font: { size: 13 } } },
                                 tooltip: {
                                     callbacks: {
                                         label: ctx => {
@@ -1481,7 +2293,7 @@ document.addEventListener('alpine:init', () => {
                             datasets: [{
                                 label:           'Amount (₹)',
                                 data:            Object.values(ratings),
-                                backgroundColor: '#00c9a7',
+                                backgroundColor: '#8298f5',
                                 borderRadius:    6
                             }]
                         },
@@ -1492,7 +2304,7 @@ document.addEventListener('alpine:init', () => {
                             scales: {
                                 x: {
                                     ticks: {
-                                        color: '#bacac3',
+                                        color: '#a7acb8',
                                         callback: v => '₹' + Number(v).toLocaleString('en-IN', { maximumFractionDigits: 0 })
                                     },
                                     grid: { color: 'rgba(255,255,255,0.05)' }
@@ -2016,57 +2828,86 @@ RULES: Return ONLY valid JSON. No markdown, no explanation. If a field is unknow
         async fetchSinglePrice(inv) {
             if (!inv) return null;
 
-            // 1. Mutual Fund via AMFI API
-            if (inv.schemeCode) {
-                try {
-                    const res = await fetch(`https://api.mfapi.in/mf/${inv.schemeCode}`);
-                    if (res.ok) {
-                        const data = await res.json();
-                        const latest = data?.data?.[0];
-                        if (latest && latest.nav) {
-                            const newNav = parseFloat(latest.nav);
-                            inv.currentPrice = newNav;
-                            if (Number(inv.units) > 0) {
-                                inv.currentValue = Math.round(Number(inv.units) * newNav * 100) / 100;
+            // 1. Mutual Fund via AMFI API (with auto-resolving scheme code fallback)
+            if (inv.type === 'Mutual Fund' || inv.schemeCode) {
+                // If schemeCode is missing, perform dynamic AMFI lookup by name
+                if (!inv.schemeCode && inv.name) {
+                    try {
+                        const searchRes = await fetch(`https://api.mfapi.in/mf/search?q=${encodeURIComponent(inv.name.trim())}`);
+                        if (searchRes.ok) {
+                            const schemes = await searchRes.json();
+                            // Pick Direct Plan Growth if possible, else first match
+                            const directGrowth = (schemes || []).find(s =>
+                                (s.schemeName || '').toLowerCase().includes('direct') &&
+                                (s.schemeName || '').toLowerCase().includes('growth')
+                            ) || schemes?.[0];
+
+                            if (directGrowth) {
+                                inv.schemeCode = String(directGrowth.schemeCode);
                             }
-                            inv.lastNavUpdate = new Date().toISOString();
-                            return newNav;
                         }
+                    } catch (e) {}
+                }
+
+                if (inv.schemeCode) {
+                    try {
+                        const res = await fetch(`https://api.mfapi.in/mf/${inv.schemeCode}`);
+                        if (res.ok) {
+                            const data = await res.json();
+                            const latest = data?.data?.[0];
+                            if (latest && latest.nav) {
+                                const newNav = parseFloat(latest.nav);
+                                inv.currentPrice = newNav;
+                                if (Number(inv.units) > 0) {
+                                    inv.currentValue = Math.round(Number(inv.units) * newNav * 100) / 100;
+                                }
+                                inv.lastNavUpdate = new Date().toISOString();
+                                return newNav;
+                            }
+                        }
+                    } catch (e) {
+                        console.warn(`Failed to fetch NAV for scheme ${inv.schemeCode}:`, e);
                     }
-                } catch (e) {
-                    console.warn(`Failed to fetch NAV for scheme ${inv.schemeCode}:`, e);
                 }
             }
 
-            // 2. Stock / ETF via Yahoo Finance chart API
+            // 2. Stock / ETF via Yahoo Finance chart API (with CORS proxy resilience)
             if (inv.ticker) {
-                try {
-                    const isUS = (inv.type === 'Stock (US)' || inv.type === 'ETF (US)');
-                    const cleanSymbol = inv.ticker.trim().toUpperCase().replace(/\.NS$|\.BO$/, '');
-                    const querySymbol = isUS ? cleanSymbol : `${cleanSymbol}.NS`;
-                    const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${querySymbol}`;
-                    const res = await fetch(yahooUrl);
-                    if (res.ok) {
-                        const data = await res.json();
-                        const meta = data.chart?.result?.[0]?.meta;
-                        const price = meta?.regularMarketPrice || meta?.chartPreviousClose;
-                        if (price) {
-                            inv.currentPrice = price;
-                            inv.currency = isUS ? 'USD' : 'INR';
+                const isUS = (inv.type === 'Stock (US)' || inv.type === 'ETF (US)');
+                const cleanSymbol = inv.ticker.trim().toUpperCase().replace(/\.NS$|\.BO$/, '');
+                const querySymbol = isUS ? cleanSymbol : `${cleanSymbol}.NS`;
 
-                            // Currency conversion to INR for portfolio total valuation
-                            const usdRate = isUS ? (this.usdInrRate || 86.5) : 1;
-                            const priceInINR = price * usdRate;
+                const endpoints = [
+                    `https://corsproxy.io/?https://query1.finance.yahoo.com/v8/finance/chart/${querySymbol}`,
+                    `https://api.allorigins.win/raw?url=${encodeURIComponent(`https://query1.finance.yahoo.com/v8/finance/chart/${querySymbol}`)}`,
+                    `https://query1.finance.yahoo.com/v8/finance/chart/${querySymbol}`
+                ];
 
-                            if (Number(inv.units) > 0) {
-                                inv.currentValue = Math.round(Number(inv.units) * priceInINR * 100) / 100;
+                for (const url of endpoints) {
+                    try {
+                        const res = await fetch(url);
+                        if (res.ok) {
+                            const data = await res.json();
+                            const meta = data.chart?.result?.[0]?.meta;
+                            const price = meta?.regularMarketPrice || meta?.chartPreviousClose;
+                            if (price && price > 0) {
+                                inv.currentPrice = price;
+                                inv.currency = isUS ? 'USD' : 'INR';
+
+                                // Currency conversion to INR for portfolio total valuation
+                                const usdRate = isUS ? (this.usdInrRate || 95.74) : 1;
+                                const priceInINR = price * usdRate;
+
+                                if (Number(inv.units) > 0) {
+                                    inv.currentValue = Math.round(Number(inv.units) * priceInINR * 100) / 100;
+                                }
+                                inv.lastNavUpdate = new Date().toISOString();
+                                return price;
                             }
-                            inv.lastNavUpdate = new Date().toISOString();
-                            return price;
                         }
+                    } catch (e) {
+                        continue;
                     }
-                } catch (e) {
-                    console.warn(`Failed to fetch price for ticker ${inv.ticker}:`, e);
                 }
             }
 
@@ -2078,13 +2919,16 @@ RULES: Return ONLY valid JSON. No markdown, no explanation. If a field is unknow
             this.navFetchState = 'fetching';
             this.navFetchError = '';
 
+            // 1. Refresh live USD/INR FX exchange rate first
+            await this.fetchUsdInrRate();
+
             let updatedCount = 0;
             try {
                 for (const inv of (this.investments || [])) {
-                    if (inv.schemeCode || inv.ticker) {
+                    if (inv.schemeCode || inv.ticker || inv.type === 'Mutual Fund') {
                         const updatedPrice = await this.fetchSinglePrice(inv);
                         if (updatedPrice) updatedCount++;
-                        await new Promise(r => setTimeout(r, 250));
+                        await new Promise(r => setTimeout(r, 200));
                     }
                 }
 
@@ -2205,12 +3049,8 @@ RULES: Return ONLY valid JSON. No markdown, no explanation. If a field is unknow
         },
 
         // ════════════════════════════════════════════════════════════
-        //  UTILITIES
+        //  UTILITIES (duplicate removed — canonical formatCurrency is at ~line 1636)
         // ════════════════════════════════════════════════════════════
-        formatCurrency(num) {
-            return '₹' + Number(num).toLocaleString('en-IN', { maximumFractionDigits: 0 });
-        },
-
         formatDate(str) {
             if (!str) return '—';
             return new Date(str).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -2330,7 +3170,7 @@ RULES: Return ONLY valid JSON. No markdown, no explanation. If a field is unknow
         regenSentimentClass(sentiment) {
             if (!sentiment) return 'text-on-surface-variant';
             const s = sentiment.toLowerCase();
-            if (s.includes('bullish')) return 'text-[#00c9a7]';
+            if (s.includes('bullish')) return 'text-primary';
             if (s.includes('bearish')) return 'text-red-400';
             if (s.includes('cautious')) return 'text-[#d4af37]';
             return 'text-on-surface-variant';
@@ -2388,24 +3228,151 @@ RULES: Return ONLY valid JSON. No markdown, no explanation. If a field is unknow
         },
 
         // ════════════════════════════════════════════════════════════
-        //  ACTIONS — SIP & RECURRING (Phase 9)
+        //  ACTIONS — SIP & RECURRING (Phase 9: Intelligent Auto-Compounding Engine)
         // ════════════════════════════════════════════════════════════
-        addSip() {
+        async addSip() {
             if (!this.newSip.name || !this.newSip.monthlyAmount) return;
-            this.sips.push({
-                ...this.newSip,
-                id:            Date.now(),
-                monthlyAmount: Number(this.newSip.monthlyAmount),
-                dayOfMonth:    Number(this.newSip.dayOfMonth) || 5
+
+            const name = this.newSip.name.trim();
+            const schemeCode = (this.newSip.schemeCode || '').trim();
+            const ticker = (this.newSip.ticker || '').trim();
+
+            // 1. Intelligent Holding Resolution: Check if this MF/Stock is already registered in investments
+            let existingHolding = (this.investments || []).find(inv => {
+                if (schemeCode && inv.schemeCode === schemeCode) return true;
+                if (ticker && (inv.ticker || '').toUpperCase() === ticker.toUpperCase()) return true;
+                const invName = (inv.name || '').toLowerCase();
+                const searchName = name.toLowerCase();
+                return invName === searchName || invName.includes(searchName) || searchName.includes(invName);
             });
+
+            // 2. If not found in investments, automatically register a new Mutual Fund / Stock holding!
+            if (!existingHolding) {
+                const isUsStock = ticker && ['NVDA', 'AVGO', 'MRVL', 'NBIS'].includes(ticker.toUpperCase());
+                const holdingType = isUsStock ? 'Stock (US)' : (schemeCode ? 'Mutual Fund' : 'Stock (IND)');
+
+                existingHolding = {
+                    id:            'inv_' + Date.now(),
+                    name:          name,
+                    type:          holdingType,
+                    schemeCode:    schemeCode,
+                    ticker:        ticker,
+                    units:         0,
+                    buyPrice:      0,
+                    currentPrice:  0,
+                    amount:        0,
+                    lastNavUpdate: new Date().toISOString()
+                };
+                this.investments.push(existingHolding);
+
+                // Instantly fetch live NAV for newly auto-created holding
+                this.fetchSinglePrice(existingHolding);
+            }
+
+            const createdSip = {
+                ...this.newSip,
+                id:                 Date.now(),
+                monthlyAmount:      Number(this.newSip.monthlyAmount),
+                dayOfMonth:         Number(this.newSip.dayOfMonth) || 5,
+                linkedInvestmentId: existingHolding.id,
+                schemeCode:         schemeCode || existingHolding.schemeCode || '',
+                ticker:             ticker || existingHolding.ticker || '',
+                lastExecutedMonth:  ''
+            };
+
+            this.sips.push(createdSip);
+
+            // Execute immediate debit check for current month
+            await this.checkSipDebits();
+
             this.newSip = {
                 name: '', type: 'SIP', monthlyAmount: '',
                 dayOfMonth: 5, startDate: '', endDate: '',
                 status: 'Active', linkedInvestmentId: null, ticker: '', schemeCode: ''
             };
-            // Reset autocomplete state
             this.sipMfSearch = { query: '', results: [], loading: false, show: false, _timer: null };
             this.addingSip = false;
+            this.saveData();
+        },
+
+        // ── AUTOMATED MONTHLY SIP EXECUTION ENGINE ─────────────────────
+        // Checks active SIP debit dates against current date. When debit day passes,
+        // automatically adds monthly capital to the linked holding, purchases units @ live NAV,
+        // and updates Total Net Worth.
+        async checkSipDebits() {
+            if (!this.sips || this.sips.length === 0) return;
+
+            const now = new Date();
+            const currentYear = now.getFullYear();
+            const currentMonth = now.getMonth();
+            const currentDay = now.getDate();
+            const currentMonthKey = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}`;
+
+            let executedCount = 0;
+
+            for (const sip of this.sips) {
+                if (sip.status !== 'Active') continue;
+                const debitDay = Number(sip.dayOfMonth) || 5;
+
+                // If current date >= debitDay and SIP hasn't executed for this month
+                if (currentDay >= debitDay && sip.lastExecutedMonth !== currentMonthKey) {
+                    let inv = (this.investments || []).find(i =>
+                        i.id === sip.linkedInvestmentId ||
+                        (sip.schemeCode && i.schemeCode === sip.schemeCode) ||
+                        (i.name || '').toLowerCase() === (sip.name || '').toLowerCase()
+                    );
+
+                    if (!inv) {
+                        inv = {
+                            id:           'inv_' + Date.now(),
+                            name:         sip.name,
+                            type:         sip.schemeCode ? 'Mutual Fund' : 'Stock (IND)',
+                            schemeCode:   sip.schemeCode || '',
+                            units:        0,
+                            buyPrice:     0,
+                            currentPrice: 0,
+                            amount:       0,
+                            lastNavUpdate: now.toISOString()
+                        };
+                        this.investments.push(inv);
+                        sip.linkedInvestmentId = inv.id;
+                    }
+
+                    const debitAmount = Number(sip.monthlyAmount) || 0;
+                    if (debitAmount > 0) {
+                        let price = Number(inv.currentPrice) || Number(inv.buyPrice) || 0;
+                        if (price <= 0) {
+                            price = await this.fetchSinglePrice(inv) || 100;
+                        }
+
+                        const isUsd = inv.currency === 'USD' || ['Stock (US)', 'ETF (US)'].includes(inv.type);
+                        const rate = isUsd ? (this.usdInrRate || 95.76) : 1;
+                        const priceInInr = price * rate;
+
+                        const newUnits = debitAmount / priceInInr;
+                        const oldUnits = Number(inv.units) || 0;
+                        const oldCost = Number(inv.amount) || (oldUnits * (Number(inv.buyPrice) || 0) * rate);
+
+                        const totalUnits = oldUnits + newUnits;
+                        const totalCost = oldCost + debitAmount;
+
+                        inv.units = Math.round(totalUnits * 1000) / 1000;
+                        inv.amount = Math.round(totalCost * 100) / 100;
+                        inv.buyPrice = Math.round((totalCost / totalUnits / rate) * 100) / 100;
+                        inv.currentValue = Math.round(totalUnits * priceInInr * 100) / 100;
+                        inv.lastNavUpdate = now.toISOString();
+
+                        sip.lastExecutedMonth = currentMonthKey;
+                        executedCount++;
+
+                        console.log(`[SIP Engine] Executed ₹${debitAmount} SIP for ${inv.name}. Added ${newUnits.toFixed(3)} units @ NAV ₹${price}. Total units: ${inv.units}`);
+                    }
+                }
+            }
+
+            if (executedCount > 0) {
+                this.saveData();
+            }
         },
 
         // ════════════════════════════════════════════════════════════
