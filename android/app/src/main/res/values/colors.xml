@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  These three names are referenced by values/styles.xml and were defined nowhere,
+  so aapt2 resource linking failed and no release build could be produced.
+
+  Values below deliberately mirror what the web layer renders TODAY (--ink #101114
+  from web/styles.css, and the #0a0a0a that app.js passes to StatusBar) so defining
+  them changes nothing visually. They are replaced with the real palette when the
+  native shell is themed.
+-->
+<resources>
+    <color name="colorPrimary">#101114</color>
+    <color name="colorPrimaryDark">#0A0A0A</color>
+    <color name="colorAccent">#A7B8FF</color>
+</resources>

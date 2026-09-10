@@ -1,4 +1,4 @@
-import { Capacitor } from '@capacitor/core';
+import { Capacitor, CapacitorHttp } from '@capacitor/core';
 import { App } from '@capacitor/app';
 import { NativeBiometric } from '@capgo/capacitor-native-biometric';
 import { SplashScreen } from '@capacitor/splash-screen';
@@ -18,8 +18,13 @@ try {
     console.warn("Failed to set PDF workerSrc:", e);
 }
 
+// CapacitorHttp issues requests from native code, so it is not subject to the
+// WebView's CORS policy. That is what lets the price sync call Yahoo directly on
+// Android instead of paying for a doomed direct attempt plus a public CORS proxy.
+// app.js feature-detects this, so the web build keeps working unchanged.
 window.AppPlugins = {
     Capacitor,
+    CapacitorHttp,
     App,
     NativeBiometric,
     SplashScreen,

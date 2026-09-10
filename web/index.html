@@ -2396,7 +2396,7 @@ No financial goals added yet. Use the form above to add your first goal!
                     <span class="text-xl font-bold text-[#d4af37] font-mono tabular" x-text="'$' + totalUsStockUSD.toFixed(2)"></span>
                     <span class="text-xs font-mono tabular" style="color:#8b8fa8;" x-text="'(' + formatCurrency(totalUsStockValuation) + ')'"></span>
                 </div>
-                <p class="text-[11px] mt-1 tabular" style="color:#8b8fa8;" x-text="'USD/INR: ₹' + (usdInrRate||95.74).toFixed(2)"></p>
+                <p class="text-[11px] mt-1 tabular" :style="fxIsStale ? 'color:#e2b97d;' : 'color:#8b8fa8;'" x-text="'USD/INR: ' + fxLabel"></p>
             </div>
         </div>
 
@@ -2489,8 +2489,8 @@ No financial goals added yet. Use the form above to add your first goal!
                                   x-text="(getInvPnL(inv) >= 0 ? '+' : '') + formatCurrency(getInvPnL(inv)) + ' (' + getInvPnLPct(inv) + '%)'"></span>
                         </div>
                         <div>
-                            <span class="text-[9px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">Last Sync</span>
-                            <span class="text-[10px] tabular" style="color:#8b8fa8;" x-text="inv.lastNavUpdate ? formatDate(inv.lastNavUpdate) : 'Not synced'"></span>
+                            <span class="text-[9px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">Price as of</span>
+                            <span class="text-[10px] tabular" :style="priceFreshness(inv).state === 'live' ? 'color:#8b8fa8;' : 'color:#e2b97d;'" x-text="priceFreshness(inv).label"></span>
                         </div>
                     </div>
                 </div>
@@ -2588,17 +2588,6 @@ No financial goals added yet. Use the form above to add your first goal!
             </div>
         </div>
 
-        <!-- Quick Action & Restore Portfolio Card -->
-        <div class="p-4 rounded-2xl flex flex-col justify-between" style="background:#13151f; border:1px solid rgba(255,255,255,0.06); box-shadow:0 4px 16px rgba(0,0,0,0.3);">
-            <span class="text-[10px] uppercase font-bold tracking-wider" style="color:#8b8fa8;">Portfolio Controls</span>
-            <div class="mt-2">
-                <button @click="loadActualPortfolio()" class="w-full px-3 py-2 rounded-xl text-xs font-semibold text-[#d4af37] border flex items-center justify-center gap-1.5 transition-colors"
-                        style="background:rgba(212,175,55,0.1); border-color:rgba(212,175,55,0.25);">
-                    <span class="material-symbols-outlined text-sm">download</span>
-                    <span>Restore Actual Holdings</span>
-                </button>
-            </div>
-        </div>
     </div>
 
     <!-- Filter Tabs -->
@@ -2672,8 +2661,8 @@ No financial goals added yet. Use the form above to add your first goal!
                                   x-text="(getInvPnL(inv) >= 0 ? '+' : '') + formatCurrency(getInvPnL(inv)) + ' (' + getInvPnLPct(inv) + '%)'"></span>
                         </div>
                         <div>
-                            <span class="text-[9px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">Last Sync</span>
-                            <span class="text-[10px] tabular" style="color:#8b8fa8;" x-text="inv.lastNavUpdate ? formatDate(inv.lastNavUpdate) : 'Not synced'"></span>
+                            <span class="text-[9px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">Price as of</span>
+                            <span class="text-[10px] tabular" :style="priceFreshness(inv).state === 'live' ? 'color:#8b8fa8;' : 'color:#e2b97d;'" x-text="priceFreshness(inv).label"></span>
                         </div>
                     </div>
                 </div>
@@ -2689,15 +2678,11 @@ No financial goals added yet. Use the form above to add your first goal!
             </div>
             <h3 class="text-base font-bold text-white mb-1">No Mutual Fund Holdings Added Yet</h3>
             <p class="text-xs max-w-md mb-5 leading-relaxed" style="color:#8b8fa8;">
-                Add your Indian Mutual Funds (Quant Small Cap, Invesco Mid Cap) to track live AMFI NAV updates and SIP compounding automatically.
+                Add a mutual fund to track its NAV from AMFI and follow your SIP contributions automatically.
             </p>
             <div class="flex flex-col sm:flex-row items-center gap-3">
                 <button @click="openAddMfModal()" class="px-4 py-2 rounded-xl bg-primary text-on-primary font-bold text-xs hover:brightness-110 transition-all shadow-md">
                     <span>Add Mutual Fund</span>
-                </button>
-                <button @click="loadActualPortfolio()" class="px-4 py-2 rounded-xl text-[#d4af37] border font-bold text-xs transition-all shadow-md"
-                        style="background:rgba(212,175,55,0.1); border-color:rgba(212,175,55,0.25);">
-                    <span>Restore Actual Holdings</span>
                 </button>
             </div>
         </div>
@@ -2862,8 +2847,8 @@ No financial goals added yet. Use the form above to add your first goal!
                                   x-text="(getInvPnL(inv) >= 0 ? '+' : '') + formatCurrency(getInvPnL(inv)) + ' (' + getInvPnLPct(inv) + '%)'"></span>
                         </div>
                         <div>
-                            <span class="text-[9px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">Last Sync</span>
-                            <span class="text-[10px] tabular" style="color:#8b8fa8;" x-text="inv.lastNavUpdate ? formatDate(inv.lastNavUpdate) : 'Not synced'"></span>
+                            <span class="text-[9px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">Price as of</span>
+                            <span class="text-[10px] tabular" :style="priceFreshness(inv).state === 'live' ? 'color:#8b8fa8;' : 'color:#e2b97d;'" x-text="priceFreshness(inv).label"></span>
                         </div>
                     </div>
                 </div>

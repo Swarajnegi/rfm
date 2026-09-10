@@ -13,8 +13,12 @@ document.addEventListener('alpine:init', () => {
 
         // Pension is the single source of truth for pension income
         // (Engineering Principle #008: No Data Duplication)
+        // Starts at 0. A seeded 56000 meant a brand-new user opened the app to a pension
+        // they had never entered, and Home derived a cash runway from it — a figure the
+        // app invented about someone's finances. Existing users are unaffected: saveData
+        // always writes this key, so a saved value overrides the default on load.
         pension: {
-            monthlyAmount: 56000,
+            monthlyAmount: 0,
             type: 'Government', // Government | Corporate | Military | Other
             revisions: []       // { date, previousAmount, note }
         },
@@ -44,8 +48,10 @@ document.addEventListener('alpine:init', () => {
             homeLoan: 0, personalLoan: 0, credit: 0, otherDebt: 0
         },
 
+        // efMonthly starts at 0 for the same reason. efMonths is a target, not a claim
+        // about the user's money, so 6 is kept as a neutral starting recommendation.
         emergency: {
-            efMonthly: 50000, efMonths: 12, efCurrent: 0
+            efMonthly: 0, efMonths: 6, efCurrent: 0
         },
 
         // ── Tax Data Store (Phase 3) ─────────────────────────────
@@ -60,7 +66,10 @@ document.addEventListener('alpine:init', () => {
             homeLoanInterest: 0,    // Section 24 interest deduction (max ₹2L)
             otherDeductions:  0,    // Any other eligible deductions
             regime:          'compare', // 'old' | 'new' | 'compare'
-            seniorCitizen:    true,  // Age 60+ — different slabs & deductions apply
+            // Defaults to false. The app was built for a 60+ user, so this was seeded true;
+            // for a general release most users are not, and a wrong value silently changes
+            // the slabs and unlocks 80TTB. Existing users keep their saved setting.
+            seniorCitizen:    false, // Age 60+ — different slabs & deductions apply
             capitalGainsOverride: null // Manual override for total capital gains tax
         },
 
@@ -110,8 +119,6 @@ document.addEventListener('alpine:init', () => {
         },
 
         // ── Internal chart instances (not reactive state) ────────────
-        _allocationChart: null,
-        _ratingChart: null,
 
         // ── Phase 11: Live NAV & Stock Price Ingestion ──────────────
         navFetchState: 'idle', // 'idle' | 'fetching' | 'done' | 'error'
@@ -176,69 +183,125 @@ document.addEventListener('alpine:init', () => {
         },
 
         // ── Phase 14: Real-Time US & Global Stocks Live FX Engine ─────
-        usdInrRate: 95.74,
-        async fetchUsdInrRate() {
-            // Restore latest cached rate from storage if available
-            const cachedRate = localStorage.getItem('rfm_usd_inr_rate');
-            if (cachedRate && Number(cachedRate) > 50 && Number(cachedRate) < 150) {
-                this.usdInrRate = Number(Number(cachedRate).toFixed(2));
+        // null until a real rate is fetched or restored from cache. Never seed a made-up
+        // number here: a wrong rate scales the ENTIRE US book at once, which reads as a
+        // uniform "prices are off" rather than as a missing rate.
+        usdInrRate: null,
+        usdInrAsOf: null,
+        // Last-resort placeholder, used only when no provider and no cache can supply a
+        // rate. Surfaced as "estimated" wherever it is used — never presented as real.
+        // Worth confirming against the live rate when you next look at this.
+        FX_FALLBACK_USD_INR: 88.0,
+        FX_MAX_AGE_MS: 12 * 60 * 60 * 1000,
+        // ── HTTP ────────────────────────────────────────────────────
+        // One GET path for every price/FX provider. On Android CapacitorHttp runs the
+        // request natively and is therefore not subject to CORS, so the caller can hit
+        // the real endpoint directly. In a browser it degrades to fetch(), which is why
+        // the stock path still needs its proxy list there.
+        get canUseNativeHttp() {
+            return !!(window.AppPlugins?.CapacitorHttp && window.AppPlugins?.Capacitor?.isNativePlatform?.());
+        },
+
+        // Resolve with the first task that succeeds; reject only if all fail. Hand-rolled
+        // rather than Promise.any because that needs Chrome 85+ and minSdk is 24, where a
+        // device with an un-updated Android System WebView would throw at runtime.
+        firstSuccessful(tasks) {
+            return new Promise((resolve, reject) => {
+                let pending = tasks.length;
+                let settled = false;
+                let lastError = null;
+                if (!pending) return reject(new Error('No price provider responded.'));
+                tasks.forEach(task => {
+                    Promise.resolve().then(task).then(
+                        value => { if (!settled) { settled = true; resolve(value); } },
+                        error => {
+                            lastError = error;
+                            if (--pending === 0 && !settled) {
+                                reject(lastError || new Error('No price provider responded.'));
+                            }
+                        }
+                    );
+                });
+            });
+        },
+
+        async httpGetJson(url, timeoutMs = 3000) {
+            if (this.canUseNativeHttp) {
+                const res = await Promise.race([
+                    window.AppPlugins.CapacitorHttp.get({ url, readTimeout: timeoutMs, connectTimeout: timeoutMs }),
+                    new Promise((_, reject) => setTimeout(() => reject(new Error('Timed out')), timeoutMs + 500))
+                ]);
+                if (res.status < 200 || res.status >= 300) throw new Error(`HTTP ${res.status}`);
+                return typeof res.data === 'string' ? JSON.parse(res.data) : res.data;
             }
+            return this.fetchJsonWithTimeout(url, timeoutMs);
+        },
 
-            // 1. Try Open Exchange Rates API (CORS-enabled, real-time)
+        // ── USD/INR ─────────────────────────────────────────────────
+        // SINGLE source of truth. Nine call sites previously each carried their own
+        // hardcoded fallback (95.74, 86.5, 95.76, and a 1 in regenWealth.js), so the
+        // same holding could be valued differently on different screens — 95.74 vs 86.5
+        // is a 10.7% spread. Everything now reads fxUsdInr, and when no real rate is
+        // available the value is flagged as estimated instead of silently guessed.
+        get fxUsdInr() {
+            const r = Number(this.usdInrRate);
+            return (Number.isFinite(r) && r > 50 && r < 150) ? r : this.FX_FALLBACK_USD_INR;
+        },
+
+        get fxIsEstimated() {
+            const r = Number(this.usdInrRate);
+            return !(Number.isFinite(r) && r > 50 && r < 150);
+        },
+
+        get fxIsStale() {
+            if (this.fxIsEstimated) return true;
+            if (!this.usdInrAsOf) return true;
+            return (Date.now() - new Date(this.usdInrAsOf).getTime()) > this.FX_MAX_AGE_MS;
+        },
+
+        get fxLabel() {
+            if (this.fxIsEstimated) return `₹${this.fxUsdInr.toFixed(2)} (estimated — no rate available)`;
+            if (this.fxIsStale)    return `₹${this.fxUsdInr.toFixed(2)} · ${this.formatDate(this.usdInrAsOf)} (stale)`;
+            return `₹${this.fxUsdInr.toFixed(2)}`;
+        },
+
+        loadCachedFxRate() {
             try {
-                const res = await fetch('https://open.er-api.com/v6/latest/USD');
-                if (res.ok) {
-                    const data = await res.json();
-                    const rate = data.rates?.INR;
-                    if (rate && rate > 50 && rate < 150) {
+                const raw = localStorage.getItem('rfm_usd_inr_rate');
+                if (!raw) return;
+                // Accept both the new {rate, ts} shape and the bare number written by older builds.
+                const parsed = raw.trim().startsWith('{') ? JSON.parse(raw) : { rate: Number(raw), ts: null };
+                const rate = Number(parsed.rate);
+                if (Number.isFinite(rate) && rate > 50 && rate < 150) {
+                    this.usdInrRate  = Number(rate.toFixed(2));
+                    this.usdInrAsOf  = parsed.ts || null;
+                }
+            } catch (e) { /* corrupt cache → treat as absent */ }
+        },
+
+        async fetchUsdInrRate() {
+            this.loadCachedFxRate();
+
+            const providers = [
+                { url: 'https://open.er-api.com/v6/latest/USD',                    pick: d => d?.rates?.INR },
+                { url: 'https://api.frankfurter.app/latest?from=USD&to=INR',       pick: d => d?.rates?.INR },
+                { url: 'https://api.exchangerate-api.com/v4/latest/USD',           pick: d => d?.rates?.INR },
+                { url: 'https://query1.finance.yahoo.com/v8/finance/chart/INR=X',  pick: d => d?.chart?.result?.[0]?.meta?.regularMarketPrice },
+            ];
+
+            // Previously four sequential bare fetch() calls with NO timeout, so a provider
+            // that hung (rather than failed) hung the entire sync with the spinner up.
+            for (const p of providers) {
+                try {
+                    const rate = Number(p.pick(await this.httpGetJson(p.url, 2500)));
+                    if (Number.isFinite(rate) && rate > 50 && rate < 150) {
                         this.usdInrRate = Number(rate.toFixed(2));
-                        localStorage.setItem('rfm_usd_inr_rate', this.usdInrRate);
+                        this.usdInrAsOf = new Date().toISOString();
+                        localStorage.setItem('rfm_usd_inr_rate', JSON.stringify({ rate: this.usdInrRate, ts: this.usdInrAsOf }));
                         return this.usdInrRate;
                     }
-                }
-            } catch (e) {}
-
-            // 2. Fallback: Frankfurter FX API
-            try {
-                const res = await fetch('https://api.frankfurter.app/latest?from=USD&to=INR');
-                if (res.ok) {
-                    const data = await res.json();
-                    const rate = data.rates?.INR;
-                    if (rate && rate > 50 && rate < 150) {
-                        this.usdInrRate = Number(rate.toFixed(2));
-                        localStorage.setItem('rfm_usd_inr_rate', this.usdInrRate);
-                        return this.usdInrRate;
-                    }
-                }
-            } catch (e) {}
-
-            // 3. Fallback: ExchangeRate-API
-            try {
-                const res = await fetch('https://api.exchangerate-api.com/v4/latest/USD');
-                if (res.ok) {
-                    const data = await res.json();
-                    const rate = data.rates?.INR;
-                    if (rate && rate > 50 && rate < 150) {
-                        this.usdInrRate = Number(rate.toFixed(2));
-                        localStorage.setItem('rfm_usd_inr_rate', this.usdInrRate);
-                        return this.usdInrRate;
-                    }
-                }
-            } catch (e) {}
-
-            // 4. Fallback: Yahoo Finance Live FX
-            try {
-                const res = await fetch('https://query1.finance.yahoo.com/v8/finance/chart/INR=X');
-                if (res.ok) {
-                    const data = await res.json();
-                    const rate = data.chart?.result?.[0]?.meta?.regularMarketPrice;
-                    if (rate && rate > 50 && rate < 150) {
-                        this.usdInrRate = Number(rate.toFixed(2));
-                        localStorage.setItem('rfm_usd_inr_rate', this.usdInrRate);
-                        return this.usdInrRate;
-                    }
-                }
-            } catch (e) {}
+                } catch (e) { /* try the next provider */ }
+            }
 
             return this.usdInrRate;
         },
@@ -510,6 +573,11 @@ document.addEventListener('alpine:init', () => {
 
             let isPrompting = false;
             let isAuthenticated = false;
+            // A failed or cancelled prompt used to re-fire every 500ms forever, with no exit
+            // but force-closing the app. Attempts are capped and backed off; after the cap
+            // the loop stops and biometricBlocked lets the UI offer a deliberate retry.
+            let attempts = 0;
+            const MAX_ATTEMPTS = 5;
 
             const enforceBiometric = async () => {
                 if (isPrompting || isAuthenticated) return;
@@ -526,19 +594,32 @@ document.addEventListener('alpine:init', () => {
                             negativeButtonText: "Cancel"
                         });
                         isAuthenticated = true;
+                        attempts = 0;
+                        this.biometricBlocked = false;
                     }
                 } catch (e) {
                     console.error("Biometric authentication error:", e);
                     isPrompting = false;
                     isAuthenticated = false;
-                    
-                    // Delay slightly before retrying to allow system UI to settle
-                    setTimeout(() => {
-                        enforceBiometric();
-                    }, 500);
+                    attempts += 1;
+
+                    if (attempts >= MAX_ATTEMPTS) {
+                        this.biometricBlocked = true;
+                        return;
+                    }
+
+                    // Back off so a repeatedly-failing sensor cannot spin the UI.
+                    setTimeout(() => { enforceBiometric(); }, 500 * Math.pow(2, attempts - 1));
                     return;
                 }
                 isPrompting = false;
+            };
+
+            // Retry deliberately, from a button, after the cap is hit.
+            this.retryBiometric = () => {
+                attempts = 0;
+                this.biometricBlocked = false;
+                enforceBiometric();
             };
 
             // Lock on cold start
@@ -555,6 +636,10 @@ document.addEventListener('alpine:init', () => {
                 if (!isActive) {
                     isAuthenticated = false;
                 } else if (isActive && !isAuthenticated && !isPrompting) {
+                    // Returning to the app is an intentional act, so it earns a fresh
+                    // set of attempts even if a previous run hit the cap.
+                    attempts = 0;
+                    this.biometricBlocked = false;
                     enforceBiometric();
                 }
             });
@@ -664,7 +749,9 @@ document.addEventListener('alpine:init', () => {
                     if (p.pension) {
                         this.pension = { ...this.pension, ...p.pension };
                     } else if (p.cashflow && p.cashflow.pension) {
-                        this.pension.monthlyAmount = Number(p.cashflow.pension) || 56000;
+                        // Legacy blobs stored pension inside cashflow. Falls back to 0, not
+                        // to the old seeded 56000 — an absent value means "not entered".
+                        this.pension.monthlyAmount = Number(p.cashflow.pension) || 0;
                     }
 
                     if (p.cashflow) {
@@ -690,183 +777,6 @@ document.addEventListener('alpine:init', () => {
 
                 // Saved financial records belong to the user. Never rewrite holdings at startup.
                 this.checkSipDebits();
-                return;
-
-                // ── Auto-Migration Pass: Calibrate exact INDMoney holdings ──
-                let hasDram = false;
-
-                this.investments = (this.investments || []).map(inv => {
-                    // 1. EPF: Exact INDMoney ledger balance
-                    if ((inv.name || '').includes('EPF') || (inv.id || '').includes('epf')) {
-                        return {
-                            ...inv,
-                            name: 'Employees Provident Fund (EPF)',
-                            type: 'Government Scheme',
-                            issuer: 'EPFO (Government of India)',
-                            amount: 25274,
-                            rate: 8.25,
-                            payout: 'Annual',
-                            maturityDate: '2058-03-31',
-                            lastNavUpdate: '2026-08-23'
-                        };
-                    }
-                    // 2. AVGO: Broadcom
-                    if (inv.ticker === 'AVGO' || (inv.name || '').includes('Broadcom')) {
-                        return {
-                            ...inv,
-                            name: 'Broadcom Inc (AVGO)',
-                            type: 'Stock (US)',
-                            ticker: 'AVGO',
-                            currency: 'USD',
-                            units: 1.164141,
-                            buyPrice: 389.51,
-                            currentPrice: inv.currentPrice || 369.00,
-                            lastNavUpdate: '2026-08-23'
-                        };
-                    }
-                    // 3. NVDA: NVIDIA
-                    if (inv.ticker === 'NVDA' || (inv.name || '').includes('NVIDIA')) {
-                        return {
-                            ...inv,
-                            name: 'NVIDIA Corp (NVDA)',
-                            type: 'Stock (US)',
-                            ticker: 'NVDA',
-                            currency: 'USD',
-                            units: 1.895487,
-                            buyPrice: 218.21,
-                            currentPrice: inv.currentPrice || 215.38,
-                            lastNavUpdate: '2026-08-23'
-                        };
-                    }
-                    // 4. MRVL: Marvell
-                    if (inv.ticker === 'MRVL' || (inv.name || '').includes('Marvell')) {
-                        return {
-                            ...inv,
-                            name: 'Marvell Technology Inc. (MRVL)',
-                            type: 'Stock (US)',
-                            ticker: 'MRVL',
-                            currency: 'USD',
-                            units: 0.609916,
-                            buyPrice: 287.57,
-                            currentPrice: inv.currentPrice || 236.21,
-                            lastNavUpdate: '2026-08-23'
-                        };
-                    }
-                    // 5. DRAM: Replace legacy NBIS with Roundhill Memory ETF
-                    if (inv.ticker === 'NBIS' || inv.ticker === 'DRAM' || (inv.name || '').includes('Roundhill') || (inv.name || '').includes('Nebius')) {
-                        hasDram = true;
-                        return {
-                            ...inv,
-                            id: inv.id || ('inv_dram_' + Date.now()),
-                            name: 'Roundhill Memory ETF (DRAM)',
-                            type: 'Stock (US)',
-                            ticker: 'DRAM',
-                            currency: 'USD',
-                            units: 1.960246,
-                            buyPrice: 54.99,
-                            currentPrice: inv.currentPrice || 57.65,
-                            lastNavUpdate: '2026-08-23'
-                        };
-                    }
-                    // 6. Invesco Midcap: Fix scheme code + correct unit count from INDMoney
-                    if ((inv.name || '').includes('Invesco') || inv.schemeCode === '119775' || inv.schemeCode === '120403') {
-                        return {
-                            ...inv,
-                            name: 'Invesco India Midcap Fund - Direct Plan - Growth',
-                            type: 'Mutual Fund',
-                            schemeCode: '120403',
-                            // INDMoney verified: ₹28k invested, ₹32.03k current, +14.41%
-                            units: 131.34,
-                            buyPrice: 213.22,
-                            currentPrice: inv.currentPrice || 243.87,
-                            lastNavUpdate: '2026-08-23'
-                        };
-                    }
-                    // 7. Quant Small Cap — correct unit count from INDMoney
-                    if ((inv.name || '').includes('Quant') || inv.schemeCode === '120828') {
-                        return {
-                            ...inv,
-                            name: 'Quant Small Cap Fund - Direct Plan - Growth',
-                            type: 'Mutual Fund',
-                            schemeCode: '120828',
-                            // INDMoney verified: ₹17.99k invested, ₹20.72k current, +15.09%
-                            units: 65.33,
-                            buyPrice: 275.44,
-                            currentPrice: inv.currentPrice || 317.10,
-                            lastNavUpdate: '2026-08-23'
-                        };
-                    }
-                    return inv;
-                });
-
-                // Ensure DRAM is present if missing
-                if (!hasDram && (this.investments || []).length > 0) {
-                    const hasDramAlready = this.investments.some(i => i.ticker === 'DRAM');
-                    if (!hasDramAlready) {
-                        this.investments.push({
-                            id: 'inv_dram_' + Date.now(),
-                            name: 'Roundhill Memory ETF (DRAM)',
-                            type: 'Stock (US)',
-                            ticker: 'DRAM',
-                            currency: 'USD',
-                            units: 1.960246,
-                            buyPrice: 54.99,
-                            currentPrice: 57.65,
-                            lastNavUpdate: '2026-08-23'
-                        });
-                    }
-                }
-
-                // Ensure bank balance matches INDMoney cash
-                if (!this.networth.bank || this.networth.bank === 25000) {
-                    this.networth.bank = 11108;
-                }
-
-                // Update SIP scheme codes and debit days (Actual user debit date: 3rd)
-                (this.sips || []).forEach(sip => {
-                    if ((sip.name || '').includes('Invesco') || sip.schemeCode === '119775' || sip.schemeCode === '120403') {
-                        sip.schemeCode = '120403';
-                        if (sip.dayOfMonth === 10 || !sip.dayOfMonth) sip.dayOfMonth = 3;
-                    }
-                    if ((sip.name || '').includes('Quant') || sip.schemeCode === '120828') {
-                        if (sip.dayOfMonth === 5 || !sip.dayOfMonth) sip.dayOfMonth = 3;
-                    }
-                });
-
-                if (!this.cashflow.salaryDay) this.cashflow.salaryDay = 1;
-
-                // Ensure dynamic cashflow streams exist
-                if (!this.cashflow.incomes || !Array.isArray(this.cashflow.incomes) || this.cashflow.incomes.length === 0) {
-                    this.cashflow.incomes = [
-                        { id: 'inc_salary', name: 'Monthly Salary', amount: Number(this.cashflow.project || 0) || 0, category: 'Salary', creditDay: 1 }
-                    ];
-                    if (this.pension && Number(this.pension.monthlyAmount) > 0) {
-                        this.cashflow.incomes.push({ id: 'inc_pension', name: 'Pension Income', amount: Number(this.pension.monthlyAmount), category: 'Pension', creditDay: 1 });
-                    }
-                    if (Number(this.cashflow.otherIncome) > 0) {
-                        this.cashflow.incomes.push({ id: 'inc_other', name: 'Other Income', amount: Number(this.cashflow.otherIncome), category: 'Other', creditDay: 5 });
-                    }
-                }
-
-                if (!this.cashflow.expenses || !Array.isArray(this.cashflow.expenses) || this.cashflow.expenses.length === 0) {
-                    this.cashflow.expenses = [
-                        { id: 'exp_housing', name: 'Housing & Utilities', amount: Number(this.cashflow.housing) || 11500, category: 'Housing' },
-                        { id: 'exp_food', name: 'Food & Household', amount: Number(this.cashflow.food) || 5000, category: 'Food' },
-                        { id: 'exp_personal', name: 'Other Expenses', amount: Number(this.cashflow.otherExpense) || 10000, category: 'Personal' }
-                    ];
-                    if (Number(this.cashflow.medical) > 0) {
-                        this.cashflow.expenses.push({ id: 'exp_medical', name: 'Medical & Insurance', amount: Number(this.cashflow.medical), category: 'Medical' });
-                    }
-                }
-
-                // Self-healing check: If investments list is empty or net worth is 0, auto-seed actual portfolio
-                if (!this.investments || this.investments.length === 0 || Number(this.totalAssets) === 0) {
-                    console.log('[RFM Boot] Empty or zero-state detected. Auto-seeding actual ₹1.94L portfolio...');
-                    this.loadActualPortfolio();
-                } else {
-                    this.saveData();
-                    this.checkSipDebits();
-                }
                 return;
             }
 
@@ -1033,7 +943,7 @@ document.addEventListener('alpine:init', () => {
             const units = Number(inv.units) || 0;
             // For US stocks/ETFs: always use units × price × FX rate. Never fall back to `amount`.
             const isUsd = inv.currency === 'USD' || ['Stock (US)', 'ETF (US)'].includes(inv.type);
-            const rate = isUsd ? (this.usdInrRate || 95.74) : 1;
+            const rate = isUsd ? this.fxUsdInr : 1;
             if (units > 0) {
                 const currentPrice = Number(inv.currentPrice) || Number(inv.nav) || Number(inv.buyPrice) || 0;
                 const val = units * currentPrice * rate;
@@ -1049,7 +959,7 @@ document.addEventListener('alpine:init', () => {
             if (!inv) return 0;
             const units = Number(inv.units) || 0;
             const isUsd = inv.currency === 'USD' || ['Stock (US)', 'ETF (US)'].includes(inv.type);
-            const rate = isUsd ? (this.usdInrRate || 95.74) : 1;
+            const rate = isUsd ? this.fxUsdInr : 1;
             if (units > 0) {
                 const buyPrice = Number(inv.buyPrice) || Number(inv.nav) || 0;
                 const val = units * buyPrice * rate;
@@ -1149,7 +1059,7 @@ document.addEventListener('alpine:init', () => {
         },
 
         get totalUsStockUSD() {
-            const usdRate = this.usdInrRate || 86.5;
+            const usdRate = this.fxUsdInr;
             return this.totalUsStockValuation / usdRate;
         },
 
@@ -1286,158 +1196,6 @@ document.addEventListener('alpine:init', () => {
             this.addingInv = true;
         },
 
-        // ── Seed Actual User Portfolio (from JARVIS Strategy Memory) ─────
-        loadActualPortfolio() {
-            const now = Date.now();
-            // NOTE: US stocks use only units+buyPrice+currentPrice. No `amount` field.
-            // getInvCurrentValue always computes: units × currentPrice × usdInrRate
-            this.investments = [
-                {
-                    id: 'inv_avgo_' + now,
-                    name: 'Broadcom Inc (AVGO)',
-                    type: 'Stock (US)',
-                    ticker: 'AVGO',
-                    currency: 'USD',
-                    units: 1.164141,
-                    buyPrice: 389.51,
-                    currentPrice: 369.00,
-                    lastNavUpdate: '2026-08-23'
-                },
-                {
-                    id: 'inv_nvda_' + (now + 1),
-                    name: 'NVIDIA Corp (NVDA)',
-                    type: 'Stock (US)',
-                    ticker: 'NVDA',
-                    currency: 'USD',
-                    units: 1.895487,
-                    buyPrice: 218.21,
-                    currentPrice: 215.38,
-                    lastNavUpdate: '2026-08-23'
-                },
-                {
-                    id: 'inv_mrvl_' + (now + 2),
-                    name: 'Marvell Technology Inc. (MRVL)',
-                    type: 'Stock (US)',
-                    ticker: 'MRVL',
-                    currency: 'USD',
-                    units: 0.609916,
-                    buyPrice: 287.57,
-                    currentPrice: 236.21,
-                    lastNavUpdate: '2026-08-23'
-                },
-                {
-                    id: 'inv_dram_' + (now + 3),
-                    name: 'Roundhill Memory ETF (DRAM)',
-                    type: 'Stock (US)',
-                    ticker: 'DRAM',
-                    currency: 'USD',
-                    units: 1.960246,
-                    buyPrice: 54.99,
-                    currentPrice: 57.65,
-                    lastNavUpdate: '2026-08-23'
-                },
-                {
-                    id: 'inv_invesco_' + (now + 4),
-                    name: 'Invesco India Midcap Fund - Direct Plan - Growth',
-                    type: 'Mutual Fund',
-                    schemeCode: '120403',
-                    // INDMoney verified: invested ₹28,000 | current ₹32,030 | +14.41%
-                    units: 131.34,
-                    buyPrice: 213.22,
-                    currentPrice: 243.87,
-                    lastNavUpdate: '2026-08-23'
-                },
-                {
-                    id: 'inv_quant_' + (now + 5),
-                    name: 'Quant Small Cap Fund - Direct Plan - Growth',
-                    type: 'Mutual Fund',
-                    schemeCode: '120828',
-                    // INDMoney verified: invested ₹17,990 | current ₹20,717 | +15.09%
-                    units: 65.33,
-                    buyPrice: 275.44,
-                    currentPrice: 317.10,
-                    lastNavUpdate: '2026-08-23'
-                },
-                {
-                    id: 'inv_epf_' + (now + 6),
-                    name: 'Employees Provident Fund (EPF)',
-                    type: 'Government Scheme',
-                    issuer: 'EPFO (Government of India)',
-                    amount: 25274,
-                    rate: 8.25,
-                    payout: 'Annual',
-                    maturityDate: '2058-03-31',
-                    lastNavUpdate: '2026-08-23'
-                }
-            ];
-
-            // Also seed active SIPs (Actual debit date: 3rd of every month)
-            this.sips = [
-                {
-                    id: 'sip_quant_' + now,
-                    name: 'Quant Small Cap SIP',
-                    type: 'SIP',
-                    monthlyAmount: 5000,
-                    dayOfMonth: 3,
-                    startDate: '2026-01-03',
-                    status: 'Active',
-                    schemeCode: '120828',
-                    linkedInvestmentId: 'inv_quant_' + (now + 5)
-                },
-                {
-                    id: 'sip_invesco_' + (now + 1),
-                    name: 'Invesco Mid Cap SIP',
-                    type: 'SIP',
-                    monthlyAmount: 5000,
-                    dayOfMonth: 3,
-                    startDate: '2026-01-03',
-                    status: 'Active',
-                    schemeCode: '120403',
-                    linkedInvestmentId: 'inv_invesco_' + (now + 4)
-                }
-            ];
-
-            this.cashflow = {
-                salaryDay: 1, // Salary credit day (1-31)
-                incomes: [
-                    { id: 'inc_salary', name: 'Monthly Salary', amount: 0, category: 'Salary', creditDay: 1 },
-                    { id: 'inc_consulting', name: 'Consulting / Freelance', amount: 0, category: 'Projects', creditDay: 5 }
-                ],
-                expenses: [
-                    { id: 'exp_housing', name: 'Housing & Utilities', amount: 15000, category: 'Housing' },
-                    { id: 'exp_food', name: 'Food & Household', amount: 12000, category: 'Food' },
-                    { id: 'exp_personal', name: 'Other Expenses', amount: 8000, category: 'Personal' }
-                ],
-                sipOverride: null,
-                project: 0,
-                otherIncome: 0,
-                housing: 15000,
-                food: 12000,
-                medical: 0,
-                otherExpense: 8000
-            };
-            this.networth = {
-                bank: 11108,
-                cash: 0,
-                property: 0,
-                otherAsset: 0,
-                homeLoan: 0,
-                carLoan: 0,
-                personalLoan: 0,
-                creditCard: 0,
-                otherLiability: 0
-            };
-            // emergency must match schema: { efMonthly, efMonths, efCurrent }
-            this.emergency = {
-                efMonthly: 50000,
-                efMonths: 6,
-                efCurrent: 150000
-            };
-
-            this.saveData();
-            this.fetchAllPrices();
-        },
-
         getAssetTotal(type) {
             return this.investments
                 .filter(i => i.type === type || (type === 'Stock' && (i.type || '').includes('Stock')) || (type === 'ETF' && (i.type || '').includes('ETF')))
@@ -1516,7 +1274,7 @@ document.addEventListener('alpine:init', () => {
 
         get totalInvested() {
             // ── Single-source-of-truth: units×avgBuyPrice×FX, fallback amount ──
-            const rate = this.usdInrRate || 95.74;
+            const rate = this.fxUsdInr;
             return (this.investments || []).reduce((sum, inv) => {
                 if (inv.units > 0 && inv.buyPrice > 0) {
                     const cost = inv.units * inv.buyPrice;
@@ -2112,7 +1870,7 @@ document.addEventListener('alpine:init', () => {
             
             let amount = Number(this.newInv.amount) || 0;
             if (isEquity && units > 0 && (currentPrice > 0 || buyPrice > 0)) {
-                const usdRate = isUS ? (this.usdInrRate || 86.5) : 1;
+                const usdRate = isUS ? this.fxUsdInr : 1;
                 amount = units * (currentPrice || buyPrice) * usdRate;
             }
 
@@ -2164,7 +1922,7 @@ document.addEventListener('alpine:init', () => {
                 
                 let amount = Number(this.editForm.amount) || 0;
                 if (isEquity && units > 0 && (currentPrice > 0 || buyPrice > 0)) {
-                    const usdRate = isUS ? (this.usdInrRate || 86.5) : 1;
+                    const usdRate = isUS ? this.fxUsdInr : 1;
                     amount = units * (currentPrice || buyPrice) * usdRate;
                 }
 
@@ -2190,54 +1948,6 @@ document.addEventListener('alpine:init', () => {
             await this.fetchAllPrices();
         },
 
-        async fetchSingleLivePrice(inv) {
-            const ticker = (inv.ticker || '').trim();
-            const isin   = (inv.isin || '').trim();
-
-            // 1. Mutual Funds via AMFI API (api.mfapi.in)
-            if (inv.type === 'Mutual Fund' || /^\d{6}$/.test(ticker)) {
-                let schemeCode = ticker;
-                if (!/^\d{6}$/.test(schemeCode)) {
-                    const searchRes = await fetch(`https://api.mfapi.in/mf/search?q=${encodeURIComponent(inv.name)}`);
-                    if (searchRes.ok) {
-                        const list = await searchRes.json();
-                        if (list && list.length > 0) schemeCode = list[0].schemeCode;
-                    }
-                }
-                if (schemeCode && /^\d{6}$/.test(schemeCode)) {
-                    const res = await fetch(`https://api.mfapi.in/mf/${schemeCode}`);
-                    if (res.ok) {
-                        const data = await res.json();
-                        if (data && data.data && data.data.length > 0) {
-                            return parseFloat(data.data[0].nav);
-                        }
-                    }
-                }
-            }
-
-            // 2. Stocks / ETFs via Yahoo Finance (using allorigins / corsproxy)
-            if (ticker) {
-                let symbol = ticker.toUpperCase();
-                if (!symbol.includes('.') && inv.type !== 'US Stock') {
-                    symbol += '.NS';
-                }
-
-                const targetUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d`;
-                const proxyUrl  = `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`;
-
-                const res = await fetch(proxyUrl);
-                if (res.ok) {
-                    const data = await res.json();
-                    const meta = data?.chart?.result?.[0]?.meta;
-                    if (meta && meta.regularMarketPrice) {
-                        return parseFloat(meta.regularMarketPrice);
-                    }
-                }
-            }
-
-            return null;
-        },
-
         cancelEdit() { this.editingInv = null; },
 
         getMonthlyEquivalent(inv) {
@@ -2245,91 +1955,6 @@ document.addEventListener('alpine:init', () => {
             const yearly = Number(inv.amount) * (Number(inv.rate) / 100);
             return this.formatCurrency(yearly / 12);
         },
-
-        // ════════════════════════════════════════════════════════════
-        //  ACTIONS — PORTFOLIO CHARTS (Deliverable 2)
-        // ════════════════════════════════════════════════════════════
-        renderPortfolioCharts() {
-            // Defer to next tick so x-show has revealed the canvas elements
-            this.$nextTick(() => {
-                // ── Allocation Doughnut ──
-                if (this._allocationChart) this._allocationChart.destroy();
-                const allocCtx = document.getElementById('allocationChart');
-                const alloc    = this.assetAllocation;
-                if (allocCtx && Object.keys(alloc).length > 0) {
-                    this._allocationChart = new Chart(allocCtx, {
-                        type: 'doughnut',
-                        data: {
-                            labels:   Object.keys(alloc),
-                            datasets: [{
-                                data:            Object.values(alloc),
-                                backgroundColor: [
-                                    '#8298f5','#a7b8ff','#c7d0ff',
-                                    '#e2b97d','#f0d2a1','#9da5b6'
-                                ],
-                                borderWidth: 2,
-                                borderColor: '#1a1d23'
-                            }]
-                        },
-                        options: {
-                            responsive: true,
-                            cutout: '65%',
-                            plugins: {
-                                legend: { position: 'bottom', labels: { color: '#a7acb8', padding: 16, font: { size: 13 } } },
-                                tooltip: {
-                                    callbacks: {
-                                        label: ctx => {
-                                            const val = ctx.raw;
-                                            return ` ₹${Number(val).toLocaleString('en-IN')}`;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    });
-                }
-
-                // ── Rating Bar ──
-                if (this._ratingChart) this._ratingChart.destroy();
-                const ratingCtx = document.getElementById('ratingChart');
-                const ratings   = this.ratingDistribution;
-                if (ratingCtx && Object.keys(ratings).length > 0) {
-                    this._ratingChart = new Chart(ratingCtx, {
-                        type: 'bar',
-                        data: {
-                            labels:   Object.keys(ratings),
-                            datasets: [{
-                                label:           'Amount (₹)',
-                                data:            Object.values(ratings),
-                                backgroundColor: '#8298f5',
-                                borderRadius:    6
-                            }]
-                        },
-                        options: {
-                            responsive: true,
-                            indexAxis:  'y',
-                            plugins:    { legend: { display: false } },
-                            scales: {
-                                x: {
-                                    ticks: {
-                                        color: '#a7acb8',
-                                        callback: v => '₹' + Number(v).toLocaleString('en-IN', { maximumFractionDigits: 0 })
-                                    },
-                                    grid: { color: 'rgba(255,255,255,0.05)' }
-                                },
-                                y: {
-                                    ticks: { color: '#bacac3' },
-                                    grid: { color: 'rgba(255,255,255,0.05)' }
-                                }
-                            }
-                        }
-                    });
-                }
-            });
-        },
-
-        // ════════════════════════════════════════════════════════════
-        //  ACTIONS — GOALS (Deliverable 3)
         // ════════════════════════════════════════════════════════════
         addGoal() {
             if (!this.newGoal.name || !this.newGoal.target) return;
@@ -2853,14 +2478,20 @@ RULES: Return ONLY valid JSON. No markdown, no explanation. If a field is unknow
                     throw new Error(`${inv.name || 'Mutual fund'} needs an AMFI scheme code before it can be synced.`);
                 }
 
-                const data = await this.fetchJsonWithTimeout(`https://api.mfapi.in/mf/${encodeURIComponent(inv.schemeCode)}`);
-                const newNav = Number(data?.data?.[0]?.nav);
+                const data = await this.httpGetJson(`https://api.mfapi.in/mf/${encodeURIComponent(inv.schemeCode)}`);
+                const row = data?.data?.[0];
+                const newNav = Number(row?.nav);
                 if (!Number.isFinite(newNav) || newNav <= 0) throw new Error('No valid NAV was returned.');
 
                 inv.currentPrice = newNav;
                 if (Number(inv.units) > 0) {
                     inv.currentValue = Math.round(Number(inv.units) * newNav * 100) / 100;
                 }
+                // AMFI publishes one NAV per business day, so a fund is "as of" its own
+                // declared date, not the moment we happened to fetch it.
+                inv.priceSource   = 'AMFI';
+                inv.priceAsOf     = this.parseAmfiDate(row?.date) || new Date().toISOString();
+                inv.priceIsClose  = true;
                 inv.lastNavUpdate = new Date().toISOString();
                 return newNav;
             }
@@ -2871,34 +2502,83 @@ RULES: Return ONLY valid JSON. No markdown, no explanation. If a field is unknow
             const cleanSymbol = inv.ticker.trim().toUpperCase().replace(/\.(NS|BO)$/, '');
             const querySymbol = isUS ? cleanSymbol : `${cleanSymbol}.NS`;
             const targetUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(querySymbol)}?interval=1d&range=5d`;
-            const endpoints = [
-                targetUrl,
-                `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`,
-                `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`
-            ];
 
-            let lastError = null;
-            for (const url of endpoints) {
-                try {
-                    const data = await this.fetchJsonWithTimeout(url);
-                    const meta = data?.chart?.result?.[0]?.meta;
-                    const price = Number(meta?.regularMarketPrice || meta?.chartPreviousClose);
-                    if (!Number.isFinite(price) || price <= 0) throw new Error('No valid market price was returned.');
+            // Native HTTP is not bound by CORS, so Android hits Yahoo directly — one request.
+            // In a browser the direct call CANNOT succeed (Yahoo sends no CORS header) yet still
+            // costs a full round trip, so it is omitted there and the proxies are RACED rather
+            // than tried one after another.
+            const data = this.canUseNativeHttp
+                ? await this.httpGetJson(targetUrl)
+                : await this.firstSuccessful([
+                    () => this.httpGetJson(`https://corsproxy.io/?${encodeURIComponent(targetUrl)}`),
+                    () => this.httpGetJson(`https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`)
+                  ]);
 
-                    inv.currentPrice = price;
-                    inv.currency = isUS ? 'USD' : 'INR';
-                    const priceInInr = price * (isUS ? (this.usdInrRate || 95.74) : 1);
-                    if (Number(inv.units) > 0) {
-                        inv.currentValue = Math.round(Number(inv.units) * priceInInr * 100) / 100;
-                    }
-                    inv.lastNavUpdate = new Date().toISOString();
-                    return price;
-                } catch (error) {
-                    lastError = error;
-                }
+            const meta = data?.chart?.result?.[0]?.meta;
+            const live = Number(meta?.regularMarketPrice);
+            const close = Number(meta?.chartPreviousClose);
+
+            // The old code did `regularMarketPrice || chartPreviousClose` and then stamped the
+            // row as freshly synced. That silently reported a previous close as a live quote —
+            // routine for US symbols, whose session is 7:00pm–1:30am IST. The two are now
+            // distinguished and the difference is carried on the record.
+            const usingClose = !(Number.isFinite(live) && live > 0);
+            const price = usingClose ? close : live;
+            if (!Number.isFinite(price) || price <= 0) throw new Error('No valid market price was returned.');
+
+            inv.currentPrice = price;
+            inv.currency = isUS ? 'USD' : 'INR';
+            const priceInInr = price * (isUS ? this.fxUsdInr : 1);
+            if (Number(inv.units) > 0) {
+                inv.currentValue = Math.round(Number(inv.units) * priceInInr * 100) / 100;
             }
 
-            throw lastError || new Error('No price provider responded.');
+            inv.priceSource  = 'Yahoo';
+            inv.priceIsClose = usingClose;
+            inv.priceAsOf    = Number.isFinite(Number(meta?.regularMarketTime))
+                ? new Date(Number(meta.regularMarketTime) * 1000).toISOString()
+                : new Date().toISOString();
+            if (isUS) {
+                inv.fxRate = this.fxUsdInr;
+                inv.fxAsOf = this.usdInrAsOf;
+                inv.fxEstimated = this.fxIsEstimated;
+            }
+            inv.lastNavUpdate = new Date().toISOString();
+            return price;
+        },
+
+        // AMFI returns "08-09-2026" (DD-MM-YYYY), which bare Date() misreads as Aug 9.
+        // Anchored at UTC NOON, not local midnight: local midnight in IST is 18:30 UTC the
+        // PREVIOUS day, so the ISO date component would be off by one and any date-string
+        // comparison would silently use the wrong day.
+        parseAmfiDate(s) {
+            const m = /^(\d{2})-(\d{2})-(\d{4})$/.exec(String(s || '').trim());
+            if (!m) return null;
+            const day = Number(m[1]), month = Number(m[2]), year = Number(m[3]);
+            if (month < 1 || month > 12 || day < 1 || day > 31 || year < 1990 || year > 2999) return null;
+            // Local noon. Date.UTC would silently roll "99-99-2026" over into a valid date,
+            // and a UTC anchor renders as the wrong day east of UTC+12. Noon local is stable
+            // in every timezone for the viewer who is reading it, and the 12h offset is
+            // irrelevant to staleness, which is measured in days.
+            const d = new Date(year, month - 1, day, 12, 0, 0, 0);
+            if (Number.isNaN(d.getTime()) || d.getDate() !== day || d.getMonth() !== month - 1) return null;
+            return d.toISOString();
+        },
+
+        // Is this holding's price a live quote, or the last close / an old sync?
+        priceFreshness(inv) {
+            if (!inv?.priceAsOf) return { state: 'unknown', label: 'not synced' };
+            const ageMs = Date.now() - new Date(inv.priceAsOf).getTime();
+            if (inv.priceIsClose) {
+                // A fund has no intraday price at all — its NAV is simply the day's value —
+                // so calling that a "last close" would overstate the problem.
+                const word = inv.priceSource === 'AMFI' ? 'NAV' : 'last close';
+                return { state: 'close', label: `${word} · ${this.formatDate(inv.priceAsOf)}` };
+            }
+            if (ageMs > 24 * 60 * 60 * 1000) {
+                return { state: 'stale', label: `${this.formatDate(inv.priceAsOf)}` };
+            }
+            return { state: 'live', label: `${inv.priceSource || 'live'}` };
         },
 
         // Refresh eligible holdings concurrently with a small worker pool to protect public data APIs.
@@ -2917,7 +2597,10 @@ RULES: Return ONLY valid JSON. No markdown, no explanation. If a field is unknow
             this.navFetchProgress = { completed: 0, total: holdings.length, updated: 0, failed: 0 };
 
             try {
-                await this.fetchUsdInrRate();
+                // The FX call used to block every quote behind it. It only affects US
+                // holdings' INR conversion, so it runs alongside the pool and is awaited
+                // once at the end, before values are recomputed.
+                const fxReady = this.fetchUsdInrRate().catch(() => null);
                 let nextIndex = 0;
                 const failures = [];
                 const worker = async () => {
@@ -2937,8 +2620,23 @@ RULES: Return ONLY valid JSON. No markdown, no explanation. If a field is unknow
                     }
                 };
 
-                const workerCount = Math.min(3, holdings.length);
+                // 3 workers × up to 13.5s per holding was the bulk of the wait. With the
+                // doomed direct attempt gone and the proxies raced, each holding is bounded
+                // at ~3s, so a wider pool is both safe for the providers and much faster.
+                const workerCount = Math.min(this.canUseNativeHttp ? 8 : 6, holdings.length);
                 await Promise.all(Array.from({ length: workerCount }, worker));
+                await fxReady;
+
+                // Re-derive US values once the real rate is known — a quote that landed
+                // before FX resolved would otherwise keep the estimated conversion.
+                for (const inv of holdings) {
+                    const isUS = inv.type === 'Stock (US)' || inv.type === 'ETF (US)' || inv.currency === 'USD';
+                    if (!isUS || !Number.isFinite(Number(inv.currentPrice)) || !(Number(inv.units) > 0)) continue;
+                    inv.currentValue = Math.round(Number(inv.units) * Number(inv.currentPrice) * this.fxUsdInr * 100) / 100;
+                    inv.fxRate = this.fxUsdInr;
+                    inv.fxAsOf = this.usdInrAsOf;
+                    inv.fxEstimated = this.fxIsEstimated;
+                }
 
                 this.lastNavFetchTime = new Date().toISOString();
                 this.investments = [...this.investments];
@@ -3239,13 +2937,24 @@ RULES: Return ONLY valid JSON. No markdown, no explanation. If a field is unknow
         // ════════════════════════════════════════════════════════════
         //  ACTIONS — BACKUP & RESTORE (Phase 7)
         // ════════════════════════════════════════════════════════════
+        // Everything a restore must carry. Backup previously exported rfm_v1 alone, so a
+        // restore on a new phone silently dropped the entire net-worth history behind the
+        // hero chart — with a "restored successfully" message. API keys are deliberately
+        // NOT included: a backup is a plaintext file the user emails or copies around.
+        BACKUP_KEYS: ['rfm_v1', 'rfm_nw_history', 'rfm_usd_inr_rate', 'rfm_api_provider', 'rfm_api_model', 'rfm_api_custom_model'],
+
         backupData() {
             const data = localStorage.getItem('rfm_v1');
             if (!data) {
                 alert('No data to backup.');
                 return;
             }
-            const blob = new Blob([data], { type: 'application/json' });
+            const payload = { format: 'rfm-backup', formatVersion: 2, exportedAt: new Date().toISOString(), keys: {} };
+            for (const k of this.BACKUP_KEYS) {
+                const v = localStorage.getItem(k);
+                if (v !== null) payload.keys[k] = v;
+            }
+            const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
@@ -3264,20 +2973,33 @@ RULES: Return ONLY valid JSON. No markdown, no explanation. If a field is unknow
                 const text = await file.text();
                 const parsed = JSON.parse(text);
                 
-                if (!parsed.version || !parsed.investments) {
+                // v2 envelope carries every key; a v1 file is the bare rfm_v1 blob. Both are
+                // accepted so backups taken before this change still restore.
+                const isV2 = parsed && parsed.format === 'rfm-backup' && parsed.keys;
+                const isV1 = parsed && parsed.version && parsed.investments;
+                if (!isV2 && !isV1) {
                     alert('Invalid backup file format.');
                     return;
                 }
 
-                if (confirm('This will overwrite your current data. Are you sure you want to proceed?')) {
-                    localStorage.setItem('rfm_v1', JSON.stringify(parsed));
-                    // Reload data into state
+                const restoring = isV2 ? parsed.keys : { rfm_v1: JSON.stringify(parsed) };
+                const names = Object.keys(restoring).filter(k => this.BACKUP_KEYS.includes(k));
+                if (!names.includes('rfm_v1')) {
+                    alert('This backup has no portfolio data in it.');
+                    return;
+                }
+
+                const summary = isV2
+                    ? `Restore ${names.length} data set(s) from ${parsed.exportedAt ? this.formatDate(parsed.exportedAt) : 'this file'}?`
+                    : 'Restore portfolio data from this older backup? It does not contain net-worth history.';
+
+                if (confirm(`${summary}\n\nThis replaces your current data and cannot be undone.`)) {
+                    for (const k of names) localStorage.setItem(k, restoring[k]);
                     this.loadData();
-                    // Reset charts if they are rendered
-                    if (this.activePage === 'portfolio') {
-                        this.renderPortfolioCharts();
-                    }
-                    alert('Data restored successfully!');
+                    this.loadNwHistory?.();
+                    this.loadCachedFxRate();
+                    this.renderNwChart?.();
+                    alert(`Restored ${names.length} data set(s).`);
                 }
             } catch (err) {
                 console.error('Restore error:', err);
@@ -3308,8 +3030,13 @@ RULES: Return ONLY valid JSON. No markdown, no explanation. If a field is unknow
 
             // 2. If not found in investments, automatically register a new Mutual Fund / Stock holding!
             if (!existingHolding) {
-                const isUsStock = ticker && ['NVDA', 'AVGO', 'MRVL', 'NBIS'].includes(ticker.toUpperCase());
-                const holdingType = isUsStock ? 'Stock (US)' : (schemeCode ? 'Mutual Fund' : 'Stock (IND)');
+                // Market cannot be inferred from a ticker alone — NSE and US symbols are both
+                // plain letters. This used to consult a hardcoded list of four specific US
+                // tickers, which was dead (newSip.ticker is never written by any form) and
+                // would have misclassified every other US symbol the moment it wasn't. A new
+                // holding therefore defaults to the Indian market and is editable afterwards;
+                // if a ticker field is ever added here, add a market selector beside it.
+                const holdingType = schemeCode ? 'Mutual Fund' : 'Stock (IND)';
 
                 existingHolding = {
                     id:            'inv_' + Date.now(),
@@ -3406,7 +3133,7 @@ RULES: Return ONLY valid JSON. No markdown, no explanation. If a field is unknow
                         }
 
                         const isUsd = inv.currency === 'USD' || ['Stock (US)', 'ETF (US)'].includes(inv.type);
-                        const rate = isUsd ? (this.usdInrRate || 95.76) : 1;
+                        const rate = isUsd ? this.fxUsdInr : 1;
                         const priceInInr = price * rate;
 
                         const newUnits = debitAmount / priceInInr;

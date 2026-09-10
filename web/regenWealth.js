@@ -58,7 +58,10 @@ window.RegenWealth = (() => {
     // rather than from stale display fields.
     function buildPortfolioSnapshot(appData) {
         const investments = appData.investments || [];
-        const fxRate = Number(appData.usdInrRate) || 1;
+        // `|| 1` here meant that whenever no rate was loaded, every US holding was valued
+        // at $1 = ₹1 — understating the US book ~88x — and that figure was then sent to the
+        // model as fact. Read the app's single FX source instead, which is never unset.
+        const fxRate = Number(appData.fxUsdInr) || Number(appData.usdInrRate) || 88.0;
         const number = value => Number(value) || 0;
         const isUsdHolding = investment => investment.currency === 'USD'
             || investment.type === 'Stock (US)'
