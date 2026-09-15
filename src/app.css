@@ -6,3 +6,178 @@
 @import "../node_modules/driver.js/dist/driver.css";
 @config "../tailwind.config.js";
 @plugin "@tailwindcss/forms";
+
+
+/* ══ THEME TOKENS ══════════════════════════════════════════════════════════
+   Every Tailwind colour utility resolves through these, in channel form, so
+   `bg-primary/20` still composites correctly AND follows the active theme.
+   Light is the default: it is what a brand-new user sees, it is readable in
+   daylight, and it is what Indian bank statements and passbooks look like.
+   Dark is opt-in and carries the previous palette verbatim, so nothing that
+   already shipped shifts. */
+/* LIGHT — the shipped default */
+:root {
+  /* Money semantics. Conventional green/red, darkened to stay legible on paper;
+     the dark theme keeps the brighter values that read on near-black. */
+  --c-positive: 23 121 94;
+  --c-negative: 180 35 24;
+  --c-caution:  138 90 11;
+  --c-background: 247 248 250;
+  --c-error: 180 35 24;
+  --c-error-container: 253 226 223;
+  --c-inverse-on-surface: 243 244 247;
+  --c-inverse-primary: 167 184 255;
+  --c-inverse-surface: 32 35 43;
+  --c-on-background: 20 22 28;
+  --c-on-error: 255 255 255;
+  --c-on-error-container: 104 20 13;
+  --c-on-primary: 255 255 255;
+  --c-on-primary-container: 26 33 92;
+  --c-on-primary-fixed: 20 26 74;
+  --c-on-primary-fixed-variant: 55 70 180;
+  --c-on-secondary: 255 255 255;
+  --c-on-secondary-container: 74 47 4;
+  --c-on-secondary-fixed: 56 35 3;
+  --c-on-secondary-fixed-variant: 110 71 8;
+  --c-on-surface: 20 22 28;
+  --c-on-surface-variant: 90 96 112;
+  --c-on-tertiary: 255 255 255;
+  --c-on-tertiary-container: 74 47 4;
+  --c-on-tertiary-fixed: 56 35 3;
+  --c-on-tertiary-fixed-variant: 110 71 8;
+  --c-outline: 122 130 146;
+  --c-outline-variant: 0 0 0;
+  --c-primary: 74 91 208;
+  --c-primary-container: 223 228 252;
+  --c-primary-fixed: 223 228 252;
+  --c-primary-fixed-dim: 150 164 240;
+  --c-secondary: 138 90 11;
+  --c-secondary-container: 250 236 209;
+  --c-secondary-fixed: 250 236 209;
+  --c-secondary-fixed-dim: 226 185 125;
+  --c-surface: 255 255 255;
+  --c-surface-bright: 255 255 255;
+  --c-surface-container: 255 255 255;
+  --c-surface-container-high: 241 243 247;
+  --c-surface-container-highest: 233 236 242;
+  --c-surface-container-low: 250 251 253;
+  --c-surface-container-lowest: 255 255 255;
+  --c-surface-dim: 240 242 246;
+  --c-surface-tint: 74 91 208;
+  --c-surface-variant: 237 240 245;
+  --c-tertiary: 138 90 11;
+  --c-tertiary-container: 250 236 209;
+  --c-tertiary-fixed: 250 236 209;
+  --c-tertiary-fixed-dim: 226 185 125;
+}
+
+/* DARK — the previous palette, unchanged */
+:root[data-theme="dark"] {
+  --c-positive: 52 211 153;
+  --c-negative: 248 113 113;
+  --c-caution:  226 185 125;
+  --c-background: 16 17 20;
+  --c-error: 255 180 171;
+  --c-error-container: 147 0 10;
+  --c-inverse-on-surface: 26 29 35;
+  --c-inverse-primary: 64 82 160;
+  --c-inverse-surface: 229 231 235;
+  --c-on-background: 240 241 243;
+  --c-on-error: 105 0 5;
+  --c-on-error-container: 255 218 214;
+  --c-on-primary: 22 27 49;
+  --c-on-primary-container: 27 34 56;
+  --c-on-primary-fixed: 23 32 74;
+  --c-on-primary-fixed-variant: 53 67 127;
+  --c-on-secondary: 43 33 19;
+  --c-on-secondary-container: 255 223 173;
+  --c-on-secondary-fixed: 43 33 14;
+  --c-on-secondary-fixed-variant: 86 65 31;
+  --c-on-surface: 240 241 243;
+  --c-on-surface-variant: 167 172 184;
+  --c-on-tertiary: 42 32 21;
+  --c-on-tertiary-container: 255 231 191;
+  --c-on-tertiary-fixed: 42 32 16;
+  --c-on-tertiary-fixed-variant: 94 73 39;
+  --c-outline: 119 126 141;
+  --c-outline-variant: 255 255 255;
+  --c-primary: 167 184 255;
+  --c-primary-container: 130 153 247;
+  --c-primary-fixed: 199 208 255;
+  --c-primary-fixed-dim: 147 166 255;
+  --c-secondary: 226 185 125;
+  --c-secondary-container: 66 49 25;
+  --c-secondary-fixed: 247 219 173;
+  --c-secondary-fixed-dim: 229 188 125;
+  --c-surface: 23 25 30;
+  --c-surface-bright: 53 57 67;
+  --c-surface-container: 26 29 35;
+  --c-surface-container-high: 35 38 46;
+  --c-surface-container-highest: 45 49 59;
+  --c-surface-container-low: 20 22 27;
+  --c-surface-container-lowest: 11 12 15;
+  --c-surface-dim: 16 17 20;
+  --c-surface-tint: 167 184 255;
+  --c-surface-variant: 40 43 51;
+  --c-tertiary: 230 189 128;
+  --c-tertiary-container: 112 85 43;
+  --c-tertiary-fixed: 240 216 173;
+  --c-tertiary-fixed-dim: 216 189 145;
+}
+
+/* Follow the OS only until the user makes an explicit choice; once they do,
+   data-theme is stamped on <html> and wins in both directions. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --c-positive: 52 211 153;
+    --c-negative: 248 113 113;
+    --c-caution:  226 185 125;
+    --c-background: 16 17 20;
+    --c-error: 255 180 171;
+    --c-error-container: 147 0 10;
+    --c-inverse-on-surface: 26 29 35;
+    --c-inverse-primary: 64 82 160;
+    --c-inverse-surface: 229 231 235;
+    --c-on-background: 240 241 243;
+    --c-on-error: 105 0 5;
+    --c-on-error-container: 255 218 214;
+    --c-on-primary: 22 27 49;
+    --c-on-primary-container: 27 34 56;
+    --c-on-primary-fixed: 23 32 74;
+    --c-on-primary-fixed-variant: 53 67 127;
+    --c-on-secondary: 43 33 19;
+    --c-on-secondary-container: 255 223 173;
+    --c-on-secondary-fixed: 43 33 14;
+    --c-on-secondary-fixed-variant: 86 65 31;
+    --c-on-surface: 240 241 243;
+    --c-on-surface-variant: 167 172 184;
+    --c-on-tertiary: 42 32 21;
+    --c-on-tertiary-container: 255 231 191;
+    --c-on-tertiary-fixed: 42 32 16;
+    --c-on-tertiary-fixed-variant: 94 73 39;
+    --c-outline: 119 126 141;
+    --c-outline-variant: 255 255 255;
+    --c-primary: 167 184 255;
+    --c-primary-container: 130 153 247;
+    --c-primary-fixed: 199 208 255;
+    --c-primary-fixed-dim: 147 166 255;
+    --c-secondary: 226 185 125;
+    --c-secondary-container: 66 49 25;
+    --c-secondary-fixed: 247 219 173;
+    --c-secondary-fixed-dim: 229 188 125;
+    --c-surface: 23 25 30;
+    --c-surface-bright: 53 57 67;
+    --c-surface-container: 26 29 35;
+    --c-surface-container-high: 35 38 46;
+    --c-surface-container-highest: 45 49 59;
+    --c-surface-container-low: 20 22 27;
+    --c-surface-container-lowest: 11 12 15;
+    --c-surface-dim: 16 17 20;
+    --c-surface-tint: 167 184 255;
+    --c-surface-variant: 40 43 51;
+    --c-tertiary: 230 189 128;
+    --c-tertiary-container: 112 85 43;
+    --c-tertiary-fixed: 240 216 173;
+    --c-tertiary-fixed-dim: 216 189 145;
+  }
+}

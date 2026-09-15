@@ -336,6 +336,7 @@ document.addEventListener('alpine:init', () => {
             this.loadData();
             this.initCapacitor();
             this.fetchUsdInrRate();
+            this.syncNativeChrome();
 
             // First-run tutorial. Deferred past the first paint so it anchors to
             // laid-out elements rather than a half-built DOM.
@@ -1575,6 +1576,37 @@ document.addEventListener('alpine:init', () => {
             this.moreMenuOpen = false;
             this.activePage = 'home';
             setTimeout(() => window.RFMMotion && window.RFMMotion.startTour(true), 450);
+        },
+
+        theme: (function () {
+            try { return localStorage.getItem('rfm_theme') || 'system'; } catch (e) { return 'system'; }
+        })(),
+
+        // Cycles light -> dark. 'system' resolves to whatever the OS currently
+        // says, so the first tap always moves to the opposite of what is on screen
+        // rather than appearing to do nothing.
+        toggleTheme() {
+            const showingDark = this.theme === 'dark'
+                || (this.theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+            this.theme = showingDark ? 'light' : 'dark';
+            document.documentElement.setAttribute('data-theme', this.theme);
+            try { localStorage.setItem('rfm_theme', this.theme); } catch (e) {}
+            if (window.RFMMotion) window.RFMMotion.Haptics.commit();
+            this.syncNativeChrome();
+        },
+
+        // Status-bar icons must invert with the theme. Style.Dark means DARK
+        // BACKGROUND -> light icons, so a light theme needs Style.Light — the
+        // inverse of what the name suggests.
+        syncNativeChrome() {
+            try {
+                const P = window.AppPlugins;
+                if (!P || !P.Capacitor || !P.Capacitor.isNativePlatform()) return;
+                const dark = document.documentElement.getAttribute('data-theme') === 'dark'
+                    || (!document.documentElement.getAttribute('data-theme')
+                        && window.matchMedia('(prefers-color-scheme: dark)').matches);
+                P.StatusBar.setStyle({ style: dark ? P.Style.Dark : P.Style.Light });
+            } catch (e) {}
         },
 
         get hasAnyPortfolioData() {
