@@ -91,4 +91,15 @@ module.exports = {
             }
         };
 
+
+// Legibility floor. The app was built for a 60+ user and shipped with 169 of its
+// 240 explicit sizes below 12px. 13px is the floor and nothing may go under it —
+// text-xs is used 280 times, so leaving it at Tailwind's 12px default would have
+// undone the codemod that raised the arbitrary values.
+module.exports.theme.extend.fontSize = Object.assign({}, module.exports.theme.extend.fontSize, {
+  xs:   ['13px', { lineHeight: '18px' }],
+  sm:   ['15px', { lineHeight: '22px' }],
+  base: ['16px', { lineHeight: '24px' }],
+});
+
 module.exports.content = ['./web/**/*.html', './web/**/*.js'];

@@ -2,7 +2,30 @@ document.addEventListener('alpine:init', () => {
     Alpine.data('appData', () => ({
 
         // ── UI State ────────────────────────────────────────────────
-        activePage: 'home',
+        // Backing field. activePage stays a plain property to every binding and
+        // every `activePage = 'x'` call site in index.html, but the setter funnels
+        // all ~30 of those writes through one place so the page change can be
+        // wrapped in a View Transition without touching a single call site.
+        // Alpine 3's reactive() preserves accessor descriptors, so this stays
+        // reactive: x-show reads the getter and is tracked normally.
+        _activePage: 'home',
+
+        get activePage() { return this._activePage; },
+        set activePage(next) {
+            if (next === this._activePage) return;
+            const apply = () => {
+                this._activePage = next;
+                if (next === 'home') this.$nextTick(() => this.renderNwChart());
+                try { window.scrollTo({ top: 0, behavior: 'instant' }); } catch (e) { window.scrollTo(0, 0); }
+            };
+            if (window.RFMMotion) {
+                window.RFMMotion.Haptics.tap();
+                window.RFMMotion.transition(apply);
+            } else {
+                apply();
+            }
+        },
+
         showNotifications: false,
 
         // ── Data Stores ─────────────────────────────────────────────
@@ -313,6 +336,10 @@ document.addEventListener('alpine:init', () => {
             this.loadData();
             this.initCapacitor();
             this.fetchUsdInrRate();
+
+            // First-run tutorial. Deferred past the first paint so it anchors to
+            // laid-out elements rather than a half-built DOM.
+            setTimeout(() => { try { window.RFMMotion && window.RFMMotion.startTour(false); } catch (e) {} }, 1200);
             // Phase 12: Schedule native alerts after data loads (fire-and-forget, non-blocking)
             this.scheduleMaturityAlerts();
             this.$watch('investments',  () => {
@@ -502,10 +529,11 @@ document.addEventListener('alpine:init', () => {
                 localization: { priceFormatter: (v) => this.formatIndianShort(v) },
             });
 
+            const single = points.length === 1;
             const series = chart.addSeries(window.LW.AreaSeries, {
-                lineColor: stroke,
-                lineWidth: 2,
-                topColor: rising ? 'rgba(167,184,255,0.35)' : 'rgba(248,113,113,0.35)',
+                lineColor: single ? 'rgba(0,0,0,0)' : stroke,
+                lineWidth: single ? 0 : 2,
+                topColor: single ? 'rgba(0,0,0,0)' : (rising ? 'rgba(167,184,255,0.35)' : 'rgba(248,113,113,0.35)'),
                 bottomColor: 'rgba(0,0,0,0)',
                 priceLineVisible: false,
                 lastValueVisible: false,
@@ -517,7 +545,7 @@ document.addEventListener('alpine:init', () => {
             chart.timeScale().fitContent();
 
             // A single observation is a point, not a fabricated flat line.
-            if (points.length === 1) {
+            if (single) {
                 window.LW.createSeriesMarkers(series, [
                     { time: points[0].time, position: 'inBar', color: stroke, shape: 'circle' }
                 ]);
@@ -1542,6 +1570,25 @@ document.addEventListener('alpine:init', () => {
         // never defined, so the "Optimal Regime" row on the tax card rendered empty
         // and threw on every page render. Ties are reported as New, which is the
         // default regime and the one requiring no election.
+        replayTutorial() {
+            try { localStorage.removeItem(window.RFMMotion.TOUR_KEY); } catch (e) {}
+            this.moreMenuOpen = false;
+            this.activePage = 'home';
+            setTimeout(() => window.RFMMotion && window.RFMMotion.startTour(true), 450);
+        },
+
+        get hasAnyPortfolioData() {
+            const nz = v => Number(v) > 0;
+            return (this.investments || []).length > 0
+                || (this.goals       || []).length > 0
+                || (this.sips        || []).length > 0
+                || (this.nwHistory   || []).length > 0
+                || Object.values(this.networth || {}).some(nz)
+                || ((this.cashflow || {}).incomes  || []).some(i => nz(i.amount))
+                || ((this.cashflow || {}).expenses || []).some(e => nz(e.amount))
+                || nz((this.emergency || {}).efCurrent);
+        },
+
         get optimalRegime() {
             return this.oldRegimeTax.tax < this.newRegimeTax.tax ? 'Old' : 'New';
         },
@@ -2651,6 +2698,15 @@ RULES: Return ONLY valid JSON. No markdown, no explanation. If a field is unknow
 
                 this.lastNavFetchTime = new Date().toISOString();
                 this.investments = [...this.investments];
+
+                // The sweep is the honesty mechanism, not decoration: it travels
+                // only over rows whose quote actually landed, so a sync that
+                // updated 3 of 11 holdings looks like one.
+                if (window.RFMMotion) {
+                    this.$nextTick(() => window.RFMMotion.syncSweep('[data-holding-row]'));
+                    if (this.navFetchProgress.failed > 0) window.RFMMotion.Haptics.warn();
+                    else if (this.navFetchProgress.updated > 0) window.RFMMotion.Haptics.success();
+                }
                 this.saveNwSnapshot({ source: 'price-sync' });
                 this.renderNwChart();
                 this.saveData();

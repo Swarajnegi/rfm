@@ -2,5 +2,7 @@
    Replaces the cdn.tailwindcss.com play build, which shipped a full JIT
    compiler to the device and made the app unusable without a network. */
 @import "tailwindcss";
+/* Driver.js base styles — the tutorial overlay. Skinned in styles.css under .rfm-tour. */
+@import "../node_modules/driver.js/dist/driver.css";
 @config "../tailwind.config.js";
 @plugin "@tailwindcss/forms";

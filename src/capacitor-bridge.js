@@ -3,6 +3,7 @@ import { App } from '@capacitor/app';
 import { NativeBiometric } from '@capgo/capacitor-native-biometric';
 import { SplashScreen } from '@capacitor/splash-screen';
 import { StatusBar, Style } from '@capacitor/status-bar';
+import { Haptics, ImpactStyle, NotificationType } from '@capacitor/haptics';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { LocalNotifications } from '@capacitor/local-notifications';
 
@@ -32,7 +33,10 @@ window.AppPlugins = {
     Style,
     Filesystem,
     Directory,
-    LocalNotifications
+    LocalNotifications,
+    Haptics,
+    ImpactStyle,
+    NotificationType
 };
 
 window.pdfjsLib = pdfjsLib;

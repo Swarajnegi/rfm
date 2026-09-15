@@ -22,6 +22,7 @@ const ok = (label, cond, detail = '') => {
     if (!cond) fail.push(label);
 };
 
+const SEED = process.argv.includes('--seed');
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
 
@@ -29,6 +30,23 @@ const consoleErrors = [];
 const blocked = [];
 page.on('console', m => { if (m.type() === 'error') consoleErrors.push(m.text()); });
 page.on('pageerror', e => consoleErrors.push('pageerror: ' + e.message));
+
+// A populated portfolio, so the checks exercise the real UI rather than only
+// the empty state. Written before any script runs.
+if (SEED) {
+    const { readFileSync } = await import('node:fs');
+    const seed = readFileSync('scripts/seed.json', 'utf8');
+    const hist = JSON.stringify(Array.from({ length: 30 }, (_, i) => {
+        const d = new Date(Date.now() - (29 - i) * 864e5).toISOString().slice(0, 10);
+        return { date: d, value: Math.round(1520000 + i * 9400 + Math.sin(i / 3) * 42000), source: 'seed' };
+    }));
+    await page.addInitScript(([blob, h]) => {
+        localStorage.setItem('rfm_v1', blob);
+        localStorage.setItem('rfm_nw_history', h);
+        localStorage.setItem('rfm_usd_inr_rate', '88.41');
+        localStorage.setItem('rfm_tour_v1', 'done');   // tour already seen
+    }, [seed, hist]);
+}
 
 // Hard-block anything not on disk. This is the whole point of the test.
 await page.route('**/*', route => {
@@ -118,6 +136,25 @@ const iconFont = await page.evaluate(async () => {
     return document.fonts.check('24px "Material Symbols Outlined"');
 });
 ok('icon font loaded (subset)', iconFont, iconFont ? '' : 'icons would render as words');
+
+if (SEED) {
+    const populated = await page.evaluate(() => ({
+        numberFlow: !!document.querySelector('number-flow'),
+        // NumberFlow exposes `value` as a getter and renders into shadow DOM whose
+        // textContent begins with its own <style> block — so assert on the value
+        // and the laid-out width, not on scraped text.
+        heroValue: document.querySelector('number-flow')?.value ?? null,
+        heroWidth: document.querySelector('number-flow')?.getBoundingClientRect().width ?? 0,
+        chartCanvas: !!document.querySelector('#nwChart canvas'),
+        holdingRows: document.querySelectorAll('[data-holding-row]').length,
+        emptyState: !!document.querySelector('.nw-empty'),
+    }));
+    ok('hero renders <number-flow>', populated.numberFlow);
+    ok('hero has a numeric value', Number.isFinite(populated.heroValue), String(populated.heroValue));
+    ok('hero figure is laid out', populated.heroWidth > 40, populated.heroWidth.toFixed(0) + 'px');
+    ok('chart drew a canvas', populated.chartCanvas);
+    ok('empty state suppressed', !populated.emptyState);
+}
 
 const realErrors = consoleErrors.filter(e => !/favicon|Failed to load resource/i.test(e));
 ok('no console errors', realErrors.length === 0, realErrors.slice(0, 2).join(' | '));

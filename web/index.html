@@ -42,6 +42,9 @@
     <!-- Regenerative Wealth Engine -->
     <script defer src="regenWealth.js"></script>
 
+    <!-- Interaction layer: transitions, sync sweep, haptics, tutorial -->
+    <script defer src="motion.js"></script>
+
     <!-- App Logic (must load before Alpine) -->
     <script defer src="app.js"></script>
     <!-- Starts Alpine; must come after app.js registers alpine:init -->
@@ -60,25 +63,25 @@
             <span class="brand-mark" aria-hidden="true">R</span>
             <span class="flex flex-col items-start leading-none">
                 <span class="font-headline-md text-headline-md-mobile md:text-headline-md text-on-surface tracking-tight text-on-background">RFM</span>
-                <span class="hidden sm:block mt-1 text-[9px] uppercase tracking-[0.16em] text-on-surface-variant">Personal finance</span>
+                <span class="hidden sm:block mt-1 text-[13px] uppercase tracking-[0.16em] text-on-surface-variant">Personal finance</span>
             </span>
         </button>
 
         <!-- Desktop Navigation Tabs -->
         <nav class="hidden md:flex items-center gap-0.5 p-1 rounded-2xl" aria-label="Main navigation" style="background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.07);">
-            <button @click="activePage = 'home'" :class="activePage === 'home' ? 'text-on-primary-container font-bold' : 'text-on-surface-variant hover:text-white'" class="flex items-center gap-2 px-4 py-1.5 rounded-xl text-[12px] transition-all duration-200" :style="activePage === 'home' ? 'background:rgba(68,229,194,0.15); color:#44e5c2;' : ''">
+            <button @click="activePage = 'home'" :class="activePage === 'home' ? 'text-on-primary-container font-bold' : 'text-on-surface-variant hover:text-white'" class="flex items-center gap-2 px-4 py-1.5 rounded-xl text-[13px] transition-all duration-200" :style="activePage === 'home' ? 'background:rgba(68,229,194,0.15); color:#44e5c2;' : ''">
                 <span class="material-symbols-outlined text-[16px]" :style="activePage === 'home' ? 'font-variation-settings: FILL 1' : ''">home</span>
                 Overview
             </button>
-            <button @click="activePage = 'investments'" :class="['investments','stocks','mutualfunds','gold'].includes(activePage) ? 'font-bold' : 'text-on-surface-variant hover:text-white'" class="flex items-center gap-2 px-4 py-1.5 rounded-xl text-[12px] transition-all duration-200" :style="['investments','stocks','mutualfunds','gold'].includes(activePage) ? 'background:rgba(68,229,194,0.15); color:#44e5c2;' : ''">
+            <button @click="activePage = 'investments'" :class="['investments','stocks','mutualfunds','gold'].includes(activePage) ? 'font-bold' : 'text-on-surface-variant hover:text-white'" class="flex items-center gap-2 px-4 py-1.5 rounded-xl text-[13px] transition-all duration-200" :style="['investments','stocks','mutualfunds','gold'].includes(activePage) ? 'background:rgba(68,229,194,0.15); color:#44e5c2;' : ''">
                 <span class="material-symbols-outlined text-[16px]" :style="['investments','stocks','mutualfunds','gold'].includes(activePage) ? 'font-variation-settings: FILL 1' : ''">account_balance_wallet</span>
                 Portfolio
             </button>
-            <button @click="activePage = 'cashflow'" :class="['cashflow','pension','emergency','goals'].includes(activePage) ? 'font-bold' : 'text-on-surface-variant hover:text-white'" class="flex items-center gap-2 px-4 py-1.5 rounded-xl text-[12px] transition-all duration-200" :style="['cashflow','pension','emergency','goals'].includes(activePage) ? 'background:rgba(68,229,194,0.15); color:#44e5c2;' : ''">
+            <button @click="activePage = 'cashflow'" :class="['cashflow','pension','emergency','goals'].includes(activePage) ? 'font-bold' : 'text-on-surface-variant hover:text-white'" class="flex items-center gap-2 px-4 py-1.5 rounded-xl text-[13px] transition-all duration-200" :style="['cashflow','pension','emergency','goals'].includes(activePage) ? 'background:rgba(68,229,194,0.15); color:#44e5c2;' : ''">
                 <span class="material-symbols-outlined text-[16px]" :style="['cashflow','pension','emergency','goals'].includes(activePage) ? 'font-variation-settings: FILL 1' : ''">bar_chart_4_bars</span>
                 Planning
             </button>
-            <button @click="activePage = 'more'" :class="['more','tax','import','maturity','networth','regen'].includes(activePage) ? 'font-bold' : 'text-on-surface-variant hover:text-white'" class="flex items-center gap-2 px-4 py-1.5 rounded-xl text-[12px] transition-all duration-200" :style="['more','tax','import','maturity','networth','regen'].includes(activePage) ? 'background:rgba(68,229,194,0.15); color:#44e5c2;' : ''">
+            <button @click="activePage = 'more'" :class="['more','tax','import','maturity','networth','regen'].includes(activePage) ? 'font-bold' : 'text-on-surface-variant hover:text-white'" class="flex items-center gap-2 px-4 py-1.5 rounded-xl text-[13px] transition-all duration-200" :style="['more','tax','import','maturity','networth','regen'].includes(activePage) ? 'background:rgba(68,229,194,0.15); color:#44e5c2;' : ''">
                 <span class="material-symbols-outlined text-[16px]" :style="['more','tax','import','maturity','networth','regen'].includes(activePage) ? 'font-variation-settings: FILL 1' : ''">apps</span>
                 More
             </button>
@@ -182,8 +185,8 @@
     <div class="relative z-10 p-6 pb-3">
         <!-- Top row: label + date + change badge -->
         <div class="flex justify-between items-start mb-1">
-            <span class="text-[10px] font-bold uppercase tracking-[0.2em] tabular" style="color: #8b8fa8;">MY NET WORTH</span>
-            <div id="nwDayBadge" class="flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold tabular"
+            <span id="nwHero" class="text-[13px] font-semibold tabular" style="color: #a7acb8;">Net worth</span>
+            <div id="nwDayBadge" x-show="hasAnyPortfolioData" class="flex items-center gap-1 px-2.5 py-1 rounded-full text-[13px] font-bold tabular"
                  :class="nwChartChangePct === null || nwChartChangePct >= 0 ? 'text-emerald-400' : 'text-red-400'"
                  style="background: rgba(68,229,194,0.08); border: 1px solid rgba(68,229,194,0.2);">
                 <span class="material-symbols-outlined text-[13px]" style="font-variation-settings: 'FILL' 1;" :class="nwChartChangePct === null || nwChartChangePct >= 0 ? 'text-emerald-400' : 'text-red-400'" x-text="nwChartChangePct === null || nwChartChangePct >= 0 ? 'trending_up' : 'trending_down'"></span>
@@ -191,9 +194,23 @@
             </div>
         </div>
 
-        <!-- Net Worth Number -->
+        <!-- Net Worth Number.
+             Suppressed entirely when there is no data: formatCurrency(0) rendered at
+             44px was the first thing a new user saw, and a confident "₹0" is a worse
+             first impression than an invitation. -->
         <div class="mb-4">
-            <span class="tabular" style="font-size:clamp(32px,8vw,44px); font-weight:800; letter-spacing:-0.5px; color:#ffffff; font-family:'Outfit',sans-serif;" x-text="formatCurrency(netWorthTotal)"></span>
+            <template x-if="hasAnyPortfolioData">
+                <number-flow class="nw-figure tabular"
+                             x-effect="$el.locales = 'en-IN';
+                                       $el.format = { style:'currency', currency:'INR', maximumFractionDigits:0 };
+                                       $el.update && $el.update(netWorthTotal)"></number-flow>
+            </template>
+            <template x-if="!hasAnyPortfolioData">
+                <div class="nw-empty">
+                    <p class="text-white font-semibold" style="font-size:clamp(20px,5vw,26px); letter-spacing:-0.02em;">Let's set up your portfolio</p>
+                    <p class="text-[13px] mt-1" style="color:#8b8fa8;">Add a holding or import a statement — your net worth builds from there.</p>
+                </div>
+            </template>
         </div>
 
         <!-- Top Gainer ticker (like INDMoney) -->
@@ -208,12 +225,18 @@
         </div>
     </div>
 
+    <template x-if="hasAnyPortfolioData">
+    <div>
     <!-- Net-worth series, rendered by TradingView Lightweight Charts into this container -->
     <div class="relative px-6 pb-0" style="height: 140px;">
         <div id="nwChart" style="width:100%;height:140px;"></div>
     </div>
+    </div>
+    </template>
 
-    <p class="relative px-6 pt-1 text-[10px] tabular" style="color:#8b8fa8;"
+    <template x-if="hasAnyPortfolioData">
+    <div>
+    <p class="relative px-6 pt-1 text-[13px] tabular" style="color:#8b8fa8;"
        x-text="nwChartData.length < 2 ? 'Tracking begins with price syncs and portfolio updates. No historical values are fabricated.' : nwChartData.length + ' recorded valuation points'">
     </p>
 
@@ -222,18 +245,20 @@
         <template x-for="range in ['1M','3M','6M','1Y','ALL']" :key="range">
             <button @click="nwChartRange = range; renderNwChart()"
                     :class="nwChartRange === range ? 'text-primary font-bold' : 'text-on-surface-variant hover:text-white'"
-                    class="text-[11px] px-2 py-1 rounded-lg transition-colors duration-150 tabular"
+                    class="text-[13px] px-2 py-1 rounded-lg transition-colors duration-150 tabular"
                     x-text="range"
                     :style="nwChartRange === range ? 'background:rgba(68,229,194,0.1);' : ''"></button>
         </template>
     </div>
+    </div>
+    </template>
 </section>
 
 <!-- ═══════════ ASSET ALLOCATION LIST (INDMoney-style) ═══════════ -->
 <section class="flex flex-col" style="border-radius:20px; overflow:hidden; background:#13151f; border:1px solid rgba(255,255,255,0.06); box-shadow:0 4px 24px rgba(0,0,0,0.4);">
     <div class="flex justify-between items-center px-5 pt-5 pb-3">
         <h3 class="font-semibold text-white text-[15px]">Assets</h3>
-        <span class="text-[11px] tabular" style="color:#8b8fa8;">Total current value</span>
+        <span class="text-[13px] tabular" style="color:#8b8fa8;">Total current value</span>
     </div>
 
     <!-- One row per non-zero asset class -->
@@ -248,11 +273,11 @@
             </div>
             <div class="flex-1 min-w-0">
                 <p class="font-semibold text-white text-[13px] mb-0.5">US Stocks</p>
-                <p class="text-[11px] tabular" style="color:#8b8fa8;" x-text="(totalUsStockValuation/totalAssets*100).toFixed(1) + '% allocation'"></p>
+                <p class="text-[13px] tabular" style="color:#8b8fa8;" x-text="(totalUsStockValuation/totalAssets*100).toFixed(1) + '% allocation'"></p>
             </div>
             <div class="text-right">
                 <p class="font-bold tabular text-white text-[14px]" x-text="formatCurrency(totalUsStockValuation)"></p>
-                <p class="text-[11px] font-bold tabular"
+                <p class="text-[13px] font-bold tabular"
                    :class="totalStockPnLPct >= 0 ? 'text-emerald-400' : 'text-red-400'"
                    x-text="(totalStockPnLPct >= 0 ? '▲' : '▼') + Math.abs(totalStockPnLPct) + '%'"></p>
             </div>
@@ -268,7 +293,7 @@
             </div>
             <div class="flex-1 min-w-0">
                 <p class="font-semibold text-white text-[13px] mb-0.5">Indian Stocks</p>
-                <p class="text-[11px] tabular" style="color:#8b8fa8;" x-text="(totalIndStockValuation/totalAssets*100).toFixed(1) + '% allocation'"></p>
+                <p class="text-[13px] tabular" style="color:#8b8fa8;" x-text="(totalIndStockValuation/totalAssets*100).toFixed(1) + '% allocation'"></p>
             </div>
             <div class="text-right">
                 <p class="font-bold tabular text-white text-[14px]" x-text="formatCurrency(totalIndStockValuation)"></p>
@@ -285,11 +310,11 @@
             </div>
             <div class="flex-1 min-w-0">
                 <p class="font-semibold text-white text-[13px] mb-0.5">Mutual Funds</p>
-                <p class="text-[11px] tabular" style="color:#8b8fa8;" x-text="(getAssetTotal('Mutual Fund')/totalAssets*100).toFixed(1) + '% allocation'"></p>
+                <p class="text-[13px] tabular" style="color:#8b8fa8;" x-text="(getAssetTotal('Mutual Fund')/totalAssets*100).toFixed(1) + '% allocation'"></p>
             </div>
             <div class="text-right">
                 <p class="font-bold tabular text-white text-[14px]" x-text="formatCurrency(getAssetTotal('Mutual Fund'))"></p>
-                <p class="text-[11px] font-bold tabular"
+                <p class="text-[13px] font-bold tabular"
                    :class="Number(totalMfPnLPct) >= 0 ? 'text-emerald-400' : 'text-red-400'"
                    x-text="mfInvestments.length ? ((Number(totalMfPnLPct) >= 0 ? '▲' : '▼') + Math.abs(Number(totalMfPnLPct)).toFixed(2) + '%') : ''"></p>
             </div>
@@ -305,7 +330,7 @@
             </div>
             <div class="flex-1 min-w-0">
                 <p class="font-semibold text-white text-[13px] mb-0.5">Govt. Schemes</p>
-                <p class="text-[11px] tabular" style="color:#8b8fa8;" x-text="(getAssetTotal('Government Scheme')/totalAssets*100).toFixed(1) + '% allocation'"></p>
+                <p class="text-[13px] tabular" style="color:#8b8fa8;" x-text="(getAssetTotal('Government Scheme')/totalAssets*100).toFixed(1) + '% allocation'"></p>
             </div>
             <div class="text-right">
                 <p class="font-bold tabular text-white text-[14px]" x-text="formatCurrency(getAssetTotal('Government Scheme'))"></p>
@@ -322,7 +347,7 @@
             </div>
             <div class="flex-1 min-w-0">
                 <p class="font-semibold text-white text-[13px] mb-0.5">Fixed Deposits</p>
-                <p class="text-[11px] tabular" style="color:#8b8fa8;" x-text="(getAssetTotal('Bank FD')/totalAssets*100).toFixed(1) + '% allocation'"></p>
+                <p class="text-[13px] tabular" style="color:#8b8fa8;" x-text="(getAssetTotal('Bank FD')/totalAssets*100).toFixed(1) + '% allocation'"></p>
             </div>
             <div class="text-right">
                 <p class="font-bold tabular text-white text-[14px]" x-text="formatCurrency(getAssetTotal('Bank FD'))"></p>
@@ -339,7 +364,7 @@
             </div>
             <div class="flex-1 min-w-0">
                 <p class="font-semibold text-white text-[13px] mb-0.5">Gold</p>
-                <p class="text-[11px] tabular" style="color:#8b8fa8;" x-text="(getAssetTotal('Gold')/totalAssets*100).toFixed(1) + '% allocation'"></p>
+                <p class="text-[13px] tabular" style="color:#8b8fa8;" x-text="(getAssetTotal('Gold')/totalAssets*100).toFixed(1) + '% allocation'"></p>
             </div>
             <div class="text-right">
                 <p class="font-bold tabular text-white text-[14px]" x-text="formatCurrency(getAssetTotal('Gold'))"></p>
@@ -362,7 +387,7 @@
 
     <!-- View All button -->
     <template x-if="totalAssets > 0">
-    <button @click="activePage = 'investments'" class="flex items-center justify-center gap-1 py-4 text-primary text-[12px] font-bold hover:opacity-80 transition-opacity" style="border-top: 1px solid rgba(255,255,255,0.05);">
+    <button @click="activePage = 'investments'" class="flex items-center justify-center gap-1 py-4 text-primary text-[13px] font-bold hover:opacity-80 transition-opacity" style="border-top: 1px solid rgba(255,255,255,0.05);">
         View All Assets <span class="material-symbols-outlined text-[15px]">arrow_forward</span>
     </button>
     </template>
@@ -451,7 +476,7 @@
          style="background: linear-gradient(145deg, #13151f 0%, #1a1c28 60%, #13151f 100%); border: 1px solid rgba(255,255,255,0.07); box-shadow: 0 8px 32px rgba(0,0,0,0.6);">
     <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-            <span class="text-[10px] font-bold uppercase tracking-[0.2em] block mb-1" style="color: #8b8fa8;">PORTFOLIO VALUE</span>
+            <span class="text-[13px] font-bold uppercase tracking-[0.2em] block mb-1" style="color: #8b8fa8;">PORTFOLIO VALUE</span>
             <div class="flex items-baseline gap-3">
                 <span class="tabular text-3xl sm:text-4xl font-extrabold text-white" style="font-family:'Outfit',sans-serif;" x-text="formatCurrency(totalAssets)"></span>
                 <span class="text-xs px-2.5 py-0.5 rounded-full font-bold tabular"
@@ -465,7 +490,7 @@
             </p>
         </div>
         <div class="flex items-center gap-2 flex-wrap">
-            <button @click="fetchAllPrices()" :disabled="navFetchState === 'fetching'"
+            <button id="syncButton" @click="fetchAllPrices()" :disabled="navFetchState === 'fetching'"
                     class="text-xs font-semibold px-3 py-2.5 rounded-xl border text-primary transition-all flex items-center gap-1.5 hover:bg-primary/10 disabled:opacity-50"
                     style="border-color:rgba(68,229,194,0.3); background:rgba(68,229,194,0.08);">
                 <span class="material-symbols-outlined text-[16px]" :class="navFetchState === 'fetching' ? 'animate-spin' : ''">sync</span>
@@ -494,13 +519,17 @@
                                 <span class="material-symbols-outlined text-[18px] text-primary" :class="navFetchState === 'fetching' ? 'animate-spin' : ''">sync</span>
                                 <span>Sync live prices</span>
                             </button>
+                            <button @click="replayTutorial()" class="w-full text-left text-sm px-4 py-3.5 rounded-xl flex items-center gap-3 hover:bg-white/5 transition-colors text-white">
+                                <span class="material-symbols-outlined text-[18px] text-primary">psychology</span>
+                                <span>Replay tutorial</span>
+                            </button>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
     </div>
-    <p x-show="navFetchState === 'fetching' || navFetchError" x-cloak class="mt-3 text-[11px] leading-relaxed" :class="navFetchState === 'error' ? 'text-red-300' : 'text-on-surface-variant'"
+    <p x-show="navFetchState === 'fetching' || navFetchError" x-cloak class="mt-3 text-[13px] leading-relaxed" :class="navFetchState === 'error' ? 'text-red-300' : 'text-on-surface-variant'"
        x-text="navFetchState === 'fetching' ? 'Syncing ' + navFetchProgress.completed + '/' + navFetchProgress.total + ' holdings...' : navFetchError"></p>
 </section>
 
@@ -516,13 +545,13 @@
             </div>
             <div class="text-right">
                 <span class="text-xs font-bold text-white font-mono tabular block" x-text="formatCurrency(totalUsStockValuation)"></span>
-                <span class="text-[10px] text-[#d4af37] font-mono font-bold tabular block" x-text="'$' + totalUsStockUSD.toFixed(2) + ' USD'"></span>
+                <span class="text-[13px] text-[#d4af37] font-mono font-bold tabular block" x-text="'$' + totalUsStockUSD.toFixed(2) + ' USD'"></span>
             </div>
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
             <template x-for="inv in usStockList" :key="inv.id">
-                <div @click="openEditModal(inv)" class="p-4 rounded-2xl cursor-pointer transition-all hover:border-white/20 relative group"
+                <div data-holding-row @click="openEditModal(inv)" class="p-4 rounded-2xl cursor-pointer transition-all hover:border-white/20 relative group"
                      style="background:#13151f; border:1px solid rgba(255,255,255,0.06); box-shadow:0 4px 16px rgba(0,0,0,0.3);">
                     <div class="flex justify-between items-start mb-3">
                         <div class="flex items-center gap-2.5 min-w-0">
@@ -531,7 +560,7 @@
                                   x-text="inv.ticker || 'US'"></span>
                             <div class="min-w-0">
                                 <h5 class="font-semibold text-white text-[13px] truncate" x-text="inv.name"></h5>
-                                <span class="text-[11px] tabular block" style="color:#8b8fa8;" x-text="inv.units + ' Shares @ $' + inv.buyPrice"></span>
+                                <span class="text-[13px] tabular block" style="color:#8b8fa8;" x-text="inv.units + ' Shares @ $' + inv.buyPrice"></span>
                             </div>
                         </div>
                         <button @click.stop="deleteInvestment(inv.id)" class="p-1 rounded-lg text-white/30 hover:text-red-400 hover:bg-red-950/30 shrink-0 ml-2">
@@ -540,16 +569,16 @@
                     </div>
                     <div class="grid grid-cols-3 gap-2 pt-2.5 text-xs" style="border-top:1px solid rgba(255,255,255,0.05);">
                         <div>
-                            <span class="text-[9px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">Live Price</span>
-                            <span class="font-bold text-[#d4af37] font-mono text-[12px] tabular" x-text="'$' + Number(inv.currentPrice || inv.buyPrice).toFixed(2)"></span>
+                            <span class="text-[13px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">Live Price</span>
+                            <span class="font-bold text-[#d4af37] font-mono text-[13px] tabular" x-text="'$' + Number(inv.currentPrice || inv.buyPrice).toFixed(2)"></span>
                         </div>
                         <div>
-                            <span class="text-[9px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">Value (INR)</span>
-                            <span class="font-bold text-white font-mono text-[12px] tabular" x-text="formatCurrency(getInvCurrentValue(inv))"></span>
+                            <span class="text-[13px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">Value (INR)</span>
+                            <span class="font-bold text-white font-mono text-[13px] tabular" x-text="formatCurrency(getInvCurrentValue(inv))"></span>
                         </div>
                         <div class="text-right">
-                            <span class="text-[9px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">P&amp;L</span>
-                            <span class="font-bold tabular text-[11px]"
+                            <span class="text-[13px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">P&amp;L</span>
+                            <span class="font-bold tabular text-[13px]"
                                   :class="getInvPnL(inv) >= 0 ? 'text-emerald-400' : 'text-red-400'"
                                   x-text="(getInvPnL(inv) >= 0 ? '+' : '') + formatCurrency(getInvPnL(inv)) + ' (' + getInvPnLPct(inv) + '%)'"></span>
                         </div>
@@ -574,7 +603,7 @@
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
             <template x-for="inv in indStockList" :key="inv.id">
-                <div @click="openEditModal(inv)" class="p-4 rounded-2xl cursor-pointer transition-all hover:border-white/20 relative group"
+                <div data-holding-row @click="openEditModal(inv)" class="p-4 rounded-2xl cursor-pointer transition-all hover:border-white/20 relative group"
                      style="background:#13151f; border:1px solid rgba(255,255,255,0.06); box-shadow:0 4px 16px rgba(0,0,0,0.3);">
                     <div class="flex justify-between items-start mb-3">
                         <div class="flex items-center gap-2.5 min-w-0">
@@ -583,7 +612,7 @@
                                   x-text="inv.ticker || 'IND'"></span>
                             <div class="min-w-0">
                                 <h5 class="font-semibold text-white text-[13px] truncate" x-text="inv.name"></h5>
-                                <span class="text-[11px] tabular block" style="color:#8b8fa8;" x-text="inv.units + ' Shares'"></span>
+                                <span class="text-[13px] tabular block" style="color:#8b8fa8;" x-text="inv.units + ' Shares'"></span>
                             </div>
                         </div>
                         <button @click.stop="deleteInvestment(inv.id)" class="p-1 rounded-lg text-white/30 hover:text-red-400 hover:bg-red-950/30 shrink-0 ml-2">
@@ -592,16 +621,16 @@
                     </div>
                     <div class="grid grid-cols-3 gap-2 pt-2.5 text-xs" style="border-top:1px solid rgba(255,255,255,0.05);">
                         <div>
-                            <span class="text-[9px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">Live Price</span>
-                            <span class="font-bold text-primary font-mono text-[12px] tabular" x-text="'₹' + Number(inv.currentPrice || inv.buyPrice).toFixed(2)"></span>
+                            <span class="text-[13px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">Live Price</span>
+                            <span class="font-bold text-primary font-mono text-[13px] tabular" x-text="'₹' + Number(inv.currentPrice || inv.buyPrice).toFixed(2)"></span>
                         </div>
                         <div>
-                            <span class="text-[9px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">Value (INR)</span>
-                            <span class="font-bold text-white font-mono text-[12px] tabular" x-text="formatCurrency(getInvCurrentValue(inv))"></span>
+                            <span class="text-[13px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">Value (INR)</span>
+                            <span class="font-bold text-white font-mono text-[13px] tabular" x-text="formatCurrency(getInvCurrentValue(inv))"></span>
                         </div>
                         <div class="text-right">
-                            <span class="text-[9px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">P&amp;L</span>
-                            <span class="font-bold tabular text-[11px]"
+                            <span class="text-[13px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">P&amp;L</span>
+                            <span class="font-bold tabular text-[13px]"
                                   :class="getInvPnL(inv) >= 0 ? 'text-emerald-400' : 'text-red-400'"
                                   x-text="(getInvPnL(inv) >= 0 ? '+' : '') + formatCurrency(getInvPnL(inv)) + ' (' + getInvPnLPct(inv) + '%)'"></span>
                         </div>
@@ -626,7 +655,7 @@
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
             <template x-for="inv in mutualFundList" :key="inv.id">
-                <div @click="openEditModal(inv)" class="p-4 rounded-2xl cursor-pointer transition-all hover:border-white/20 relative group"
+                <div data-holding-row @click="openEditModal(inv)" class="p-4 rounded-2xl cursor-pointer transition-all hover:border-white/20 relative group"
                      style="background:#13151f; border:1px solid rgba(255,255,255,0.06); box-shadow:0 4px 16px rgba(0,0,0,0.3);">
                     <div class="flex justify-between items-start mb-3">
                         <div class="flex items-center gap-2.5 min-w-0">
@@ -635,7 +664,7 @@
                                   x-text="inv.schemeCode ? ('AMFI ' + inv.schemeCode) : 'MF'"></span>
                             <div class="min-w-0">
                                 <h5 class="font-semibold text-white text-[13px] truncate" x-text="inv.name"></h5>
-                                <span class="text-[11px] tabular block" style="color:#8b8fa8;" x-text="inv.units + ' Units @ ₹' + inv.buyPrice"></span>
+                                <span class="text-[13px] tabular block" style="color:#8b8fa8;" x-text="inv.units + ' Units @ ₹' + inv.buyPrice"></span>
                             </div>
                         </div>
                         <button @click.stop="deleteInvestment(inv.id)" class="p-1 rounded-lg text-white/30 hover:text-red-400 hover:bg-red-950/30 shrink-0 ml-2">
@@ -644,16 +673,16 @@
                     </div>
                     <div class="grid grid-cols-3 gap-2 pt-2.5 text-xs" style="border-top:1px solid rgba(255,255,255,0.05);">
                         <div>
-                            <span class="text-[9px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">Live NAV</span>
-                            <span class="font-bold text-primary font-mono text-[12px] tabular" x-text="'₹' + Number(inv.currentPrice || inv.buyPrice).toFixed(2)"></span>
+                            <span class="text-[13px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">Live NAV</span>
+                            <span class="font-bold text-primary font-mono text-[13px] tabular" x-text="'₹' + Number(inv.currentPrice || inv.buyPrice).toFixed(2)"></span>
                         </div>
                         <div>
-                            <span class="text-[9px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">Current Value</span>
-                            <span class="font-bold text-white font-mono text-[12px] tabular" x-text="formatCurrency(getInvCurrentValue(inv))"></span>
+                            <span class="text-[13px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">Current Value</span>
+                            <span class="font-bold text-white font-mono text-[13px] tabular" x-text="formatCurrency(getInvCurrentValue(inv))"></span>
                         </div>
                         <div class="text-right">
-                            <span class="text-[9px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">P&amp;L</span>
-                            <span class="font-bold tabular text-[11px]"
+                            <span class="text-[13px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">P&amp;L</span>
+                            <span class="font-bold tabular text-[13px]"
                                   :class="getInvPnL(inv) >= 0 ? 'text-emerald-400' : 'text-red-400'"
                                   x-text="(getInvPnL(inv) >= 0 ? '+' : '') + formatCurrency(getInvPnL(inv)) + ' (' + getInvPnLPct(inv) + '%)'"></span>
                         </div>
@@ -677,7 +706,7 @@
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
             <template x-for="inv in debtAndEpfList" :key="inv.id">
-                <div @click="openEditModal(inv)" class="p-4 rounded-2xl cursor-pointer transition-all hover:border-white/20 relative group"
+                <div data-holding-row @click="openEditModal(inv)" class="p-4 rounded-2xl cursor-pointer transition-all hover:border-white/20 relative group"
                      style="background:#13151f; border:1px solid rgba(255,255,255,0.06); box-shadow:0 4px 16px rgba(0,0,0,0.3);">
                     <div class="flex justify-between items-start mb-3">
                         <div class="flex items-center gap-2.5 min-w-0">
@@ -686,18 +715,18 @@
                                   x-text="inv.type"></span>
                             <div class="min-w-0">
                                 <h5 class="font-semibold text-white text-[13px] truncate" x-text="inv.name"></h5>
-                                <span class="text-[11px] block" style="color:#8b8fa8;" x-text="inv.issuer || 'Government of India'"></span>
+                                <span class="text-[13px] block" style="color:#8b8fa8;" x-text="inv.issuer || 'Government of India'"></span>
                             </div>
                         </div>
                     </div>
                     <div class="grid grid-cols-2 gap-2 pt-2.5 text-xs" style="border-top:1px solid rgba(255,255,255,0.05);">
                         <div>
-                            <span class="text-[9px] uppercase block mb-0.5" style="color:#8b8fa8;">Guaranteed Rate</span>
-                            <span class="font-bold text-emerald-400 font-mono tabular text-[12px]" x-text="(inv.rate || '8.25') + '% p.a.'"></span>
+                            <span class="text-[13px] uppercase block mb-0.5" style="color:#8b8fa8;">Guaranteed Rate</span>
+                            <span class="font-bold text-emerald-400 font-mono tabular text-[13px]" x-text="(inv.rate || '8.25') + '% p.a.'"></span>
                         </div>
                         <div class="text-right">
-                            <span class="text-[9px] uppercase block mb-0.5" style="color:#8b8fa8;">Corpus</span>
-                            <span class="font-bold text-white font-mono tabular text-[12px]" x-text="formatCurrency(getInvCurrentValue(inv))"></span>
+                            <span class="text-[13px] uppercase block mb-0.5" style="color:#8b8fa8;">Corpus</span>
+                            <span class="font-bold text-white font-mono tabular text-[13px]" x-text="formatCurrency(getInvCurrentValue(inv))"></span>
                         </div>
                     </div>
                 </div>
@@ -714,7 +743,7 @@
     <div class="flex justify-between items-center px-1">
         <div>
             <h3 class="font-bold text-white text-sm">SIP &amp; Recurring Mandates</h3>
-            <p class="text-[11px]" style="color:#8b8fa8;">Monthly Outflow: <span class="text-primary font-bold tabular" x-text="formatCurrency(totalMonthlySipOutflow)"></span></p>
+            <p class="text-[13px]" style="color:#8b8fa8;">Monthly Outflow: <span class="text-primary font-bold tabular" x-text="formatCurrency(totalMonthlySipOutflow)"></span></p>
         </div>
         <button @click="addingSip = true" class="text-xs font-semibold px-3 py-1.5 rounded-xl border text-primary transition-all"
                 style="border-color:rgba(68,229,194,0.3); background:rgba(68,229,194,0.1);">+ Add SIP</button>
@@ -726,15 +755,15 @@
                  style="background:#13151f; border:1px solid rgba(255,255,255,0.06); box-shadow:0 2px 12px rgba(0,0,0,0.3);">
                 <div class="min-w-0 cursor-pointer" @click="openEditSipModal(sip)">
                     <div class="flex items-center gap-2">
-                        <span class="text-[10px] px-2 py-0.5 rounded font-bold font-mono text-[#d4af37]"
+                        <span class="text-[13px] px-2 py-0.5 rounded font-bold font-mono text-[#d4af37]"
                               style="background:rgba(212,175,55,0.12);" x-text="sip.type || 'SIP'"></span>
                         <span class="font-semibold text-white text-[13px] truncate" x-text="sip.name"></span>
                     </div>
-                    <p class="text-[11px] mt-0.5 tabular" style="color:#8b8fa8;" x-text="'Debit on ' + (sip.dayOfMonth || 3) + 'th of every month'"></p>
+                    <p class="text-[13px] mt-0.5 tabular" style="color:#8b8fa8;" x-text="'Debit on ' + (sip.dayOfMonth || 3) + 'th of every month'"></p>
                 </div>
                 <div class="flex items-center gap-2 shrink-0 ml-2">
                     <button @click="toggleSipStatus(sip); saveData()"
-                            class="px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all"
+                            class="px-2.5 py-1 rounded-lg text-[13px] font-bold transition-all"
                             :class="sip.status === 'Active' ? 'bg-emerald-950/60 text-emerald-400 border border-emerald-500/30' : 'bg-amber-950/60 text-amber-400 border border-amber-500/30'">
                         <span x-text="sip.status === 'Active' ? 'Active' : 'Skipped / Paused'"></span>
                     </button>
@@ -769,16 +798,16 @@
     </div>
     <div class="flex-1 min-w-0">
         <p class="text-xs font-semibold text-white" x-text="(localStorage.getItem('rfm_api_key') || localStorage.getItem('rfm_gemini_key')) ? 'AI Classifier Active — Universal LLM Engine' : 'AI Classifier Inactive'"></p>
-        <p class="text-[11px] text-on-surface-variant leading-relaxed"
+        <p class="text-[13px] text-on-surface-variant leading-relaxed"
            x-text="(localStorage.getItem('rfm_api_key') || localStorage.getItem('rfm_gemini_key')) ? 'Any unsupported PDF format will automatically be parsed using your connected AI key.' : 'Add an API key (OpenRouter, Gemini, or OpenAI) in the Regenerative Wealth module to enable AI fallback.'">
         </p>
     </div>
     <button x-show="!(localStorage.getItem('rfm_api_key') || localStorage.getItem('rfm_gemini_key'))" @click="activePage = 'regen'"
-            class="shrink-0 text-[11px] font-semibold text-[#d4af37] px-3 py-1.5 rounded-lg border border-[#d4af37]/30 hover:bg-[#d4af37]/10 transition-all">
+            class="shrink-0 text-[13px] font-semibold text-[#d4af37] px-3 py-1.5 rounded-lg border border-[#d4af37]/30 hover:bg-[#d4af37]/10 transition-all">
         Enable AI
     </button>
     <span x-show="(localStorage.getItem('rfm_api_key') || localStorage.getItem('rfm_gemini_key'))"
-          class="shrink-0 text-[11px] font-semibold text-primary bg-primary/10 border border-primary/30 px-3 py-1.5 rounded-lg">
+          class="shrink-0 text-[13px] font-semibold text-primary bg-primary/10 border border-primary/30 px-3 py-1.5 rounded-lg">
         Active ✓
     </span>
 </div>
@@ -868,8 +897,8 @@
         <h3 class="text-lg font-bold text-white">Parse Results</h3>
         <!-- Phase 13: AI badge -->
         <template x-if="aiClassifier.usedAI">
-            <span class="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-gradient-to-r from-violet-600/20 to-primary/20 border border-primary/40 text-primary">
-                <span class="material-symbols-outlined text-[12px]" style="font-variation-settings: 'FILL' 1;">auto_awesome</span>
+            <span class="flex items-center gap-1 text-[13px] font-bold px-2 py-0.5 rounded-full bg-gradient-to-r from-violet-600/20 to-primary/20 border border-primary/40 text-primary">
+                <span class="material-symbols-outlined text-[13px]" style="font-variation-settings: 'FILL' 1;">auto_awesome</span>
                 AI Classified
             </span>
         </template>
@@ -883,11 +912,11 @@
     </p>
     <!-- AI Document Summary -->
     <template x-if="aiClassifier.usedAI && importResults.aiDocumentSummary">
-        <p class="text-[11px] text-on-surface-variant italic mt-0.5 leading-relaxed" x-text="'AI: ' + importResults.aiDocumentSummary"></p>
+        <p class="text-[13px] text-on-surface-variant italic mt-0.5 leading-relaxed" x-text="'AI: ' + importResults.aiDocumentSummary"></p>
     </template>
     <!-- AI Confidence badge -->
     <template x-if="aiClassifier.usedAI">
-        <span class="text-[10px] mt-0.5"
+        <span class="text-[13px] mt-0.5"
               :class="aiClassifier.confidence === 'High' ? 'text-emerald-400' : aiClassifier.confidence === 'Low' ? 'text-amber-400' : 'text-on-surface-variant'"
               x-text="'Confidence: ' + (aiClassifier.confidence || 'Medium')"></span>
     </template>
@@ -927,11 +956,11 @@
 </td>
 <td class="py-2.5 px-3 font-semibold text-white" x-text="inv.name"></td>
 <td class="py-2.5 px-3 text-on-surface-variant" x-text="inv.type"></td>
-<td class="py-2.5 px-3 font-mono text-[11px] text-white/70" x-text="inv.isin || '—'"></td>
+<td class="py-2.5 px-3 font-mono text-[13px] text-white/70" x-text="inv.isin || '—'"></td>
 <td class="py-2.5 px-3 text-right text-white" x-text="inv.units ? inv.units.toLocaleString('en-IN', {maximumFractionDigits: 4}) : '—'"></td>
 <td class="py-2.5 px-3 text-right font-bold text-primary" x-text="formatCurrency(inv.amount)"></td>
 <td class="py-2.5 px-3 text-center">
-<span class="px-2 py-0.5 rounded text-[10px] font-semibold" :class="findDuplicate(inv) ? 'bg-amber-950/60 text-amber-400 border border-amber-500/30' : 'bg-emerald-950/60 text-emerald-400 border border-emerald-500/30'" x-text="findDuplicate(inv) ? '⚠️ Dup' : '✅ New'"></span>
+<span class="px-2 py-0.5 rounded text-[13px] font-semibold" :class="findDuplicate(inv) ? 'bg-amber-950/60 text-amber-400 border border-amber-500/30' : 'bg-emerald-950/60 text-emerald-400 border border-emerald-500/30'" x-text="findDuplicate(inv) ? '⚠️ Dup' : '✅ New'"></span>
 </td>
 </tr>
 </template>
@@ -1012,7 +1041,7 @@ Restore from JSON
         <div class="p-5 rounded-2xl flex flex-col justify-between relative overflow-hidden"
              style="background:#13151f; border:1px solid rgba(255,255,255,0.06); box-shadow:0 4px 16px rgba(0,0,0,0.3);">
             <div class="flex items-center justify-between mb-3">
-                <span class="text-[10px] uppercase font-bold tracking-wider" style="color:#8b8fa8;">Total Interest Income</span>
+                <span class="text-[13px] uppercase font-bold tracking-wider" style="color:#8b8fa8;">Total Interest Income</span>
                 <span class="material-symbols-outlined text-primary text-xl">trending_up</span>
             </div>
             <div class="text-3xl font-extrabold text-white mb-2 tabular" style="font-family:'Outfit',sans-serif;" x-text="formatCurrency(totalInterestIncome || 0)"></div>
@@ -1024,21 +1053,21 @@ Restore from JSON
              style="background:#13151f; border:1px solid rgba(255,255,255,0.06); box-shadow:0 4px 16px rgba(0,0,0,0.3);">
             <div>
                 <div class="flex items-center justify-between mb-2">
-                    <span class="text-[10px] uppercase font-bold tracking-wider" style="color:#8b8fa8;">Capital Gains Tax</span>
+                    <span class="text-[13px] uppercase font-bold tracking-wider" style="color:#8b8fa8;">Capital Gains Tax</span>
                     <span class="material-symbols-outlined text-red-400 text-xl">monitoring</span>
                 </div>
                 <div class="text-3xl font-extrabold text-white mb-3 tabular" style="font-family:'Outfit',sans-serif;" x-text="formatCurrency(totalCapitalGainsTax)"></div>
 
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-3 text-xs" style="border-top:1px solid rgba(255,255,255,0.05);">
                     <div class="p-2.5 rounded-xl" style="background:#0d0f1a; border:1px solid rgba(255,255,255,0.05);">
-                        <span class="text-[10px] block" style="color:#8b8fa8;">Equity LTCG (&gt;12m, 12.5%)</span>
+                        <span class="text-[13px] block" style="color:#8b8fa8;">Equity LTCG (&gt;12m, 12.5%)</span>
                         <span class="font-bold text-white tabular" x-text="formatCurrency(equityLTCG ? equityLTCG.totalGains : 0) + ' Gain'"></span>
-                        <span class="text-[10px] text-emerald-400 block mt-0.5 tabular" x-text="'Exempt: ' + formatCurrency(equityLTCG ? equityLTCG.exemptionUsed : 0)"></span>
+                        <span class="text-[13px] text-emerald-400 block mt-0.5 tabular" x-text="'Exempt: ' + formatCurrency(equityLTCG ? equityLTCG.exemptionUsed : 0)"></span>
                         <span class="font-semibold text-red-400 block mt-0.5 tabular" x-text="'Tax: ' + formatCurrency(equityLTCG ? equityLTCG.tax : 0)"></span>
                     </div>
 
                     <div class="p-2.5 rounded-xl" style="background:#0d0f1a; border:1px solid rgba(255,255,255,0.05);">
-                        <span class="text-[10px] block" style="color:#8b8fa8;">Equity STCG (≤12m, 20%)</span>
+                        <span class="text-[13px] block" style="color:#8b8fa8;">Equity STCG (≤12m, 20%)</span>
                         <span class="font-bold text-white tabular" x-text="formatCurrency(equitySTCG ? equitySTCG.totalGains : 0) + ' Gain'"></span>
                         <span class="font-semibold text-red-400 block mt-1 tabular" x-text="'Tax: ' + formatCurrency(equitySTCG ? equitySTCG.tax : 0)"></span>
                     </div>
@@ -1055,7 +1084,7 @@ Restore from JSON
         <div class="p-5 rounded-2xl flex flex-col justify-between relative overflow-hidden"
              style="background:#13151f; border:1px solid rgba(255,255,255,0.06); box-shadow:0 4px 16px rgba(0,0,0,0.3);">
             <div class="flex items-center justify-between mb-3">
-                <span class="text-[10px] uppercase font-bold tracking-wider" style="color:#8b8fa8;">TDS Deducted</span>
+                <span class="text-[13px] uppercase font-bold tracking-wider" style="color:#8b8fa8;">TDS Deducted</span>
                 <span class="material-symbols-outlined text-amber-300 text-xl">receipt</span>
             </div>
             <div class="text-3xl font-extrabold text-white mb-2 tabular" style="font-family:'Outfit',sans-serif;" x-text="formatCurrency(totalTds || 0)"></div>
@@ -1067,7 +1096,7 @@ Restore from JSON
              style="background: linear-gradient(145deg, #13151f 0%, #1c2030 60%, #13151f 100%); border: 1px solid rgba(212,175,55,0.25); box-shadow: 0 4px 16px rgba(0,0,0,0.4);">
             <div>
                 <div class="flex items-center justify-between mb-3">
-                    <span class="text-[10px] uppercase font-bold tracking-wider" style="color:#8b8fa8;">Net Total Tax Payable</span>
+                    <span class="text-[13px] uppercase font-bold tracking-wider" style="color:#8b8fa8;">Net Total Tax Payable</span>
                     <span class="material-symbols-outlined text-[#d4af37] text-xl">account_balance</span>
                 </div>
                 <div class="text-3xl md:text-4xl font-extrabold text-[#d4af37] mb-2 tabular" style="font-family:'Outfit',sans-serif;" x-text="formatCurrency(netTaxPayable || 0)"></div>
@@ -1095,19 +1124,19 @@ Restore from JSON
                 <div class="p-3.5 rounded-xl" style="background:#0d0f1a;" :class="recommendedRegime === 'old' ? 'border border-primary' : 'border border-white/5'">
                     <div class="flex justify-between items-center mb-1">
                         <span class="font-bold text-white text-xs">Old Regime</span>
-                        <span x-show="recommendedRegime === 'old'" class="text-[10px] text-primary font-bold">Best ★</span>
+                        <span x-show="recommendedRegime === 'old'" class="text-[13px] text-primary font-bold">Best ★</span>
                     </div>
                     <div class="text-lg font-bold text-white my-1 tabular" x-text="formatCurrency(oldRegimeTax.tax)"></div>
-                    <p class="text-[11px]" style="color:#8b8fa8;">Allows 80C, 80D, 80TTB &amp; Home Loan deductions.</p>
+                    <p class="text-[13px]" style="color:#8b8fa8;">Allows 80C, 80D, 80TTB &amp; Home Loan deductions.</p>
                 </div>
 
                 <div class="p-3.5 rounded-xl" style="background:#0d0f1a;" :class="recommendedRegime === 'new' ? 'border border-primary' : 'border border-white/5'">
                     <div class="flex justify-between items-center mb-1">
                         <span class="font-bold text-white text-xs">New Regime</span>
-                        <span x-show="recommendedRegime === 'new'" class="text-[10px] text-primary font-bold">Best ★</span>
+                        <span x-show="recommendedRegime === 'new'" class="text-[13px] text-primary font-bold">Best ★</span>
                     </div>
                     <div class="text-lg font-bold text-white my-1 tabular" x-text="formatCurrency(newRegimeTax.tax)"></div>
-                    <p class="text-[11px]" style="color:#8b8fa8;">₹75,000 Standard deduction (FY 2024-25), zero tax up to ₹7L.</p>
+                    <p class="text-[13px]" style="color:#8b8fa8;">₹75,000 Standard deduction (FY 2024-25), zero tax up to ₹7L.</p>
                 </div>
             </div>
         </div>
@@ -1124,9 +1153,9 @@ Restore from JSON
                 <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
                     <template x-for="item in advanceTaxSchedule" :key="item.due">
                         <div class="p-2.5 rounded-xl text-xs" style="background:#0d0f1a; border:1px solid rgba(255,255,255,0.05);">
-                            <span class="text-[10px] block" style="color:#8b8fa8;" x-text="item.due"></span>
+                            <span class="text-[13px] block" style="color:#8b8fa8;" x-text="item.due"></span>
                             <span class="font-bold text-primary block my-1 tabular" x-text="formatCurrency(item.amount)"></span>
-                            <span class="text-[10px] text-white/70 block tabular" x-text="item.pct + '% Due'"></span>
+                            <span class="text-[13px] text-white/70 block tabular" x-text="item.pct + '% Due'"></span>
                         </div>
                     </template>
                 </div>
@@ -1159,7 +1188,7 @@ Restore from JSON
                 <div>
                     <div class="flex items-center gap-2 flex-wrap">
                         <h3 class="font-bold text-white text-base">Regenerative Wealth AI</h3>
-                        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold text-black" style="background:#d4af37;">AI Engine</span>
+                        <span class="px-2 py-0.5 rounded-full text-[13px] font-bold text-black" style="background:#d4af37;">AI Engine</span>
                     </div>
                     <p class="text-xs mt-1" style="color:#8b8fa8;">Intelligent daily reinvestment strategy synthesized from your live holdings and macro trends.</p>
                 </div>
@@ -1390,7 +1419,7 @@ Restore from JSON
                 <span class="material-symbols-outlined text-[16px] text-[#d4af37]">key</span>
                 API Key Management
             </span>
-            <span class="text-[10px] text-white/40 font-mono">100% Client-Side Local Storage</span>
+            <span class="text-[13px] text-white/40 font-mono">100% Client-Side Local Storage</span>
         </div>
 
         <div class="flex flex-col sm:flex-row gap-3">
@@ -1411,27 +1440,27 @@ Restore from JSON
                class="p-3 rounded-xl bg-surface-container-lowest/60 border border-white/5 hover:border-[#d4af37]/40 transition-all group">
                 <div class="flex items-center justify-between mb-1">
                     <span class="text-xs font-semibold text-white group-hover:text-[#d4af37] transition-colors">OpenRouter</span>
-                    <span class="text-[10px] text-[#d4af37] font-mono">sk-or-v1-...</span>
+                    <span class="text-[13px] text-[#d4af37] font-mono">sk-or-v1-...</span>
                 </div>
-                <p class="text-[10px] text-on-surface-variant leading-tight">Access 100+ models (Gemini, Llama, DeepSeek) →</p>
+                <p class="text-[13px] text-on-surface-variant leading-tight">Access 100+ models (Gemini, Llama, DeepSeek) →</p>
             </a>
 
             <a href="https://aistudio.google.com/app/apikey" target="_blank"
                class="p-3 rounded-xl bg-surface-container-lowest/60 border border-white/5 hover:border-emerald-400/40 transition-all group">
                 <div class="flex items-center justify-between mb-1">
                     <span class="text-xs font-semibold text-white group-hover:text-emerald-400 transition-colors">Google Gemini</span>
-                    <span class="text-[10px] text-emerald-400 font-mono">AIzaSy...</span>
+                    <span class="text-[13px] text-emerald-400 font-mono">AIzaSy...</span>
                 </div>
-                <p class="text-[10px] text-on-surface-variant leading-tight">Free direct API keys from AI Studio →</p>
+                <p class="text-[13px] text-on-surface-variant leading-tight">Free direct API keys from AI Studio →</p>
             </a>
 
             <a href="https://platform.openai.com/api-keys" target="_blank"
                class="p-3 rounded-xl bg-surface-container-lowest/60 border border-white/5 hover:border-sky-400/40 transition-all group">
                 <div class="flex items-center justify-between mb-1">
                     <span class="text-xs font-semibold text-white group-hover:text-sky-400 transition-colors">OpenAI</span>
-                    <span class="text-[10px] text-sky-400 font-mono">sk-...</span>
+                    <span class="text-[13px] text-sky-400 font-mono">sk-...</span>
                 </div>
-                <p class="text-[10px] text-on-surface-variant leading-tight">Direct GPT-4o / GPT-4o-mini keys →</p>
+                <p class="text-[13px] text-on-surface-variant leading-tight">Direct GPT-4o / GPT-4o-mini keys →</p>
             </a>
         </div>
     </div>
@@ -1448,13 +1477,13 @@ Restore from JSON
                 <span class="material-symbols-outlined text-[16px] text-[#d4af37]">tune</span>
                 Model Switcher &amp; Provider Settings
             </span>
-            <span class="text-[10px] text-[#d4af37] font-semibold"
+            <span class="text-[13px] text-[#d4af37] font-semibold"
                   x-text="regenWealth.model === 'custom' ? (regenWealth.customModel || 'Custom') : regenWealth.model"></span>
         </div>
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-                <label class="block text-[11px] font-semibold text-on-surface-variant mb-1">Provider Detection Mode</label>
+                <label class="block text-[13px] font-semibold text-on-surface-variant mb-1">Provider Detection Mode</label>
                 <select x-model="regenWealth.provider" @change="saveRegenApiKey(false); loadRegenModelCatalog()" class="w-full px-3 py-2 rounded-xl bg-surface-container-lowest border border-white/10 text-white text-xs outline-none focus:border-[#d4af37]">
                     <option value="auto">Auto-Detect from Key Prefix</option>
                     <option value="openrouter">Force OpenRouter API</option>
@@ -1465,8 +1494,8 @@ Restore from JSON
 
             <div>
                 <div class="flex items-center justify-between gap-2 mb-1">
-                    <label class="block text-[11px] font-semibold text-on-surface-variant">Active Model</label>
-                    <button type="button" @click="loadRegenModelCatalog()" :disabled="regenWealth.modelCatalogState === 'loading'" class="text-[10px] text-primary disabled:opacity-50">
+                    <label class="block text-[13px] font-semibold text-on-surface-variant">Active Model</label>
+                    <button type="button" @click="loadRegenModelCatalog()" :disabled="regenWealth.modelCatalogState === 'loading'" class="text-[13px] text-primary disabled:opacity-50">
                         <span x-text="regenWealth.modelCatalogState === 'loading' ? 'Loading catalog...' : 'Refresh live catalog'"></span>
                     </button>
                 </div>
@@ -1483,13 +1512,13 @@ Restore from JSON
                     </template>
                     <option value="custom">⚙️ Custom Model String...</option>
                 </select>
-                <p x-show="regenWealth.modelCatalogError" x-cloak class="mt-1 text-[10px] text-amber-300" x-text="regenWealth.modelCatalogError"></p>
+                <p x-show="regenWealth.modelCatalogError" x-cloak class="mt-1 text-[13px] text-amber-300" x-text="regenWealth.modelCatalogError"></p>
             </div>
         </div>
 
         <!-- Custom Model Input string -->
         <div x-show="regenWealth.model === 'custom'" class="pt-1">
-            <label class="block text-[11px] font-semibold text-on-surface-variant mb-1">Custom Model ID</label>
+            <label class="block text-[13px] font-semibold text-on-surface-variant mb-1">Custom Model ID</label>
             <div class="flex gap-2">
                 <input type="text" x-model="regenWealth.customModel"
                        placeholder="e.g. provider/model-id from your enabled provider"
@@ -1523,7 +1552,7 @@ Reads: <span class="text-white font-medium">ET Markets</span> · <span class="te
 <div class="flex items-center gap-4">
 <div class="w-16 h-16 rounded-2xl bg-surface-container-lowest border border-[#d4af37]/30 flex flex-col items-center justify-center shrink-0 shadow-inner">
 <span class="text-xl font-bold text-[#d4af37]" x-text="regenWealth.analysis.portfolioHealthScore || 85"></span>
-<span class="text-[9px] uppercase tracking-wider text-on-surface-variant font-label-caps">Health</span>
+<span class="text-[13px] uppercase tracking-wider text-on-surface-variant font-label-caps">Health</span>
 </div>
 <div>
 <div class="flex items-center gap-2">
@@ -1585,12 +1614,12 @@ Reads: <span class="text-white font-medium">ET Markets</span> · <span class="te
 <span class="material-symbols-outlined" x-text="regenAssetIcon(rec.assetClass)"></span>
 </div>
 <div>
-<span class="text-[11px] font-label-caps uppercase text-on-surface-variant" x-text="rec.assetClass"></span>
+<span class="text-[13px] font-label-caps uppercase text-on-surface-variant" x-text="rec.assetClass"></span>
 <h4 class="font-bold text-white text-base leading-snug" x-text="rec.title"></h4>
 </div>
 </div>
 
-<span class="px-2.5 py-1 rounded-full text-[10px] font-bold border shrink-0" :class="regenPriorityClass(rec.priority)" x-text="rec.priority + ' Priority'">
+<span class="px-2.5 py-1 rounded-full text-[13px] font-bold border shrink-0" :class="regenPriorityClass(rec.priority)" x-text="rec.priority + ' Priority'">
 </span>
 </div>
 
@@ -1598,19 +1627,19 @@ Reads: <span class="text-white font-medium">ET Markets</span> · <span class="te
 
 <div class="grid grid-cols-2 gap-3 text-xs my-4 pt-2 border-t border-white/5">
 <div>
-<span class="text-on-surface-variant text-[11px] block">Suggested Allocation</span>
+<span class="text-on-surface-variant text-[13px] block">Suggested Allocation</span>
 <span class="font-bold text-primary" x-text="rec.suggestedAllocation || '—'"></span>
 </div>
 <div>
-<span class="text-on-surface-variant text-[11px] block">Time Horizon</span>
+<span class="text-on-surface-variant text-[13px] block">Time Horizon</span>
 <span class="font-semibold text-white" x-text="rec.timeHorizon || '—'"></span>
 </div>
 <div>
-<span class="text-on-surface-variant text-[11px] block">Risk Profile</span>
+<span class="text-on-surface-variant text-[13px] block">Risk Profile</span>
 <span class="font-semibold text-white" x-text="rec.risk || 'Low'"></span>
 </div>
 <div>
-<span class="text-on-surface-variant text-[11px] block">Urgency Score</span>
+<span class="text-on-surface-variant text-[13px] block">Urgency Score</span>
 <span class="font-bold text-[#d4af37]" x-text="(rec.urgencyScore || 80) + ' / 100'"></span>
 </div>
 </div>
@@ -1618,10 +1647,10 @@ Reads: <span class="text-white font-medium">ET Markets</span> · <span class="te
 
 <template x-if="rec.specificInstruments &amp;&amp; rec.specificInstruments.length &gt; 0">
 <div class="pt-3 border-t border-white/5">
-<span class="text-[10px] font-label-caps uppercase text-on-surface-variant block mb-1.5">Recommended Instruments:</span>
+<span class="text-[13px] font-label-caps uppercase text-on-surface-variant block mb-1.5">Recommended Instruments:</span>
 <div class="flex flex-wrap gap-1.5">
 <template x-for="inst in rec.specificInstruments" :key="inst">
-<span class="px-2.5 py-0.5 rounded-md bg-surface-container-highest text-white text-[11px] border border-white/5" x-text="inst"></span>
+<span class="px-2.5 py-0.5 rounded-md bg-surface-container-highest text-white text-[13px] border border-white/5" x-text="inst"></span>
 </template>
 </div>
 </div>
@@ -1665,14 +1694,14 @@ Reads: <span class="text-white font-medium">ET Markets</span> · <span class="te
                 <span class="material-symbols-outlined text-primary text-base">event_repeat</span>
                 <div>
                     <div class="flex items-center gap-1.5">
-                        <span class="text-[10px] text-white/50">Salary Cycle:</span>
+                        <span class="text-[13px] text-white/50">Salary Cycle:</span>
                         <span class="text-xs font-bold text-white font-mono" x-text="cashflowCycleInfo.cycleLabel"></span>
                     </div>
-                    <span class="text-[10px] text-emerald-400 font-medium" x-text="cashflowCycleInfo.daysRemaining + ' days until salary reset'"></span>
+                    <span class="text-[13px] text-emerald-400 font-medium" x-text="cashflowCycleInfo.daysRemaining + ' days until salary reset'"></span>
                 </div>
             </div>
             <div class="pl-2 border-l border-white/10 flex items-center gap-1.5">
-                <span class="text-[10px] text-white/50">Pay Day:</span>
+                <span class="text-[13px] text-white/50">Pay Day:</span>
                 <input type="number" min="1" max="31" x-model.number="cashflow.salaryDay" @change="saveData()"
                        class="w-10 px-1.5 py-0.5 rounded text-center text-xs font-mono font-bold text-[#d4af37] bg-white/5 border border-white/10 outline-none focus:border-primary tabular">
             </div>
@@ -1704,12 +1733,12 @@ Reads: <span class="text-white font-medium">ET Markets</span> · <span class="te
                         </div>
                         <div class="flex items-center justify-between gap-2 pt-1 text-xs" style="border-top:1px solid rgba(255,255,255,0.04);">
                             <div class="flex items-center gap-1.5">
-                                <span class="text-[10px] text-white/40">Credit Day:</span>
+                                <span class="text-[13px] text-white/40">Credit Day:</span>
                                 <input type="number" min="1" max="31" x-model.number="inc.creditDay" @change="saveData()" placeholder="1"
-                                       class="w-10 px-1.5 py-0.5 rounded text-center font-mono text-[11px] text-white/80 bg-white/5 border border-white/10 outline-none focus:border-primary tabular">
+                                       class="w-10 px-1.5 py-0.5 rounded text-center font-mono text-[13px] text-white/80 bg-white/5 border border-white/10 outline-none focus:border-primary tabular">
                             </div>
                             <div class="flex items-center gap-1">
-                                <span class="text-[10px] text-white/40">₹</span>
+                                <span class="text-[13px] text-white/40">₹</span>
                                 <input type="number" x-model.number="inc.amount" @change="saveData()" placeholder="0"
                                        class="w-28 px-2 py-1 rounded-lg text-right font-mono font-bold text-white text-xs outline-none focus:border-primary tabular"
                                        style="background:#13151f; border:1px solid rgba(255,255,255,0.08);">
@@ -1749,7 +1778,7 @@ Reads: <span class="text-white font-medium">ET Markets</span> · <span class="te
                             </button>
                         </div>
                         <div class="flex items-center justify-between gap-2 pt-1" style="border-top:1px solid rgba(255,255,255,0.04);">
-                            <span class="text-[10px] text-white/40">Amount (₹)</span>
+                            <span class="text-[13px] text-white/40">Amount (₹)</span>
                             <input type="number" x-model.number="exp.amount" @change="saveData()" placeholder="0"
                                    class="w-32 px-2.5 py-1 rounded-lg text-right font-mono font-bold text-white text-xs outline-none focus:border-red-400 tabular"
                                    style="background:#13151f; border:1px solid rgba(255,255,255,0.08);">
@@ -1768,12 +1797,12 @@ Reads: <span class="text-white font-medium">ET Markets</span> · <span class="te
                 <div class="pt-3 mt-2" style="border-top:1px solid rgba(255,255,255,0.06);">
                     <div class="flex items-center justify-between mb-2">
                         <div>
-                            <span class="text-[11px] font-bold text-white block">SIP &amp; RD Outflows</span>
-                            <span class="text-[10px]" style="color:#8b8fa8;" x-text="activeSipCount + ' Active · ' + (sips.length - activeSipCount) + ' Paused/Skipped'"></span>
+                            <span class="text-[13px] font-bold text-white block">SIP &amp; RD Outflows</span>
+                            <span class="text-[13px]" style="color:#8b8fa8;" x-text="activeSipCount + ' Active · ' + (sips.length - activeSipCount) + ' Paused/Skipped'"></span>
                         </div>
                         <div class="flex items-center gap-2">
                             <span class="font-bold text-primary font-mono tabular text-xs" x-text="formatCurrency(effectiveMonthlySipOutflow)"></span>
-                            <button @click="addingSip = true" class="text-[10px] px-2 py-0.5 rounded border border-primary/30 text-primary hover:bg-primary/10 transition-all">+ Add</button>
+                            <button @click="addingSip = true" class="text-[13px] px-2 py-0.5 rounded border border-primary/30 text-primary hover:bg-primary/10 transition-all">+ Add</button>
                         </div>
                     </div>
 
@@ -1784,13 +1813,13 @@ Reads: <span class="text-white font-medium">ET Markets</span> · <span class="te
                                 <div class="min-w-0 cursor-pointer" @click="openEditSipModal(sip)">
                                     <div class="flex items-center gap-1.5">
                                         <span class="font-semibold text-white text-xs truncate" x-text="sip.name"></span>
-                                        <span class="text-[9px] px-1.5 py-0.2 rounded font-mono text-[#d4af37]" style="background:rgba(212,175,55,0.12);" x-text="'₹' + sip.monthlyAmount"></span>
+                                        <span class="text-[13px] px-1.5 py-0.2 rounded font-mono text-[#d4af37]" style="background:rgba(212,175,55,0.12);" x-text="'₹' + sip.monthlyAmount"></span>
                                     </div>
-                                    <span class="text-[10px] block mt-0.5" style="color:#8b8fa8;" x-text="'Debit on ' + (sip.dayOfMonth || 3) + 'th of month'"></span>
+                                    <span class="text-[13px] block mt-0.5" style="color:#8b8fa8;" x-text="'Debit on ' + (sip.dayOfMonth || 3) + 'th of month'"></span>
                                 </div>
                                 <div class="flex items-center gap-1.5 shrink-0">
                                     <button @click="toggleSipStatus(sip); saveData()"
-                                            class="px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all"
+                                            class="px-2.5 py-1 rounded-lg text-[13px] font-bold transition-all"
                                             :class="sip.status === 'Active' ? 'bg-emerald-950/60 text-emerald-400 border border-emerald-500/30 hover:brightness-125' : 'bg-amber-950/60 text-amber-400 border border-amber-500/30 hover:brightness-125'">
                                         <span x-text="sip.status === 'Active' ? 'Active' : 'Skipped / Paused'"></span>
                                     </button>
@@ -1800,7 +1829,7 @@ Reads: <span class="text-white font-medium">ET Markets</span> · <span class="te
                                 </div>
                             </div>
                         </template>
-                        <div x-show="sips.length === 0" class="text-center py-2 text-[11px] text-white/40">
+                        <div x-show="sips.length === 0" class="text-center py-2 text-[13px] text-white/40">
                             No SIPs configured. Tap "+ Add" to link an SIP.
                         </div>
                     </div>
@@ -1823,7 +1852,7 @@ Reads: <span class="text-white font-medium">ET Markets</span> · <span class="te
                 </div>
                 <div class="flex justify-between items-center mb-3 text-xs pl-2" style="border-left:2px solid rgba(255,255,255,0.1);">
                     <span style="color:#8b8fa8;">└ Includes Active SIPs</span>
-                    <span class="font-medium text-white/70 font-mono tabular text-[11px]" x-text="formatCurrency(effectiveMonthlySipOutflow)"></span>
+                    <span class="font-medium text-white/70 font-mono tabular text-[13px]" x-text="formatCurrency(effectiveMonthlySipOutflow)"></span>
                 </div>
 
                 <div class="pt-3 my-3 flex justify-between items-center" style="border-top:1px solid rgba(255,255,255,0.08);">
@@ -1836,10 +1865,10 @@ Reads: <span class="text-white font-medium">ET Markets</span> · <span class="te
             </div>
 
             <div class="mt-4 p-4 rounded-xl" style="background:#0d0f1a; border:1px solid rgba(255,255,255,0.06);">
-                <span class="block text-[10px] uppercase font-bold tracking-wider mb-1" style="color:#8b8fa8;">Savings Rate</span>
+                <span class="block text-[13px] uppercase font-bold tracking-wider mb-1" style="color:#8b8fa8;">Savings Rate</span>
                 <div class="flex items-center justify-between">
                     <span class="text-2xl font-extrabold text-[#d4af37] font-mono tabular" style="font-family:'Outfit',sans-serif;" x-text="savingsRate + '%'"></span>
-                    <span class="text-[11px]" :class="Number(savingsRate) >= 20 ? 'text-emerald-400' : 'text-amber-400'" x-text="Number(savingsRate) >= 20 ? '★ Healthy' : 'Target: 20%+'"></span>
+                    <span class="text-[13px]" :class="Number(savingsRate) >= 20 ? 'text-emerald-400' : 'text-amber-400'" x-text="Number(savingsRate) >= 20 ? '★ Healthy' : 'Target: 20%+'"></span>
                 </div>
             </div>
         </div>
@@ -1954,7 +1983,7 @@ Reads: <span class="text-white font-medium">ET Markets</span> · <span class="te
 <div>
 <label class="block text-xs font-medium text-on-surface-variant mb-1">Monthly Pension Amount (₹)</label>
 <input type="number" :value="pension.monthlyAmount" @change="updatePension($event.target.value)" class="w-full px-3 py-2 rounded-lg bg-surface-container-lowest border border-white/10 text-white focus:border-primary outline-none text-lg font-bold">
-<p class="text-[11px] text-on-surface-variant mt-1">Editing this logs a revision entry automatically.</p>
+<p class="text-[13px] text-on-surface-variant mt-1">Editing this logs a revision entry automatically.</p>
 </div>
 <div>
 <label class="block text-xs font-medium text-on-surface-variant mb-1">Pension Category</label>
@@ -2273,7 +2302,7 @@ No financial goals added yet. Use the form above to add your first goal!
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <!-- Total Stock Portfolio -->
         <div class="p-4 rounded-2xl flex flex-col justify-between" style="background:#13151f; border:1px solid rgba(255,255,255,0.06); box-shadow:0 4px 16px rgba(0,0,0,0.3);">
-            <div class="flex justify-between items-center text-[10px] uppercase font-bold tracking-wider" style="color:#8b8fa8;">
+            <div class="flex justify-between items-center text-[13px] uppercase font-bold tracking-wider" style="color:#8b8fa8;">
                 <span>Total Stocks Value</span>
                 <span class="material-symbols-outlined text-primary text-base">show_chart</span>
             </div>
@@ -2287,18 +2316,18 @@ No financial goals added yet. Use the form above to add your first goal!
 
         <!-- Indian Stocks Total -->
         <div class="p-4 rounded-2xl flex flex-col justify-between" style="background:#13151f; border:1px solid rgba(255,255,255,0.06); box-shadow:0 4px 16px rgba(0,0,0,0.3);">
-            <div class="flex justify-between items-center text-[10px] uppercase font-bold tracking-wider" style="color:#8b8fa8;">
+            <div class="flex justify-between items-center text-[13px] uppercase font-bold tracking-wider" style="color:#8b8fa8;">
                 <span>🇮🇳 Indian Stocks</span>
             </div>
             <div class="mt-2">
                 <span class="text-xl font-bold text-white tabular" x-text="formatCurrency(totalIndStockValuation)"></span>
-                <p class="text-[11px] mt-1 tabular" style="color:#8b8fa8;" x-text="stockInvestments.filter(i => ['Stock (IND)', 'ETF (IND)', 'Stock'].includes(i.type) || !i.type.includes('US')).length + ' Stock(s)'"></p>
+                <p class="text-[13px] mt-1 tabular" style="color:#8b8fa8;" x-text="stockInvestments.filter(i => ['Stock (IND)', 'ETF (IND)', 'Stock'].includes(i.type) || !i.type.includes('US')).length + ' Stock(s)'"></p>
             </div>
         </div>
 
         <!-- US Stocks Total -->
         <div class="p-4 rounded-2xl flex flex-col justify-between" style="background:#13151f; border:1px solid rgba(255,255,255,0.06); box-shadow:0 4px 16px rgba(0,0,0,0.3);">
-            <div class="flex justify-between items-center text-[10px] uppercase font-bold tracking-wider" style="color:#8b8fa8;">
+            <div class="flex justify-between items-center text-[13px] uppercase font-bold tracking-wider" style="color:#8b8fa8;">
                 <span>🇺🇸 US Stocks (USD)</span>
             </div>
             <div class="mt-2">
@@ -2306,13 +2335,13 @@ No financial goals added yet. Use the form above to add your first goal!
                     <span class="text-xl font-bold text-[#d4af37] font-mono tabular" x-text="'$' + totalUsStockUSD.toFixed(2)"></span>
                     <span class="text-xs font-mono tabular" style="color:#8b8fa8;" x-text="'(' + formatCurrency(totalUsStockValuation) + ')'"></span>
                 </div>
-                <p class="text-[11px] mt-1 tabular" :style="fxIsStale ? 'color:#e2b97d;' : 'color:#8b8fa8;'" x-text="'USD/INR: ' + fxLabel"></p>
+                <p class="text-[13px] mt-1 tabular" :style="fxIsStale ? 'color:#e2b97d;' : 'color:#8b8fa8;'" x-text="'USD/INR: ' + fxLabel"></p>
             </div>
         </div>
 
         <!-- Quick Add Buttons Card -->
         <div class="p-4 rounded-2xl flex flex-col justify-between" style="background:#13151f; border:1px solid rgba(255,255,255,0.06); box-shadow:0 4px 16px rgba(0,0,0,0.3);">
-            <span class="text-[10px] uppercase font-bold tracking-wider" style="color:#8b8fa8;">Quick Actions</span>
+            <span class="text-[13px] uppercase font-bold tracking-wider" style="color:#8b8fa8;">Quick Actions</span>
             <div class="grid grid-cols-2 gap-2 mt-2">
                 <button @click="openAddStockModal('Stock (IND)')" class="px-2.5 py-2 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] text-xs font-semibold text-white border border-white/10 flex items-center justify-center gap-1 transition-colors">
                     <span>🇮🇳 + IND</span>
@@ -2347,7 +2376,7 @@ No financial goals added yet. Use the form above to add your first goal!
     <template x-if="filteredStockInvestments.length > 0">
         <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
             <template x-for="inv in filteredStockInvestments" :key="inv.id">
-                <div class="p-4 rounded-2xl transition-all hover:border-white/20 relative group"
+                <div data-holding-row class="p-4 rounded-2xl transition-all hover:border-white/20 relative group"
                      style="background:#13151f; border:1px solid rgba(255,255,255,0.06); box-shadow:0 4px 16px rgba(0,0,0,0.3);">
                     <div class="flex justify-between items-start mb-3">
                         <div class="flex items-center gap-2.5 min-w-0">
@@ -2356,7 +2385,7 @@ No financial goals added yet. Use the form above to add your first goal!
                                   x-text="inv.ticker ? inv.ticker.toUpperCase() : inv.type"></span>
                             <div class="min-w-0">
                                 <h3 class="font-semibold text-white text-[13px] truncate" x-text="inv.name"></h3>
-                                <span class="text-[11px] block" style="color:#8b8fa8;"
+                                <span class="text-[13px] block" style="color:#8b8fa8;"
                                       x-text="['Stock (US)', 'ETF (US)'].includes(inv.type) ? 'US Market (NASDAQ/NYSE)' : 'Indian Market (NSE/BSE)'"></span>
                             </div>
                         </div>
@@ -2375,32 +2404,32 @@ No financial goals added yet. Use the form above to add your first goal!
                     <!-- Metrics Details Grid -->
                     <div class="grid grid-cols-2 sm:grid-cols-3 gap-2.5 pt-2.5 text-xs" style="border-top:1px solid rgba(255,255,255,0.05);">
                         <div>
-                            <span class="text-[9px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">Shares / Units</span>
+                            <span class="text-[13px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">Shares / Units</span>
                             <span class="font-semibold text-white font-mono tabular" x-text="inv.units || '—'"></span>
                         </div>
                         <div>
-                            <span class="text-[9px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">Avg Buy Price</span>
+                            <span class="text-[13px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">Avg Buy Price</span>
                             <span class="font-semibold text-white font-mono tabular"
                                   x-text="['Stock (US)', 'ETF (US)'].includes(inv.type) ? ('$' + Number(inv.buyPrice || 0).toFixed(2)) : formatCurrency(inv.buyPrice || 0)"></span>
                         </div>
                         <div>
-                            <span class="text-[9px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">Live Price</span>
+                            <span class="text-[13px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">Live Price</span>
                             <span class="font-bold text-primary font-mono tabular"
                                   x-text="inv.currentPrice ? (['Stock (US)', 'ETF (US)'].includes(inv.type) ? ('$' + Number(inv.currentPrice).toFixed(2)) : ('₹' + Number(inv.currentPrice).toFixed(2))) : 'Syncing...'"></span>
                         </div>
                         <div>
-                            <span class="text-[9px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">Total Value (INR)</span>
+                            <span class="text-[13px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">Total Value (INR)</span>
                             <span class="font-bold text-white font-mono tabular" x-text="formatCurrency(getInvCurrentValue(inv))"></span>
                         </div>
                         <div>
-                            <span class="text-[9px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">P&amp;L</span>
+                            <span class="text-[13px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">P&amp;L</span>
                             <span class="font-bold font-mono tabular"
                                   :class="getInvPnL(inv) >= 0 ? 'text-emerald-400' : 'text-red-400'"
                                   x-text="(getInvPnL(inv) >= 0 ? '+' : '') + formatCurrency(getInvPnL(inv)) + ' (' + getInvPnLPct(inv) + '%)'"></span>
                         </div>
                         <div>
-                            <span class="text-[9px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">Price as of</span>
-                            <span class="text-[10px] tabular" :style="priceFreshness(inv).state === 'live' ? 'color:#8b8fa8;' : 'color:#e2b97d;'" x-text="priceFreshness(inv).label"></span>
+                            <span class="text-[13px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">Price as of</span>
+                            <span class="text-[13px] tabular" :style="priceFreshness(inv).state === 'live' ? 'color:#8b8fa8;' : 'color:#e2b97d;'" x-text="priceFreshness(inv).label"></span>
                         </div>
                     </div>
                 </div>
@@ -2464,7 +2493,7 @@ No financial goals added yet. Use the form above to add your first goal!
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <!-- Total MF Valuation -->
         <div class="p-4 rounded-2xl flex flex-col justify-between" style="background:#13151f; border:1px solid rgba(255,255,255,0.06); box-shadow:0 4px 16px rgba(0,0,0,0.3);">
-            <div class="flex justify-between items-center text-[10px] uppercase font-bold tracking-wider" style="color:#8b8fa8;">
+            <div class="flex justify-between items-center text-[13px] uppercase font-bold tracking-wider" style="color:#8b8fa8;">
                 <span>Total MF Value</span>
                 <span class="material-symbols-outlined text-[#d4af37] text-base">pie_chart</span>
             </div>
@@ -2478,23 +2507,23 @@ No financial goals added yet. Use the form above to add your first goal!
 
         <!-- Total Invested Amount -->
         <div class="p-4 rounded-2xl flex flex-col justify-between" style="background:#13151f; border:1px solid rgba(255,255,255,0.06); box-shadow:0 4px 16px rgba(0,0,0,0.3);">
-            <div class="flex justify-between items-center text-[10px] uppercase font-bold tracking-wider" style="color:#8b8fa8;">
+            <div class="flex justify-between items-center text-[13px] uppercase font-bold tracking-wider" style="color:#8b8fa8;">
                 <span>Invested Principal</span>
             </div>
             <div class="mt-2">
                 <span class="text-xl font-bold text-white tabular" x-text="formatCurrency(totalMfCost)"></span>
-                <p class="text-[11px] mt-1 tabular" style="color:#8b8fa8;" x-text="mfInvestments.length + ' Scheme(s) Holding'"></p>
+                <p class="text-[13px] mt-1 tabular" style="color:#8b8fa8;" x-text="mfInvestments.length + ' Scheme(s) Holding'"></p>
             </div>
         </div>
 
         <!-- Active SIPs Stream -->
         <div class="p-4 rounded-2xl flex flex-col justify-between" style="background:#13151f; border:1px solid rgba(255,255,255,0.06); box-shadow:0 4px 16px rgba(0,0,0,0.3);">
-            <div class="flex justify-between items-center text-[10px] uppercase font-bold tracking-wider" style="color:#8b8fa8;">
+            <div class="flex justify-between items-center text-[13px] uppercase font-bold tracking-wider" style="color:#8b8fa8;">
                 <span>Active SIP Outflow</span>
             </div>
             <div class="mt-2">
                 <span class="text-xl font-bold text-primary font-mono tabular" x-text="formatCurrency(totalMonthlySipOutflow) + '/mo'"></span>
-                <p class="text-[11px] mt-1 tabular" style="color:#8b8fa8;" x-text="sips.filter(s => s.status === 'Active').length + ' Active Mandate(s)'"></p>
+                <p class="text-[13px] mt-1 tabular" style="color:#8b8fa8;" x-text="sips.filter(s => s.status === 'Active').length + ' Active Mandate(s)'"></p>
             </div>
         </div>
 
@@ -2522,7 +2551,7 @@ No financial goals added yet. Use the form above to add your first goal!
     <template x-if="filteredMfInvestments.length > 0">
         <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
             <template x-for="inv in filteredMfInvestments" :key="inv.id">
-                <div class="p-4 rounded-2xl transition-all hover:border-white/20 relative group"
+                <div data-holding-row class="p-4 rounded-2xl transition-all hover:border-white/20 relative group"
                      style="background:#13151f; border:1px solid rgba(255,255,255,0.06); box-shadow:0 4px 16px rgba(0,0,0,0.3);">
                     <div class="flex justify-between items-start mb-3">
                         <div class="flex items-center gap-2.5 min-w-0">
@@ -2531,7 +2560,7 @@ No financial goals added yet. Use the form above to add your first goal!
                                   x-text="inv.schemeCode ? ('AMFI ' + inv.schemeCode) : 'MF'"></span>
                             <div class="min-w-0">
                                 <h3 class="font-semibold text-white text-[13px] truncate" x-text="inv.name"></h3>
-                                <span class="text-[11px] block" style="color:#8b8fa8;">Indian Mutual Fund (Growth)</span>
+                                <span class="text-[13px] block" style="color:#8b8fa8;">Indian Mutual Fund (Growth)</span>
                             </div>
                         </div>
 
@@ -2549,30 +2578,30 @@ No financial goals added yet. Use the form above to add your first goal!
                     <!-- Metrics Grid -->
                     <div class="grid grid-cols-2 sm:grid-cols-3 gap-2.5 pt-2.5 text-xs" style="border-top:1px solid rgba(255,255,255,0.05);">
                         <div>
-                            <span class="text-[9px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">Units Held</span>
+                            <span class="text-[13px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">Units Held</span>
                             <span class="font-semibold text-white font-mono tabular" x-text="inv.units || '—'"></span>
                         </div>
                         <div>
-                            <span class="text-[9px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">Avg Buy NAV</span>
+                            <span class="text-[13px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">Avg Buy NAV</span>
                             <span class="font-semibold text-white font-mono tabular" x-text="formatCurrency(inv.buyPrice || 0)"></span>
                         </div>
                         <div>
-                            <span class="text-[9px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">Live NAV</span>
+                            <span class="text-[13px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">Live NAV</span>
                             <span class="font-bold text-primary font-mono tabular" x-text="inv.currentPrice ? ('₹' + Number(inv.currentPrice).toFixed(2)) : 'Syncing...'"></span>
                         </div>
                         <div>
-                            <span class="text-[9px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">Current Value</span>
+                            <span class="text-[13px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">Current Value</span>
                             <span class="font-bold text-white font-mono tabular" x-text="formatCurrency(getInvCurrentValue(inv))"></span>
                         </div>
                         <div>
-                            <span class="text-[9px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">P&amp;L</span>
+                            <span class="text-[13px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">P&amp;L</span>
                             <span class="font-bold font-mono tabular"
                                   :class="getInvPnL(inv) >= 0 ? 'text-emerald-400' : 'text-red-400'"
                                   x-text="(getInvPnL(inv) >= 0 ? '+' : '') + formatCurrency(getInvPnL(inv)) + ' (' + getInvPnLPct(inv) + '%)'"></span>
                         </div>
                         <div>
-                            <span class="text-[9px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">Price as of</span>
-                            <span class="text-[10px] tabular" :style="priceFreshness(inv).state === 'live' ? 'color:#8b8fa8;' : 'color:#e2b97d;'" x-text="priceFreshness(inv).label"></span>
+                            <span class="text-[13px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">Price as of</span>
+                            <span class="text-[13px] tabular" :style="priceFreshness(inv).state === 'live' ? 'color:#8b8fa8;' : 'color:#e2b97d;'" x-text="priceFreshness(inv).label"></span>
                         </div>
                     </div>
                 </div>
@@ -2633,7 +2662,7 @@ No financial goals added yet. Use the form above to add your first goal!
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <!-- Total Gold Valuation -->
         <div class="p-4 rounded-2xl flex flex-col justify-between" style="background:#13151f; border:1px solid rgba(255,255,255,0.06); box-shadow:0 4px 16px rgba(0,0,0,0.3);">
-            <div class="flex justify-between items-center text-[10px] uppercase font-bold tracking-wider" style="color:#8b8fa8;">
+            <div class="flex justify-between items-center text-[13px] uppercase font-bold tracking-wider" style="color:#8b8fa8;">
                 <span>Total Gold Value</span>
                 <span class="material-symbols-outlined text-[#d4af37] text-base">diamond</span>
             </div>
@@ -2647,29 +2676,29 @@ No financial goals added yet. Use the form above to add your first goal!
 
         <!-- Total Gold Weight -->
         <div class="p-4 rounded-2xl flex flex-col justify-between" style="background:#13151f; border:1px solid rgba(255,255,255,0.06); box-shadow:0 4px 16px rgba(0,0,0,0.3);">
-            <div class="flex justify-between items-center text-[10px] uppercase font-bold tracking-wider" style="color:#8b8fa8;">
+            <div class="flex justify-between items-center text-[13px] uppercase font-bold tracking-wider" style="color:#8b8fa8;">
                 <span>Total Units / Weight</span>
             </div>
             <div class="mt-2">
                 <span class="text-xl font-bold text-[#d4af37] tabular" x-text="totalGoldGrams.toFixed(2) + ' Units/g'"></span>
-                <p class="text-[11px] mt-1 tabular" style="color:#8b8fa8;" x-text="goldInvestments.length + ' Asset(s)'"></p>
+                <p class="text-[13px] mt-1 tabular" style="color:#8b8fa8;" x-text="goldInvestments.length + ' Asset(s)'"></p>
             </div>
         </div>
 
         <!-- Invested Principal -->
         <div class="p-4 rounded-2xl flex flex-col justify-between" style="background:#13151f; border:1px solid rgba(255,255,255,0.06); box-shadow:0 4px 16px rgba(0,0,0,0.3);">
-            <div class="flex justify-between items-center text-[10px] uppercase font-bold tracking-wider" style="color:#8b8fa8;">
+            <div class="flex justify-between items-center text-[13px] uppercase font-bold tracking-wider" style="color:#8b8fa8;">
                 <span>Invested Principal</span>
             </div>
             <div class="mt-2">
                 <span class="text-xl font-bold text-white tabular" x-text="formatCurrency(totalGoldCost)"></span>
-                <p class="text-[11px] mt-1 tabular" style="color:#8b8fa8;">Purchase cost basis</p>
+                <p class="text-[13px] mt-1 tabular" style="color:#8b8fa8;">Purchase cost basis</p>
             </div>
         </div>
 
         <!-- Quick Action Card -->
         <div class="p-4 rounded-2xl flex flex-col justify-between" style="background:#13151f; border:1px solid rgba(255,255,255,0.06); box-shadow:0 4px 16px rgba(0,0,0,0.3);">
-            <span class="text-[10px] uppercase font-bold tracking-wider" style="color:#8b8fa8;">Quick Actions</span>
+            <span class="text-[13px] uppercase font-bold tracking-wider" style="color:#8b8fa8;">Quick Actions</span>
             <div class="grid grid-cols-2 gap-2 mt-2">
                 <button @click="openAddGoldModal('Sovereign Gold Bond (SGB)')" class="px-2.5 py-2 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] text-xs font-semibold text-white border border-white/10 flex items-center justify-center gap-1 transition-colors">
                     <span>+ SGB</span>
@@ -2717,7 +2746,7 @@ No financial goals added yet. Use the form above to add your first goal!
                                   x-text="inv.ticker || 'GOLD'"></span>
                             <div class="min-w-0">
                                 <h3 class="font-semibold text-white text-[13px] truncate" x-text="inv.name"></h3>
-                                <span class="text-[11px] block" style="color:#8b8fa8;" x-text="inv.type"></span>
+                                <span class="text-[13px] block" style="color:#8b8fa8;" x-text="inv.type"></span>
                             </div>
                         </div>
 
@@ -2735,30 +2764,30 @@ No financial goals added yet. Use the form above to add your first goal!
                     <!-- Metrics Grid -->
                     <div class="grid grid-cols-2 sm:grid-cols-3 gap-2.5 pt-2.5 text-xs" style="border-top:1px solid rgba(255,255,255,0.05);">
                         <div>
-                            <span class="text-[9px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">Weight / Units</span>
+                            <span class="text-[13px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">Weight / Units</span>
                             <span class="font-semibold text-white font-mono tabular" x-text="(inv.units || '—') + ' g/units'"></span>
                         </div>
                         <div>
-                            <span class="text-[9px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">Buy Rate</span>
+                            <span class="text-[13px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">Buy Rate</span>
                             <span class="font-semibold text-white font-mono tabular" x-text="formatCurrency(inv.buyPrice || 0)"></span>
                         </div>
                         <div>
-                            <span class="text-[9px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">Live Rate</span>
+                            <span class="text-[13px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">Live Rate</span>
                             <span class="font-bold text-[#d4af37] font-mono tabular" x-text="inv.currentPrice ? ('₹' + Number(inv.currentPrice).toFixed(2)) : 'Syncing...'"></span>
                         </div>
                         <div>
-                            <span class="text-[9px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">Total Valuation</span>
+                            <span class="text-[13px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">Total Valuation</span>
                             <span class="font-bold text-white font-mono tabular" x-text="formatCurrency(getInvCurrentValue(inv))"></span>
                         </div>
                         <div>
-                            <span class="text-[9px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">P&amp;L</span>
+                            <span class="text-[13px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">P&amp;L</span>
                             <span class="font-bold font-mono tabular"
                                   :class="getInvPnL(inv) >= 0 ? 'text-emerald-400' : 'text-red-400'"
                                   x-text="(getInvPnL(inv) >= 0 ? '+' : '') + formatCurrency(getInvPnL(inv)) + ' (' + getInvPnLPct(inv) + '%)'"></span>
                         </div>
                         <div>
-                            <span class="text-[9px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">Price as of</span>
-                            <span class="text-[10px] tabular" :style="priceFreshness(inv).state === 'live' ? 'color:#8b8fa8;' : 'color:#e2b97d;'" x-text="priceFreshness(inv).label"></span>
+                            <span class="text-[13px] uppercase tracking-wider block mb-0.5" style="color:#8b8fa8;">Price as of</span>
+                            <span class="text-[13px] tabular" :style="priceFreshness(inv).state === 'live' ? 'color:#8b8fa8;' : 'color:#e2b97d;'" x-text="priceFreshness(inv).label"></span>
                         </div>
                     </div>
                 </div>
@@ -2798,35 +2827,35 @@ No financial goals added yet. Use the form above to add your first goal!
                 class="flex flex-col items-center justify-center gap-1 px-4 py-1 transition-all duration-200 relative"
                 :class="activePage === 'home' ? 'text-primary' : 'text-on-surface-variant'">
             <span class="material-symbols-outlined text-[22px]" :style="activePage === 'home' ? 'font-variation-settings: FILL 1' : 'font-variation-settings: FILL 0'">home</span>
-            <span class="text-[10px] font-semibold">Overview</span>
+            <span class="text-[13px] font-semibold">Overview</span>
             <!-- Active indicator -->
             <span x-show="activePage === 'home'" class="absolute -bottom-2 left-1/2 -translate-x-1/2 w-5 h-0.5 rounded-full bg-primary"></span>
         </button>
 
         <!-- Portfolio -->
-        <button @click="activePage = 'investments'"
+        <button id="navPortfolio" @click="activePage = 'investments'"
                 class="flex flex-col items-center justify-center gap-1 px-4 py-1 transition-all duration-200 relative"
                 :class="['investments','stocks','mutualfunds','gold'].includes(activePage) ? 'text-primary' : 'text-on-surface-variant'">
             <span class="material-symbols-outlined text-[22px]" :style="['investments','stocks','mutualfunds','gold'].includes(activePage) ? 'font-variation-settings: FILL 1' : 'font-variation-settings: FILL 0'">account_balance_wallet</span>
-            <span class="text-[10px] font-semibold">Portfolio</span>
+            <span class="text-[13px] font-semibold">Portfolio</span>
             <span x-show="['investments','stocks','mutualfunds','gold'].includes(activePage)" class="absolute -bottom-2 left-1/2 -translate-x-1/2 w-5 h-0.5 rounded-full bg-primary"></span>
         </button>
 
         <!-- Plan (cashflow, pension, emergency, goals) -->
-        <button @click="activePage = 'cashflow'"
+        <button id="navPlanning" @click="activePage = 'cashflow'"
                 class="flex flex-col items-center justify-center gap-1 px-4 py-1 transition-all duration-200 relative"
                 :class="['cashflow','pension','emergency','goals'].includes(activePage) ? 'text-primary' : 'text-on-surface-variant'">
             <span class="material-symbols-outlined text-[22px]" :style="['cashflow','pension','emergency','goals'].includes(activePage) ? 'font-variation-settings: FILL 1' : 'font-variation-settings: FILL 0'">bar_chart_4_bars</span>
-            <span class="text-[10px] font-semibold">Planning</span>
+            <span class="text-[13px] font-semibold">Planning</span>
             <span x-show="['cashflow','pension','emergency','goals'].includes(activePage)" class="absolute -bottom-2 left-1/2 -translate-x-1/2 w-5 h-0.5 rounded-full bg-primary"></span>
         </button>
 
         <!-- Tools (tax, import, maturity, more) -->
-        <button @click="activePage = 'more'"
+        <button id="navMore" @click="activePage = 'more'"
                 class="flex flex-col items-center justify-center gap-1 px-4 py-1 transition-all duration-200 relative"
                 :class="['more','tax','import','maturity','networth','regen'].includes(activePage) ? 'text-primary' : 'text-on-surface-variant'">
             <span class="material-symbols-outlined text-[22px]" :style="['more','tax','import','maturity','networth','regen'].includes(activePage) ? 'font-variation-settings: FILL 1' : 'font-variation-settings: FILL 0'">apps</span>
-            <span class="text-[10px] font-semibold">More</span>
+            <span class="text-[13px] font-semibold">More</span>
             <span x-show="['more','tax','import','maturity','networth','regen'].includes(activePage)" class="absolute -bottom-2 left-1/2 -translate-x-1/2 w-5 h-0.5 rounded-full bg-primary"></span>
         </button>
 
@@ -2882,7 +2911,7 @@ No financial goals added yet. Use the form above to add your first goal!
                 <input type="text" x-model="newInv.ticker"
                        :placeholder="['Stock (US)', 'ETF (US)'].includes(newInv.type) ? 'e.g. NVDA, AAPL, MSFT, TSLA, VOO, QQQ' : 'e.g. RELIANCE, INFY, TATAMOTORS, NIFTYBEES'"
                        class="w-full px-3.5 py-2.5 rounded-xl bg-surface-container-lowest border border-primary/40 text-white outline-none text-sm uppercase font-mono">
-                <p class="text-[11px] text-on-surface-variant/70 mt-1"
+                <p class="text-[13px] text-on-surface-variant/70 mt-1"
                    x-text="['Stock (US)', 'ETF (US)'].includes(newInv.type) ? 'Auto-syncs live USD price from Yahoo Finance' : 'Auto-syncs live NAV/price from Yahoo Finance (.NS)'"></p>
             </div>
 
@@ -2904,7 +2933,7 @@ No financial goals added yet. Use the form above to add your first goal!
                     <template x-for="scheme in mfSearchResults" :key="scheme.schemeCode">
                         <div @click="selectMfScheme(newInv, scheme)" class="p-2.5 hover:bg-surface-container-high rounded-lg cursor-pointer text-xs text-white flex justify-between items-center border-b border-white/5">
                             <span class="font-medium text-white" x-text="scheme.schemeName"></span>
-                            <span class="text-[10px] text-primary font-mono ml-2 shrink-0" x-text="'Code: ' + scheme.schemeCode"></span>
+                            <span class="text-[13px] text-primary font-mono ml-2 shrink-0" x-text="'Code: ' + scheme.schemeCode"></span>
                         </div>
                     </template>
                 </div>
@@ -2993,7 +3022,7 @@ No financial goals added yet. Use the form above to add your first goal!
 <div class="relative">
 <label class="block text-xs font-medium text-white/70 mb-1 flex items-center gap-1.5">
     Plan Name
-    <span x-show="newSip.type === 'SIP' || newSip.type === 'PPF'" class="text-[10px] px-1.5 py-0.5 rounded bg-primary/15 text-primary border border-primary/25">
+    <span x-show="newSip.type === 'SIP' || newSip.type === 'PPF'" class="text-[13px] px-1.5 py-0.5 rounded bg-primary/15 text-primary border border-primary/25">
         AMFI Search
     </span>
 </label>
@@ -3026,9 +3055,9 @@ No financial goals added yet. Use the form above to add your first goal!
 <!-- Scheme code badge after selection -->
 <template x-if="newSip.schemeCode">
     <div class="flex items-center gap-1.5 mt-1.5">
-        <span class="text-[11px] text-primary/70">AMFI Code:</span>
-        <span class="text-[11px] font-mono font-bold text-primary bg-primary/10 border border-primary/20 px-2 py-0.5 rounded" x-text="newSip.schemeCode"></span>
-        <button type="button" @click="newSip.schemeCode = ''" class="text-[11px] text-white/30 hover:text-white/60 ml-auto">✕ Clear</button>
+        <span class="text-[13px] text-primary/70">AMFI Code:</span>
+        <span class="text-[13px] font-mono font-bold text-primary bg-primary/10 border border-primary/20 px-2 py-0.5 rounded" x-text="newSip.schemeCode"></span>
+        <button type="button" @click="newSip.schemeCode = ''" class="text-[13px] text-white/30 hover:text-white/60 ml-auto">✕ Clear</button>
     </div>
 </template>
 
@@ -3041,7 +3070,7 @@ No financial goals added yet. Use the form above to add your first goal!
      x-cloak>
     <div class="px-3 py-2 border-b border-white/5 flex items-center gap-2">
         <span class="material-symbols-outlined text-[14px] text-primary/60">auto_awesome</span>
-        <span class="text-[11px] text-white/40">Select from AMFI-registered mutual funds</span>
+        <span class="text-[13px] text-white/40">Select from AMFI-registered mutual funds</span>
     </div>
     <div class="max-h-56 overflow-y-auto">
         <template x-for="scheme in sipMfSearch.results" :key="scheme.schemeCode">
@@ -3054,14 +3083,14 @@ No financial goals added yet. Use the form above to add your first goal!
                     <span class="material-symbols-outlined text-[14px] text-primary/50 mt-0.5 shrink-0 group-hover:text-primary transition-colors">savings</span>
                     <div class="flex-1 min-w-0">
                         <p class="text-xs text-white leading-snug line-clamp-2" x-text="scheme.schemeName"></p>
-                        <p class="text-[10px] font-mono text-primary/60 mt-0.5" x-text="'Code: ' + scheme.schemeCode"></p>
+                        <p class="text-[13px] font-mono text-primary/60 mt-0.5" x-text="'Code: ' + scheme.schemeCode"></p>
                     </div>
                 </div>
             </button>
         </template>
     </div>
     <div class="px-3 py-1.5 border-t border-white/5 text-center">
-        <span class="text-[10px] text-white/25">Data from AMFI India • No API key needed</span>
+        <span class="text-[13px] text-white/25">Data from AMFI India • No API key needed</span>
     </div>
 </div>
 

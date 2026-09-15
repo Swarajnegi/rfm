@@ -522,3 +522,102 @@ nav[class*='bottom-0'] button:active {
     transform: translateY(0);
   }
 }
+
+/* NumberFlow hero figure. Sized here rather than inline so the custom element
+   inherits one place to change. */
+:root .nw-figure {
+  font-size: clamp(34px, 8.5vw, 48px);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: #ffffff;
+  --number-flow-mask-height: 0.3em;
+  --number-flow-char-height: 1em;
+}
+
+/* ── View Transitions ────────────────────────────────────────────────────
+   The browser cross-fades old and new page snapshots on the compositor.
+   Named elements morph between screens instead of being redrawn, which is
+   what makes a tab change read as movement rather than a jump cut. */
+@view-transition { navigation: auto; }
+
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 260ms;
+  animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* The net-worth figure is the one element that exists on more than one
+   surface, so it gets its own name and morphs rather than cross-fading. */
+.nw-figure { view-transition-name: nw-figure; }
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(root),
+  ::view-transition-new(root) { animation: none !important; }
+}
+
+/* ── Price-sync sweep ────────────────────────────────────────────────────
+   Driven by GSAP animating the --sweep custom property per row. A row that
+   did not change never animates, so the sweep shows what actually updated
+   rather than implying everything did. */
+[data-holding-row] {
+  --sweep: 0;
+  position: relative;
+}
+[data-holding-row]::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(90deg,
+      rgba(167,184,255,0) 0%,
+      rgba(167,184,255,0.16) 50%,
+      rgba(167,184,255,0) 100%);
+  opacity: calc(1 - var(--sweep));
+  transform: translateX(calc(-100% + var(--sweep) * 200%));
+  transition: none;
+}
+[data-holding-row]:not([style*="--sweep"])::after { opacity: 0; }
+
+/* ── Tutorial popovers ───────────────────────────────────────────────── */
+.driver-popover.rfm-tour {
+  background: #1a1d23;
+  color: #f0f1f3;
+  border: 1px solid rgba(255,255,255,0.10);
+  border-radius: 1rem;
+  box-shadow: 0 24px 70px rgba(0,0,0,0.56);
+  font-family: 'Manrope', sans-serif;
+  max-width: 300px;
+}
+.driver-popover.rfm-tour .driver-popover-title { font-size: 17px; font-weight: 700; }
+.driver-popover.rfm-tour .driver-popover-description { font-size: 14px; line-height: 1.5; color: #a7acb8; }
+.driver-popover.rfm-tour .driver-popover-progress-text { color: #777e8d; font-size: 13px; }
+.driver-popover.rfm-tour button:not(.driver-popover-close-btn) {
+  background: linear-gradient(135deg, #c3cdff, #8c9ff8);
+  color: #171b31; border: 0; border-radius: 0.6rem;
+  font-weight: 700; font-size: 14px; padding: 7px 14px; text-shadow: none;
+}
+.driver-popover.rfm-tour .driver-popover-prev-btn {
+  background: rgba(255,255,255,0.07); color: #f0f1f3;
+}
+.driver-popover.rfm-tour .driver-popover-arrow-side-top { border-top-color: #1a1d23; }
+.driver-popover.rfm-tour .driver-popover-arrow-side-bottom { border-bottom-color: #1a1d23; }
+.driver-popover.rfm-tour .driver-popover-arrow-side-left { border-left-color: #1a1d23; }
+.driver-popover.rfm-tour .driver-popover-arrow-side-right { border-right-color: #1a1d23; }
+
+/* Driver's close affordance is an icon, not an action — exclude it from the
+   primary-button treatment above. */
+:root .driver-popover.rfm-tour .driver-popover-close-btn {
+  background: transparent;
+  color: #777e8d;
+  font-size: 20px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  line-height: 1;
+  border-radius: 0.5rem;
+}
+:root .driver-popover.rfm-tour .driver-popover-close-btn:hover { color: #f0f1f3; background: rgba(255,255,255,0.06); }
+
+/* The hero reserves room for the chart. With no data the chart is not rendered,
+   so the card should collapse instead of showing a tall empty well. */
+:root .portfolio-hero:has(.nw-empty) { min-height: 0 !important; }
