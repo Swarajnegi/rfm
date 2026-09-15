@@ -1,0 +1,6 @@
+/* Compiled at build time by @tailwindcss/cli into web/tailwind.css.
+   Replaces the cdn.tailwindcss.com play build, which shipped a full JIT
+   compiler to the device and made the app unusable without a network. */
+@import "tailwindcss";
+@config "../tailwind.config.js";
+@plugin "@tailwindcss/forms";

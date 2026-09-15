@@ -438,97 +438,100 @@ document.addEventListener('alpine:init', () => {
             return `${change >= 0 ? '+' : ''}${change.toFixed(2)}%`;
         },
 
-        /** Render or update the Chart.js net worth chart */
+        /** Net-worth series (TradingView Lightweight Charts) */
+        // Formats an INR figure the way Indians read it: crore, then lakh, then
+        // full 2,2,3 grouping. Was buried inside a Chart.js tooltip callback.
+        formatIndianShort(v) {
+            const n = Number(v) || 0;
+            const a = Math.abs(n);
+            if (a >= 1e7) return '\u20b9' + (n / 1e7).toFixed(2) + ' Cr';
+            if (a >= 1e5) return '\u20b9' + (n / 1e5).toFixed(2) + ' L';
+            return '\u20b9' + n.toLocaleString('en-IN', { maximumFractionDigits: 0 });
+        },
+
         renderNwChart() {
-            const canvas = document.getElementById('nwChartCanvas');
-            if (!canvas || typeof Chart === 'undefined') return;
+            const el = document.getElementById('nwChart');
+            if (!el || !window.LW) return;
+
+            // Lightweight Charts measures its container. Inside an x-show'd page
+            // that is display:none the measurement is 0x0 and the chart renders
+            // blank with no error, so defer until the element actually has a box.
+            if (!el.clientWidth) {
+                if (!this._nwChartRetry) {
+                    this._nwChartRetry = true;
+                    this.$nextTick(() => { this._nwChartRetry = false; this.renderNwChart(); });
+                }
+                return;
+            }
 
             this.loadNwHistory();
 
-            // A single observation is displayed as a point, not a fabricated flat line.
             let data = [...(this.nwChartData.length ? this.nwChartData : this.nwHistory)];
             if (data.length === 0) {
-                const today = new Date().toISOString().slice(0, 10);
-                data = [{ date: today, value: Math.round(this.netWorthTotal) }];
+                data = [{ date: new Date().toISOString().slice(0, 10), value: Math.round(this.netWorthTotal) }];
             }
 
-            const labels = data.map(p => {
-                const d = new Date(p.date);
-                return d.toLocaleDateString('en-IN', { month: 'short', day: 'numeric' });
-            });
-            const values = data.map(p => p.value);
-
-            const minVal = Math.min(...values);
-            const maxVal = Math.max(...values);
-            const padding = Math.max(Math.abs(maxVal) * 0.02, 1);
-            const trend  = data.length < 2 || values[values.length - 1] >= values[0];
-
-            // Destroy existing chart instance if present
-            if (window._rfmNwChart) {
-                window._rfmNwChart.destroy();
-                window._rfmNwChart = null;
+            // The series must be ascending and unique on time, or the library throws.
+            const byDate = new Map();
+            for (const p of data) {
+                const t = String(p.date).slice(0, 10);
+                if (t) byDate.set(t, Number(p.value) || 0);
             }
+            const points = [...byDate.entries()].sort((a, b) => a[0] < b[0] ? -1 : 1)
+                                                .map(([time, value]) => ({ time, value }));
 
-            const ctx = canvas.getContext('2d');
-            const gradient = ctx.createLinearGradient(0, 0, 0, 200);
-            gradient.addColorStop(0, trend ? 'rgba(167,184,255,0.35)' : 'rgba(248,113,113,0.35)');
-            gradient.addColorStop(1, 'rgba(0,0,0,0)');
+            const rising = points.length < 2 || points[points.length - 1].value >= points[0].value;
+            const stroke = rising ? '#a7b8ff' : '#f87171';
 
-            window._rfmNwChart = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels,
-                    datasets: [{
-                        data: values,
-                        borderColor: trend ? '#a7b8ff' : '#f87171',
-                        borderWidth: 2.5,
-                        backgroundColor: gradient,
-                        fill: true,
-                        tension: 0.45,
-                        showLine: data.length > 1,
-                        pointRadius: data.length === 1 ? 4 : 0,
-                        pointHoverRadius: 5,
-                        pointHoverBackgroundColor: trend ? '#a7b8ff' : '#f87171',
-                    }]
+            if (window._rfmNwChart) { window._rfmNwChart.remove(); window._rfmNwChart = null; }
+
+            const chart = window.LW.createChart(el, {
+                width: el.clientWidth,
+                height: el.clientHeight || 140,
+                layout: { background: { color: 'transparent' }, textColor: 'rgba(255,255,255,0.45)', attributionLogo: false },
+                grid: { vertLines: { visible: false }, horzLines: { visible: false } },
+                rightPriceScale: { visible: false },
+                leftPriceScale: { visible: false },
+                timeScale: { visible: false, fixLeftEdge: true, fixRightEdge: true },
+                handleScroll: false,
+                handleScale: false,
+                crosshair: {
+                    vertLine: { color: stroke, width: 1, style: 3, labelVisible: false },
+                    horzLine: { visible: false, labelVisible: false },
                 },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    animation: { duration: 600, easing: 'easeInOutQuart' },
-                    interaction: { mode: 'index', intersect: false },
-                    plugins: {
-                        legend: { display: false },
-                        tooltip: {
-                            backgroundColor: 'rgba(10,10,10,0.9)',
-                            borderColor: trend ? '#a7b8ff' : '#f87171',
-                            borderWidth: 1,
-                            titleColor: 'rgba(255,255,255,0.5)',
-                            bodyColor: '#ffffff',
-                            bodyFont: { family: 'Manrope', size: 14, weight: 'bold' },
-                            callbacks: {
-                                label: (ctx) => {
-                                    const v = ctx.raw;
-                                    if (v >= 10000000) return '₹' + (v/10000000).toFixed(2) + ' Cr';
-                                    if (v >= 100000)   return '₹' + (v/100000).toFixed(2) + ' L';
-                                    return '₹' + v.toLocaleString('en-IN');
-                                }
-                            }
-                        }
-                    },
-                    scales: {
-                        x: {
-                            display: false,
-                            grid: { display: false }
-                        },
-                        y: {
-                            display: false,
-                            min: Math.max(0, minVal - padding),
-                            max: maxVal + padding,
-                            grid: { display: false }
-                        }
-                    }
-                }
+                localization: { priceFormatter: (v) => this.formatIndianShort(v) },
             });
+
+            const series = chart.addSeries(window.LW.AreaSeries, {
+                lineColor: stroke,
+                lineWidth: 2,
+                topColor: rising ? 'rgba(167,184,255,0.35)' : 'rgba(248,113,113,0.35)',
+                bottomColor: 'rgba(0,0,0,0)',
+                priceLineVisible: false,
+                lastValueVisible: false,
+                crosshairMarkerRadius: 4,
+                crosshairMarkerBorderColor: stroke,
+                crosshairMarkerBackgroundColor: stroke,
+            });
+            series.setData(points);
+            chart.timeScale().fitContent();
+
+            // A single observation is a point, not a fabricated flat line.
+            if (points.length === 1) {
+                window.LW.createSeriesMarkers(series, [
+                    { time: points[0].time, position: 'inBar', color: stroke, shape: 'circle' }
+                ]);
+            }
+
+            window._rfmNwChart = chart;
+
+            if (this._nwResizeBound) window.removeEventListener('resize', this._nwResizeBound);
+            this._nwResizeBound = () => {
+                if (window._rfmNwChart && el.clientWidth) {
+                    window._rfmNwChart.applyOptions({ width: el.clientWidth });
+                }
+            };
+            window.addEventListener('resize', this._nwResizeBound);
         },
 
         async initCapacitor() {
@@ -1533,6 +1536,14 @@ document.addEventListener('alpine:init', () => {
 
         get taxSavingByOptimalRegime() {
             return Math.abs(this.oldRegimeTax.tax - this.newRegimeTax.tax);
+        },
+
+        // index.html:1191 bound x-text="optimalRegime" against a property that was
+        // never defined, so the "Optimal Regime" row on the tax card rendered empty
+        // and threw on every page render. Ties are reported as New, which is the
+        // default regime and the one requiring no election.
+        get optimalRegime() {
+            return this.oldRegimeTax.tax < this.newRegimeTax.tax ? 'Old' : 'New';
         },
 
         // ── ADVANCE TAX SCHEDULE ─────────────────────────────────────

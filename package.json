@@ -4,8 +4,13 @@
   "description": "Open web/index.html in Chrome, Edge, Safari, or Firefox.",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "esbuild src/capacitor-bridge.js --bundle --outfile=web/plugins.js --minify"
+    "build:css": "tailwindcss -i src/app.css -o web/tailwind.css --minify",
+    "build:vendor": "esbuild src/vendor.js --bundle --format=iife --outfile=web/vendor.js --minify",
+    "build:boot": "esbuild src/boot.js --bundle --format=iife --outfile=web/boot.js --minify",
+    "build:bridge": "esbuild src/capacitor-bridge.js --bundle --outfile=web/plugins.js --minify",
+    "build": "npm run build:css && npm run build:vendor && npm run build:boot && npm run build:bridge",
+    "verify": "node scripts/verify-offline.mjs",
+    "test": "npm run verify"
   },
   "repository": {
     "type": "git",
@@ -25,13 +30,25 @@
     "@capacitor/cli": "^8.4.2",
     "@capacitor/core": "^8.4.2",
     "@capacitor/filesystem": "^8.1.2",
+    "@capacitor/haptics": "^8.0.2",
     "@capacitor/local-notifications": "^8.2.0",
     "@capacitor/splash-screen": "^8.0.1",
     "@capacitor/status-bar": "^8.0.2",
     "@capgo/capacitor-native-biometric": "^8.6.2",
-    "pdfjs-dist": "^6.1.200"
+    "@formkit/auto-animate": "^0.10.0",
+    "alpinejs": "^3.17.3",
+    "driver.js": "^1.8.0",
+    "gsap": "^3.15.0",
+    "lightweight-charts": "^5.2.1",
+    "lucide": "^1.46.0",
+    "number-flow": "^0.6.2",
+    "pdfjs-dist": "^6.3.289"
   },
   "devDependencies": {
-    "esbuild": "^0.28.1"
+    "@tailwindcss/cli": "^4.3.3",
+    "@tailwindcss/forms": "^0.5.11",
+    "esbuild": "^0.28.1",
+    "playwright": "^1.63.0",
+    "tailwindcss": "^4.3.3"
   }
 }
