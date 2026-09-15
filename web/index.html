@@ -144,7 +144,7 @@
             </button>
         </div>
 
-        <div class="flex flex-col gap-3 max-h-[60vh] overflow-y-auto pr-1">
+        <div data-animate-list class="flex flex-col gap-3 max-h-[60vh] overflow-y-auto pr-1">
             <template x-for="notif in notificationsList" :key="notif.id">
                 <div @click="activePage = notif.actionPage; showNotifications = false" class="p-3.5 rounded-xl border border-white/5 flex gap-3 items-start cursor-pointer transition-all hover:bg-surface-container-high"
                      :class="{
@@ -241,7 +241,7 @@
     </p>
 
     <!-- Range selector -->
-    <div class="flex justify-around px-6 pb-4 pt-2 border-t" style="border-color: rgba(255,255,255,0.05);">
+    <div data-animate-list class="flex justify-around px-6 pb-4 pt-2 border-t" style="border-color: rgba(255,255,255,0.05);">
         <template x-for="range in ['1M','3M','6M','1Y','ALL']" :key="range">
             <button @click="nwChartRange = range; renderNwChart()"
                     :class="nwChartRange === range ? 'text-primary font-bold' : 'text-on-surface-variant hover:text-white'"
@@ -549,7 +549,7 @@
             </div>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div data-animate-list class="grid grid-cols-1 md:grid-cols-2 gap-3">
             <template x-for="inv in usStockList" :key="inv.id">
                 <div data-holding-row @click="openEditModal(inv)" class="p-4 rounded-2xl cursor-pointer transition-all hover:border-white/20 relative group"
                      style="background:#13151f; border:1px solid rgba(255,255,255,0.06); box-shadow:0 4px 16px rgba(0,0,0,0.3);">
@@ -601,7 +601,7 @@
             <span class="text-xs font-bold text-white font-mono tabular" x-text="formatCurrency(totalIndStockValuation)"></span>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div data-animate-list class="grid grid-cols-1 md:grid-cols-2 gap-3">
             <template x-for="inv in indStockList" :key="inv.id">
                 <div data-holding-row @click="openEditModal(inv)" class="p-4 rounded-2xl cursor-pointer transition-all hover:border-white/20 relative group"
                      style="background:#13151f; border:1px solid rgba(255,255,255,0.06); box-shadow:0 4px 16px rgba(0,0,0,0.3);">
@@ -653,7 +653,7 @@
             <span class="text-xs font-bold text-white font-mono tabular" x-text="formatCurrency(totalMfValuation)"></span>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div data-animate-list class="grid grid-cols-1 md:grid-cols-2 gap-3">
             <template x-for="inv in mutualFundList" :key="inv.id">
                 <div data-holding-row @click="openEditModal(inv)" class="p-4 rounded-2xl cursor-pointer transition-all hover:border-white/20 relative group"
                      style="background:#13151f; border:1px solid rgba(255,255,255,0.06); box-shadow:0 4px 16px rgba(0,0,0,0.3);">
@@ -704,7 +704,7 @@
             </div>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div data-animate-list class="grid grid-cols-1 md:grid-cols-2 gap-3">
             <template x-for="inv in debtAndEpfList" :key="inv.id">
                 <div data-holding-row @click="openEditModal(inv)" class="p-4 rounded-2xl cursor-pointer transition-all hover:border-white/20 relative group"
                      style="background:#13151f; border:1px solid rgba(255,255,255,0.06); box-shadow:0 4px 16px rgba(0,0,0,0.3);">
@@ -749,7 +749,7 @@
                 style="border-color:rgba(68,229,194,0.3); background:rgba(68,229,194,0.1);">+ Add SIP</button>
     </div>
 
-    <div class="flex flex-col gap-2.5">
+    <div data-animate-list class="flex flex-col gap-2.5">
         <template x-for="sip in sips" :key="sip.id">
             <div class="p-3.5 rounded-2xl flex justify-between items-center"
                  style="background:#13151f; border:1px solid rgba(255,255,255,0.06); box-shadow:0 2px 12px rgba(0,0,0,0.3);">
@@ -948,7 +948,7 @@
 <th class="py-2.5 px-3 text-center">Status</th>
 </tr>
 </thead>
-<tbody>
+<tbody data-animate-list>
 <template x-for="(inv, idx) in importResults.investments" :key="idx">
 <tr class="border-b border-white/5 hover:bg-surface-container-high transition-colors">
 <td class="py-2.5 px-3">
@@ -1150,7 +1150,7 @@ Restore from JSON
             </div>
 
             <template x-if="advanceTaxSchedule &amp;&amp; advanceTaxSchedule.length &gt; 0">
-                <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <div data-animate-list class="grid grid-cols-2 sm:grid-cols-4 gap-2">
                     <template x-for="item in advanceTaxSchedule" :key="item.due">
                         <div class="p-2.5 rounded-xl text-xs" style="background:#0d0f1a; border:1px solid rgba(255,255,255,0.05);">
                             <span class="text-[13px] block" style="color:#8b8fa8;" x-text="item.due"></span>
@@ -1547,11 +1547,11 @@ Reads: <span class="text-white font-medium">ET Markets</span> · <span class="te
 <template x-if="regenWealth.analysis">
 <div class="flex flex-col gap-6">
 <!-- Overview Card -->
-<div class="bg-gradient-to-br from-[#1c2b3c] to-[#0d1b2a] border border-white/10 rounded-2xl p-6 shadow-2xl flex flex-col gap-6">
+<div data-insight-card class="bg-gradient-to-br from-[#1c2b3c] to-[#0d1b2a] border border-white/10 rounded-2xl p-6 shadow-2xl flex flex-col gap-6">
 <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-4 border-b border-white/10">
 <div class="flex items-center gap-4">
 <div class="w-16 h-16 rounded-2xl bg-surface-container-lowest border border-[#d4af37]/30 flex flex-col items-center justify-center shrink-0 shadow-inner">
-<span class="text-xl font-bold text-[#d4af37]" x-text="regenWealth.analysis.portfolioHealthScore || 85"></span>
+<span data-insight-score class="text-xl font-bold text-[#d4af37]" x-text="regenWealth.analysis.portfolioHealthScore || 85"></span>
 <span class="text-[13px] uppercase tracking-wider text-on-surface-variant font-label-caps">Health</span>
 </div>
 <div>
@@ -1581,7 +1581,7 @@ Reads: <span class="text-white font-medium">ET Markets</span> · <span class="te
 <template x-if="regenWealth.analysis.keyRisks &amp;&amp; regenWealth.analysis.keyRisks.length &gt; 0">
 <div>
 <h4 class="text-xs font-label-caps uppercase text-red-400 tracking-wider mb-2">Key Macro Risks Detected</h4>
-<div class="flex flex-wrap gap-2">
+<div data-animate-list class="flex flex-wrap gap-2">
 <template x-for="risk in regenWealth.analysis.keyRisks" :key="risk">
 <span class="px-3 py-1 rounded-lg bg-red-950/40 border border-red-500/30 text-red-300 text-xs font-medium flex items-center gap-1.5">
 <span class="material-symbols-outlined text-sm">warning</span>
@@ -1603,7 +1603,7 @@ Reads: <span class="text-white font-medium">ET Markets</span> · <span class="te
 </div>
 
 <!-- Recommendations Grid -->
-<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+<div data-animate-list class="grid grid-cols-1 md:grid-cols-2 gap-6">
 <template x-for="rec in regenWealth.analysis.recommendations" :key="rec.id || rec.title">
 <div class="bg-gradient-to-br from-[#122131] to-[#0d1c2d] rounded-2xl p-6 border transition-all hover:-translate-y-2 flex flex-col justify-between" :class="regenCardGlow(rec.priority)">
 
@@ -1648,7 +1648,7 @@ Reads: <span class="text-white font-medium">ET Markets</span> · <span class="te
 <template x-if="rec.specificInstruments &amp;&amp; rec.specificInstruments.length &gt; 0">
 <div class="pt-3 border-t border-white/5">
 <span class="text-[13px] font-label-caps uppercase text-on-surface-variant block mb-1.5">Recommended Instruments:</span>
-<div class="flex flex-wrap gap-1.5">
+<div data-animate-list class="flex flex-wrap gap-1.5">
 <template x-for="inst in rec.specificInstruments" :key="inst">
 <span class="px-2.5 py-0.5 rounded-md bg-surface-container-highest text-white text-[13px] border border-white/5" x-text="inst"></span>
 </template>
@@ -1721,7 +1721,7 @@ Reads: <span class="text-white font-medium">ET Markets</span> · <span class="te
             </div>
 
             <!-- Incomes List -->
-            <div class="space-y-3">
+            <div data-animate-list class="space-y-3">
                 <template x-for="inc in (cashflow.incomes || [])" :key="inc.id">
                     <div class="p-3 rounded-xl flex flex-col gap-2" style="background:#0d0f1a; border:1px solid rgba(255,255,255,0.05);">
                         <div class="flex items-center justify-between gap-2">
@@ -1767,7 +1767,7 @@ Reads: <span class="text-white font-medium">ET Markets</span> · <span class="te
             </div>
 
             <!-- Expenses List -->
-            <div class="space-y-3">
+            <div data-animate-list class="space-y-3">
                 <template x-for="exp in (cashflow.expenses || [])" :key="exp.id">
                     <div class="p-3 rounded-xl flex flex-col gap-2" style="background:#0d0f1a; border:1px solid rgba(255,255,255,0.05);">
                         <div class="flex items-center justify-between gap-2">
@@ -1807,7 +1807,7 @@ Reads: <span class="text-white font-medium">ET Markets</span> · <span class="te
                     </div>
 
                     <!-- Individual SIP Skip Toggles -->
-                    <div class="space-y-2 mt-2">
+                    <div data-animate-list class="space-y-2 mt-2">
                         <template x-for="sip in sips" :key="sip.id">
                             <div class="p-2.5 rounded-xl flex items-center justify-between gap-2" style="background:#0d0f1a; border:1px solid rgba(255,255,255,0.04);">
                                 <div class="min-w-0 cursor-pointer" @click="openEditSipModal(sip)">
@@ -2028,7 +2028,7 @@ Reads: <span class="text-white font-medium">ET Markets</span> · <span class="te
 <th class="py-2.5 px-3 text-right">Action</th>
 </tr>
 </thead>
-<tbody>
+<tbody data-animate-list>
 <template x-for="(rev, idx) in [...pension.revisions].reverse()" :key="idx">
 <tr class="border-b border-white/5 hover:bg-surface-container-high transition-colors">
 <td class="py-2.5 px-3 text-white" x-text="formatDate(rev.date)"></td>
@@ -2170,7 +2170,7 @@ With your current monthly surplus, you could reach full funding in ~<span class=
 No financial goals added yet. Use the form above to add your first goal!
 </div>
 
-<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+<div data-animate-list class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
 <template x-for="g in goalsProgress" :key="g.id">
 <div class="bg-gradient-to-br from-[#1c2b3c] to-[#0d1b2a] border border-white/5 rounded-2xl p-5 shadow-xl hover:-translate-y-2 transition-all flex flex-col justify-between">
 <div>
@@ -2237,7 +2237,7 @@ No financial goals added yet. Use the form above to add your first goal!
 <th class="py-3 px-4 text-center">Urgency</th>
 </tr>
 </thead>
-<tbody>
+<tbody data-animate-list>
 <template x-for="inv in maturingInvestments" :key="inv.id">
 <tr class="border-b border-white/5 hover:bg-surface-container-high transition-colors">
 <td class="py-3 px-4 font-bold text-white" x-text="inv.name"></td>
@@ -2374,7 +2374,7 @@ No financial goals added yet. Use the form above to add your first goal!
 
     <!-- Stock Cards Grid (If stocks exist) -->
     <template x-if="filteredStockInvestments.length > 0">
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div data-animate-list class="grid grid-cols-1 md:grid-cols-2 gap-3">
             <template x-for="inv in filteredStockInvestments" :key="inv.id">
                 <div data-holding-row class="p-4 rounded-2xl transition-all hover:border-white/20 relative group"
                      style="background:#13151f; border:1px solid rgba(255,255,255,0.06); box-shadow:0 4px 16px rgba(0,0,0,0.3);">
@@ -2549,7 +2549,7 @@ No financial goals added yet. Use the form above to add your first goal!
 
     <!-- MF Cards Grid -->
     <template x-if="filteredMfInvestments.length > 0">
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div data-animate-list class="grid grid-cols-1 md:grid-cols-2 gap-3">
             <template x-for="inv in filteredMfInvestments" :key="inv.id">
                 <div data-holding-row class="p-4 rounded-2xl transition-all hover:border-white/20 relative group"
                      style="background:#13151f; border:1px solid rgba(255,255,255,0.06); box-shadow:0 4px 16px rgba(0,0,0,0.3);">
@@ -2735,7 +2735,7 @@ No financial goals added yet. Use the form above to add your first goal!
 
     <!-- Gold Cards Grid -->
     <template x-if="filteredGoldInvestments.length > 0">
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div data-animate-list class="grid grid-cols-1 md:grid-cols-2 gap-3">
             <template x-for="inv in filteredGoldInvestments" :key="inv.id">
                 <div class="p-4 rounded-2xl transition-all hover:border-white/20 relative group"
                      style="background:#13151f; border:1px solid rgba(255,255,255,0.06); box-shadow:0 4px 16px rgba(0,0,0,0.3);">
@@ -2929,7 +2929,7 @@ No financial goals added yet. Use the form above to add your first goal!
                 </div>
                 <div x-show="newInv.schemeCode" class="text-xs text-primary mt-1 font-mono" x-text="'Selected AMFI Scheme Code: ' + newInv.schemeCode"></div>
                 <!-- Search Results Dropdown -->
-                <div x-show="mfSearchResults.length > 0" class="absolute z-50 left-0 right-0 top-full mt-1 bg-[#122131] border border-white/10 rounded-xl shadow-2xl max-h-48 overflow-y-auto p-1">
+                <div data-animate-list x-show="mfSearchResults.length > 0" class="absolute z-50 left-0 right-0 top-full mt-1 bg-[#122131] border border-white/10 rounded-xl shadow-2xl max-h-48 overflow-y-auto p-1">
                     <template x-for="scheme in mfSearchResults" :key="scheme.schemeCode">
                         <div @click="selectMfScheme(newInv, scheme)" class="p-2.5 hover:bg-surface-container-high rounded-lg cursor-pointer text-xs text-white flex justify-between items-center border-b border-white/5">
                             <span class="font-medium text-white" x-text="scheme.schemeName"></span>
@@ -3072,7 +3072,7 @@ No financial goals added yet. Use the form above to add your first goal!
         <span class="material-symbols-outlined text-[14px] text-primary/60">auto_awesome</span>
         <span class="text-[13px] text-white/40">Select from AMFI-registered mutual funds</span>
     </div>
-    <div class="max-h-56 overflow-y-auto">
+    <div data-animate-list class="max-h-56 overflow-y-auto">
         <template x-for="scheme in sipMfSearch.results" :key="scheme.schemeCode">
             <button
                 type="button"

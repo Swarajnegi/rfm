@@ -120,5 +120,52 @@
         d.drive();
     }
 
-    window.RFMMotion = { transition, syncSweep, flashValue, Haptics, startTour, TOUR_KEY, reduced };
+
+    /* ── List motion ─────────────────────────────────────────────────────
+       AutoAnimate on any container marked [data-animate-list]. Rows added,
+       removed or reordered by Alpine's x-for slide instead of snapping, so
+       adding a holding or changing a filter reads as a change to the same
+       list rather than a different screen. */
+    function enhanceLists(root) {
+        if (reduced || !window.autoAnimate) return;
+        (root || document).querySelectorAll('[data-animate-list]').forEach(el => {
+            if (el.__aa) return;
+            el.__aa = true;
+            try { window.autoAnimate(el, { duration: 220, easing: 'cubic-bezier(0.16,1,0.3,1)' }); } catch (e) {}
+        });
+    }
+
+    /* ── Insights reveal ─────────────────────────────────────────────────
+       The AI section used to go spinner -> wall of text. Cards now land one
+       at a time so the eye is led through them, and the headline figure is
+       split so it resolves character by character. Purely presentational:
+       if GSAP is absent the cards are simply already visible. */
+    function revealInsights(scope) {
+        if (reduced || !window.gsap) return;
+        const root = scope || document;
+        const cards = [...root.querySelectorAll('[data-insight-card]')];
+        if (!cards.length) return;
+
+        const tl = window.gsap.timeline({ defaults: { ease: 'ledger' } });
+        tl.fromTo(cards,
+            { opacity: 0, y: 14 },
+            { opacity: 1, y: 0, duration: 0.42, stagger: 0.08, clearProps: 'all' });
+
+        const score = root.querySelector('[data-insight-score]');
+        if (score && window.SplitText) {
+            try {
+                const split = new window.SplitText(score, { type: 'chars' });
+                tl.from(split.chars, { opacity: 0, y: -8, duration: 0.3, stagger: 0.04 }, 0.1);
+            } catch (e) {}
+        }
+        Haptics.commit();
+    }
+
+    window.RFMMotion = { transition, syncSweep, flashValue, enhanceLists, revealInsights, Haptics, startTour, TOUR_KEY, reduced };
+
+    // Lists appear as pages are visited, so re-scan after Alpine settles.
+    document.addEventListener('alpine:initialized', () => {
+        enhanceLists();
+        setInterval(() => enhanceLists(), 1500);
+    });
 })();

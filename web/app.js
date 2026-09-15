@@ -2939,6 +2939,9 @@ RULES: Return ONLY valid JSON. No markdown, no explanation. If a field is unknow
             if (!activeModel) {
                 this.regenWealth.error = 'Choose a model from the live catalog or enter a custom model ID.';
                 this.regenWealth.loading = false;
+                if (this.regenWealth.analysis && window.RFMMotion) {
+                    this.$nextTick(() => window.RFMMotion.revealInsights());
+                }
                 this.regenWealth.progressMsg = '';
                 return;
             }
@@ -2960,6 +2963,9 @@ RULES: Return ONLY valid JSON. No markdown, no explanation. If a field is unknow
                 this.regenWealth.progressMsg = '';
             } finally {
                 this.regenWealth.loading = false;
+                if (this.regenWealth.analysis && window.RFMMotion) {
+                    this.$nextTick(() => window.RFMMotion.revealInsights());
+                }
             }
         },
 
