@@ -498,7 +498,10 @@ button.row:active, label.row:active { background: var(--wash); transform: scale(
   font-size: var(--t-micro); font-weight: 600; color: var(--brass);
   /* Visually a link, but the tappable area is a full 44px — grown with padding
      and pulled back with margin so the type still sits on the baseline. */
-  min-height: 44px; display: inline-flex; align-items: center;
+  /* A short label ("Add") left the target 41px wide even with a 44px height,
+     so the minimum applies on both axes. */
+  min-height: 44px; min-width: 44px;
+  display: inline-flex; align-items: center; justify-content: flex-end;
   padding: 0 var(--s2); margin: calc(var(--s3) * -1) calc(var(--s2) * -1);
   border-radius: var(--r-control);
 }

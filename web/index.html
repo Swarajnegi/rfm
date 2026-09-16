@@ -346,16 +346,16 @@ if(t==="light"||t==="dark"){d.setAttribute("data-theme",t);}})();
     <section class="sheet">
       <div class="sheet__head sheet__head--split">
         <h2 class="sheet__title">Recurring</h2>
-        <span class="tnum muted" x-text="formatCurrency(totalMonthlySipOutflow) + ' a month'"></span>
+        <button class="linkbtn" @click="addingSip = true">Add</button>
       </div>
       <template x-for="sip in activeSips.slice(0,4)" :key="sip.id">
-        <div class="row">
+        <button class="row" @click="openEditSipModal(sip)">
           <span class="row__label">
             <span class="row__name" x-text="sip.name"></span>
             <span class="row__meta" x-text="'The ' + ordinal(sip.dayOfMonth) + ' of every month · ' + getSipDaysUntilDebit(sip)"></span>
           </span>
           <span class="row__value tnum" x-text="formatCurrency(sip.monthlyAmount)"></span>
-        </div>
+        </button>
       </template>
     </section>
   </template>
@@ -645,7 +645,13 @@ if(t==="light"||t==="dark"){d.setAttribute("data-theme",t);}})();
 <!-- Goals -->
 <main x-show="activePage === 'goals'" x-cloak class="surface stack">
   <button class="backlink" @click="goBack()"><span class="icon icon--sm">arrow_back</span> Planning</button>
-  <section class="pagehead"><h1 class="headline">Goals</h1></section>
+  <section class="pagehead">
+    <h1 class="headline">Goals</h1>
+    <p class="lead" style="margin-top:var(--s2)">Name what you are saving for and Corpus tracks the gap.</p>
+  </section>
+  <button class="btn btn--primary btn--block" @click="addingGoal = true">
+    <span class="icon icon--sm">add</span> Add a goal
+  </button>
   <template x-if="!goalsProgress.length">
     <section class="empty">
       <span class="icon empty__icon">savings</span>
@@ -979,6 +985,139 @@ if(t==="light"||t==="dark"){d.setAttribute("data-theme",t);}})();
         <button type="button" class="btn btn--ghost down" @click="deleteInvestment(editForm.id); cancelEdit()">Remove</button>
         <div class="bsheet__footactions">
           <button type="button" class="btn btn--ghost" @click="cancelEdit()">Cancel</button>
+          <button type="submit" class="btn btn--primary">Save</button>
+        </div>
+      </div>
+    </form>
+  </section>
+</div>
+
+<!-- Add a goal -->
+<div class="scrim" x-show="addingGoal" x-cloak @click.self="addingGoal = false" @keydown.escape.window="addingGoal = false">
+  <section class="bsheet" role="dialog" aria-modal="true" aria-label="Add a goal">
+    <div class="bsheet__grip"></div>
+    <header class="bsheet__head">
+      <h2 class="title">What are you saving for?</h2>
+      <button class="iconbtn" @click="addingGoal = false" aria-label="Close"><span class="icon">close</span></button>
+    </header>
+    <form class="form" @submit.prevent="addGoal(); addingGoal = false">
+      <label class="f"><span class="f__label">Name it</span>
+        <input class="field" type="text" x-model="newGoal.name" required placeholder="A year in Japan"></label>
+      <label class="f"><span class="f__label">Kind</span>
+        <select class="field" x-model="newGoal.type">
+          <template x-for="t in goalTypes" :key="t"><option :value="t" x-text="t"></option></template>
+        </select></label>
+      <div class="f__row">
+        <label class="f"><span class="f__label">How much</span>
+          <input class="field tnum" x-money="newGoal.target" placeholder="₹0"></label>
+        <label class="f"><span class="f__label">Saved so far</span>
+          <input class="field tnum" x-money="newGoal.current" placeholder="₹0"></label>
+      </div>
+      <label class="f"><span class="f__label">By when</span>
+        <input class="field" type="date" x-model="newGoal.targetDate"></label>
+      <div class="bsheet__foot">
+        <button type="button" class="btn btn--ghost" @click="addingGoal = false">Cancel</button>
+        <button type="submit" class="btn btn--primary">Add goal</button>
+      </div>
+    </form>
+  </section>
+</div>
+
+<!-- Edit a goal -->
+<div class="scrim" x-show="editingGoal" x-cloak @click.self="cancelGoalEdit()" @keydown.escape.window="cancelGoalEdit()">
+  <section class="bsheet" role="dialog" aria-modal="true" aria-label="Edit goal">
+    <div class="bsheet__grip"></div>
+    <header class="bsheet__head">
+      <h2 class="title" x-text="editGoalForm.name || 'Edit goal'"></h2>
+      <button class="iconbtn" @click="cancelGoalEdit()" aria-label="Close"><span class="icon">close</span></button>
+    </header>
+    <form class="form" @submit.prevent="saveGoalEdit()">
+      <label class="f"><span class="f__label">Name</span>
+        <input class="field" type="text" x-model="editGoalForm.name"></label>
+      <div class="f__row">
+        <label class="f"><span class="f__label">Target</span>
+          <input class="field tnum" x-money="editGoalForm.target"></label>
+        <label class="f"><span class="f__label">Saved</span>
+          <input class="field tnum" x-money="editGoalForm.current"></label>
+      </div>
+      <label class="f"><span class="f__label">By when</span>
+        <input class="field" type="date" x-model="editGoalForm.targetDate"></label>
+      <div class="bsheet__foot bsheet__foot--split">
+        <button type="button" class="btn btn--ghost down" @click="deleteGoal(editGoalForm.id); cancelGoalEdit()">Remove</button>
+        <div class="bsheet__footactions">
+          <button type="button" class="btn btn--ghost" @click="cancelGoalEdit()">Cancel</button>
+          <button type="submit" class="btn btn--primary">Save</button>
+        </div>
+      </div>
+    </form>
+  </section>
+</div>
+
+<!-- Add a recurring contribution -->
+<div class="scrim" x-show="addingSip" x-cloak @click.self="addingSip = false" @keydown.escape.window="addingSip = false">
+  <section class="bsheet" role="dialog" aria-modal="true" aria-label="Add a recurring contribution">
+    <div class="bsheet__grip"></div>
+    <header class="bsheet__head">
+      <h2 class="title">Something that repeats</h2>
+      <button class="iconbtn" @click="addingSip = false" aria-label="Close"><span class="icon">close</span></button>
+    </header>
+    <form class="form" @submit.prevent="addSip(); addingSip = false">
+      <label class="f">
+        <span class="f__label">What is it</span>
+        <input class="field" type="text" x-model="newSip.name" required placeholder="Start typing to search AMFI"
+               @input="sipMfSearch.query = newSip.name; searchSipMf(newSip.name)">
+      </label>
+      <template x-if="sipMfSearch.show && sipMfSearch.results.length">
+        <ul class="typeahead">
+          <template x-for="r in sipMfSearch.results.slice(0,6)" :key="r.schemeCode">
+            <li><button type="button" class="typeahead__item" @click="selectSipMf(r)" x-text="r.schemeName"></button></li>
+          </template>
+        </ul>
+      </template>
+      <div class="f__row">
+        <label class="f"><span class="f__label">Every month</span>
+          <input class="field tnum" x-money="newSip.monthlyAmount" placeholder="₹0"></label>
+        <label class="f"><span class="f__label">On the</span>
+          <input class="field tnum" type="number" min="1" max="31" x-model.number="newSip.dayOfMonth"></label>
+      </div>
+      <label class="f"><span class="f__label">Kind</span>
+        <select class="field" x-model="newSip.type">
+          <option>SIP</option><option>RD</option><option>PPF</option><option>Other</option>
+        </select></label>
+      <div class="bsheet__foot">
+        <button type="button" class="btn btn--ghost" @click="addingSip = false">Cancel</button>
+        <button type="submit" class="btn btn--primary">Add it</button>
+      </div>
+    </form>
+  </section>
+</div>
+
+<!-- Edit a recurring contribution -->
+<div class="scrim" x-show="editingSip" x-cloak @click.self="cancelSipEdit()" @keydown.escape.window="cancelSipEdit()">
+  <section class="bsheet" role="dialog" aria-modal="true" aria-label="Edit recurring contribution">
+    <div class="bsheet__grip"></div>
+    <header class="bsheet__head">
+      <h2 class="title" x-text="editSipForm.name || 'Edit'"></h2>
+      <button class="iconbtn" @click="cancelSipEdit()" aria-label="Close"><span class="icon">close</span></button>
+    </header>
+    <form class="form" @submit.prevent="saveSipEdit()">
+      <label class="f"><span class="f__label">Name</span>
+        <input class="field" type="text" x-model="editSipForm.name"></label>
+      <div class="f__row">
+        <label class="f"><span class="f__label">Every month</span>
+          <input class="field tnum" x-money="editSipForm.monthlyAmount"></label>
+        <label class="f"><span class="f__label">On the</span>
+          <input class="field tnum" type="number" min="1" max="31" x-model.number="editSipForm.dayOfMonth"></label>
+      </div>
+      <label class="f check__row">
+        <input type="checkbox" class="check" :checked="editSipForm.status === 'Active'"
+               @change="editSipForm.status = $event.target.checked ? 'Active' : 'Paused'">
+        <span class="f__label" style="margin:0">Still running</span>
+      </label>
+      <div class="bsheet__foot bsheet__foot--split">
+        <button type="button" class="btn btn--ghost down" @click="deleteSip(editSipForm.id); cancelSipEdit()">Remove</button>
+        <div class="bsheet__footactions">
+          <button type="button" class="btn btn--ghost" @click="cancelSipEdit()">Cancel</button>
           <button type="submit" class="btn btn--primary">Save</button>
         </div>
       </div>

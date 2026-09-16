@@ -111,6 +111,7 @@ document.addEventListener('alpine:init', () => {
         editingInv: null,
         editForm: {},
         addingInv: false,
+        addingGoal: false,
         moreMenuOpen: false,
 
         // ── Goal Edit State (Deliverable 3) ─────────────────────────
@@ -1898,6 +1899,8 @@ document.addEventListener('alpine:init', () => {
         get efSurplus() {
             return (Number(this.emergency.efCurrent) || 0) - (Number(this.efRequired) || 0);
         },
+
+        goalTypes: ['Emergency Fund', 'Retirement', 'House', 'Education', 'Travel', 'New Car', 'Other'],
 
         get hasAnyPortfolioData() {
             const nz = v => Number(v) > 0;
