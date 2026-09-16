@@ -174,6 +174,30 @@ if(t==="light"||t==="dark"){d.setAttribute("data-theme",t);}})();
     </p>
   </section>
 
+  <!-- The result of the last sync, stated plainly. A sync that updated 3 of 5
+       holdings must LOOK like one; reporting "done" and moving on is the
+       behaviour this app exists not to have. -->
+  <template x-if="navFetchState === 'fetching'">
+    <section class="syncbar" aria-live="polite">
+      <span class="syncbar__spinner" aria-hidden="true"></span>
+      <span x-text="navFetchProgress.total
+        ? `Refreshing ${navFetchProgress.completed} of ${navFetchProgress.total}…`
+        : 'Refreshing prices…'"></span>
+    </section>
+  </template>
+
+  <template x-if="navFetchState !== 'fetching' && navFetchProgress.failed > 0">
+    <section class="syncbar syncbar--warn" aria-live="polite">
+      <span class="icon icon--sm">warning</span>
+      <span class="syncbar__body">
+        <span x-text="`${navFetchProgress.updated} refreshed, ${navFetchProgress.failed} could not be reached`"></span>
+        <span class="syncbar__detail" x-text="navFetchError"></span>
+        <span class="syncbar__detail">The figures below keep their last verified value.</span>
+      </span>
+      <button class="linkbtn" @click="fetchAllPrices()">Retry</button>
+    </section>
+  </template>
+
   <!-- Filter. Sentence case, no all-caps, and it names asset classes the way an
        Indian investor says them rather than by internal type strings. -->
   <div class="seg seg--scroll" role="tablist" aria-label="Filter holdings">

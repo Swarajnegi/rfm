@@ -746,3 +746,31 @@ button.row:active, label.row:active { background: var(--wash); transform: scale(
   background: currentColor; opacity: 0.45; flex: none;
 }
 .hero__delta-in { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+
+/* ═══ SYNC RESULT ═════════════════════════════════════════════════════════
+   Not a toast. A toast disappears, and the fact that two holdings are running
+   on an old price is still true ten seconds later — so it stays until the
+   situation changes. */
+.syncbar {
+  display: flex; align-items: flex-start; gap: var(--s3);
+  padding: var(--s4) var(--s5);
+  background: var(--sheet);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-panel);
+  font-size: var(--t-small); font-weight: 600;
+  color: var(--ink-soft);
+}
+.syncbar--warn { border-color: var(--brass-rule); background: var(--wash); color: var(--ink); }
+.syncbar--warn .icon { color: var(--brass); margin-top: 1px; }
+.syncbar__body { display: grid; gap: 2px; flex: 1; min-width: 0; }
+.syncbar__detail { font-size: var(--t-micro); font-weight: 500; color: var(--ink-faint); }
+.syncbar .linkbtn { flex: none; align-self: flex-start; margin-top: -6px; }
+
+.syncbar__spinner {
+  width: 15px; height: 15px; flex: none; margin-top: 2px;
+  border: 2px solid var(--rule-strong);
+  border-top-color: var(--brass);
+  border-radius: 999px;
+  animation: spin 800ms linear infinite;
+}
+@media (prefers-reduced-motion: reduce) { .syncbar__spinner { animation-duration: 3s; } }
