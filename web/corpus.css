@@ -62,7 +62,21 @@
   --r-panel:   16px;
   --r-sheet:   24px;
 
+  /* A bezier decelerates to a halt; a spring overshoots a touch and settles.
+     linear() samples the spring directly, so this needs no JS and stays on the
+     compositor. Fallback for older engines is the bezier below. */
   --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --spring: linear(
+    0, 0.0018 1.4%, 0.0082, 0.0202 4.2%, 0.0398, 0.0691 7.5%, 0.1103 9.6%,
+    0.2039 13.1%, 0.4304 19.8%, 0.5266 22.8%, 0.6117, 0.6868 28.5%,
+    0.7529 31.4%, 0.8104, 0.8604 37.4%, 0.9036 40.5%, 0.9405 43.9%,
+    0.9714 47.7%, 0.9967 52.1%, 1.0168 57.2%, 1.0318 63.5%, 1.0407 71.8%,
+    1.0443 84.4%, 1.0442 100%);
+  --spring-soft: linear(
+    0, 0.0039 2.3%, 0.0157, 0.0352 6.9%, 0.0625 9.2%, 0.1407 13.8%,
+    0.25 18.4%, 0.3906 23%, 0.5625 27.6%, 0.6406 29.9%, 0.7109,
+    0.7734 34.5%, 0.8281, 0.875 39.1%, 0.9141, 0.9453 43.7%,
+    0.9688 46%, 0.9844 48.3%, 0.9961 52.9%, 1 57.5%, 1 100%);
   --fast: 180ms;
   --slow: 420ms;
 
@@ -173,9 +187,14 @@ input, select, textarea { font: inherit; }
   position: relative;
 }
 .row + .row { box-shadow: inset 0 1px 0 var(--rule); }
-button.row { transition: background var(--fast) var(--ease); }
-button.row:hover { background: var(--wash); }
-button.row:active { background: var(--wash); }
+button.row, label.row {
+  transition: background var(--fast) var(--ease), transform 120ms var(--ease);
+  -webkit-tap-highlight-color: transparent;
+}
+button.row:hover, label.row:hover { background: var(--wash); }
+/* Scales from the row's own left edge so a list does not appear to breathe
+   sideways when one item is pressed. */
+button.row:active, label.row:active { background: var(--wash); transform: scale(0.994); transform-origin: left center; }
 .row__name { font-size: var(--t-body); font-weight: 500; }
 .row__meta { font-size: var(--t-micro); line-height: var(--lh-micro); color: var(--ink-faint); margin-top: 2px; }
 .row__value { font-size: var(--t-body); font-weight: 600; text-align: right; }
@@ -221,9 +240,10 @@ button.row:active { background: var(--wash); }
   min-height: 48px; padding: 0 var(--s5);
   border-radius: var(--r-control);
   font-size: var(--t-small); font-weight: 600; letter-spacing: 0.01em;
-  transition: transform var(--fast) var(--ease), background var(--fast) var(--ease);
+  transition: transform 260ms var(--spring), background var(--fast) var(--ease), box-shadow var(--fast) var(--ease);
+  -webkit-tap-highlight-color: transparent;
 }
-.btn:active { transform: scale(0.98); }
+.btn:active { transform: scale(0.965); }
 .btn--primary { background: var(--ink); color: var(--ground); }
 .btn--brass   { background: var(--brass); color: var(--ground); }
 .btn--quiet   { background: transparent; color: var(--ink); box-shadow: inset 0 0 0 1px var(--rule-strong); }
@@ -257,7 +277,7 @@ button.row:active { background: var(--wash); }
 /* ── Segmented control ─────────────────────────────────────────────────── */
 .seg { display: flex; gap: var(--s1); padding: 0; background: none; }
 .seg__item {
-  flex: 1; min-height: 34px; padding: 0 var(--s2);
+  flex: 1; min-height: 44px; padding: 0 var(--s3);
   border-radius: 999px; font-size: var(--t-micro); font-weight: 600; color: var(--ink-faint);
   transition: color var(--fast) var(--ease), background var(--fast) var(--ease);
 }
@@ -290,7 +310,13 @@ button.row:active { background: var(--wash); }
   backdrop-filter: blur(16px) saturate(140%);
   -webkit-backdrop-filter: blur(16px) saturate(140%);
   border-bottom: 1px solid transparent;
-  transition: border-color var(--fast) var(--ease);
+  transition: border-color 240ms var(--ease), background 240ms var(--ease);
+}
+/* A permanent divider under a bar that has nothing beneath it is noise; it
+   should appear only when it is actually separating two things. */
+.appbar.is-stuck {
+  border-bottom-color: var(--rule);
+  background: color-mix(in srgb, var(--ground) 94%, transparent);
 }
 .appbar__inner { display: flex; align-items: center; justify-content: space-between; min-height: 60px; }
 
@@ -389,17 +415,22 @@ button.row:active { background: var(--wash); }
   color: var(--ink-faint);
   position: relative;
   transition: color var(--fast) var(--ease);
+  -webkit-tap-highlight-color: transparent;
 }
+.dock__item .icon { transition: transform 320ms var(--spring); }
+.dock__item.is-active .icon { transform: translateY(-1px) scale(1.06); }
 .dock__item::before {
   content: ''; position: absolute; top: 0; left: 50%;
-  width: 0; height: 2px; background: var(--brass);
-  transform: translateX(-50%);
-  transition: width var(--fast) var(--ease);
+  width: 26px; height: 2px; background: var(--brass);
+  transform: translateX(-50%) scaleX(0);
+  transform-origin: center;
+  transition: transform 340ms var(--spring), opacity var(--fast) var(--ease);
+  opacity: 0;
 }
 .dock__item.is-active { color: var(--ink); }
-.dock__item.is-active::before { width: 26px; }
+.dock__item.is-active::before { transform: translateX(-50%) scaleX(1); opacity: 1; }
 .dock__label { font-size: var(--t-micro); font-weight: 600; letter-spacing: 0.005em; }
-.dock__item:active { transform: scale(0.96); }
+.dock__item:active .icon { transform: scale(0.9); }
 
 /* The sync sweep, restated for the new material. */
 [data-holding-row] { --sweep: 0; }
@@ -424,9 +455,15 @@ button.row:active { background: var(--wash); }
 .sheet__head--split .muted { font-size: var(--t-small); font-weight: 600; color: var(--ink-faint); }
 
 /* Horizontally scrollable filter that does not announce its scrollbar. */
-.seg--scroll { overflow-x: auto; scrollbar-width: none; -ms-overflow-style: none; padding-bottom: 2px; }
+.seg--scroll {
+  overflow-x: auto; scrollbar-width: none; -ms-overflow-style: none;
+  margin: 0 calc(var(--gutter) * -1);
+  padding: 0 var(--gutter) 2px;
+  scroll-padding-inline: var(--gutter);
+  overscroll-behavior-x: contain;
+}
 .seg--scroll::-webkit-scrollbar { display: none; }
-.seg--scroll .seg__item { flex: 0 0 auto; padding: 0 var(--s4); }
+.seg--scroll .seg__item { flex: 0 0 auto; padding: 0 var(--s4); scroll-snap-align: start; }
 
 /* A holding's row carries three facts: what it is, what it is worth, and how
    sure we are of that. The third is the one most apps omit. */
@@ -457,7 +494,14 @@ button.row:active { background: var(--wash); }
 .meter--inline { margin: 7px 0 0; }
 .meter__fill { display: block; height: 100%; width: var(--pct, 0%); background: var(--brass); border-radius: 3px; transition: width var(--slow) var(--ease); }
 
-.linkbtn { font-size: var(--t-micro); font-weight: 600; color: var(--brass); }
+.linkbtn {
+  font-size: var(--t-micro); font-weight: 600; color: var(--brass);
+  /* Visually a link, but the tappable area is a full 44px — grown with padding
+     and pulled back with margin so the type still sits on the baseline. */
+  min-height: 44px; display: inline-flex; align-items: center;
+  padding: 0 var(--s2); margin: calc(var(--s3) * -1) calc(var(--s2) * -1);
+  border-radius: var(--r-control);
+}
 .linkbtn:hover { text-decoration: underline; text-underline-offset: 3px; }
 .sheet__note { padding: 0 var(--s5) var(--s5); color: var(--ink-faint); font-size: var(--t-small); max-width: var(--measure); }
 
@@ -509,12 +553,12 @@ button.row:active { background: var(--wash); }
   border-radius: var(--r-sheet) var(--r-sheet) 0 0;
   box-shadow: var(--lift-high);
   padding-bottom: calc(var(--s5) + env(safe-area-inset-bottom));
-  animation: sheet-up 320ms var(--ease);
+  animation: sheet-up 460ms var(--spring-soft);
 }
 .bsheet--top {
   border-radius: 0 0 var(--r-sheet) var(--r-sheet);
   margin-top: env(safe-area-inset-top);
-  animation: sheet-down 320ms var(--ease);
+  animation: sheet-down 460ms var(--spring-soft);
 }
 @keyframes sheet-up   { from { transform: translateY(100%); } }
 @keyframes sheet-down { from { transform: translateY(-100%); } }
@@ -542,7 +586,10 @@ button.row:active { background: var(--wash); }
    guess where they are about to land. */
 .backlink {
   display: inline-flex; align-items: center; gap: 6px;
-  margin-top: var(--s5); padding: 6px 0;
+  min-height: 44px;
+  margin-top: var(--s4); margin-left: calc(var(--s2) * -1);
+  padding: 0 var(--s2);
+  border-radius: var(--r-control);
   font-size: var(--t-small); font-weight: 600; color: var(--ink-soft);
 }
 .backlink:hover { color: var(--ink); }
@@ -561,14 +608,17 @@ button.row:active { background: var(--wash); }
 .dropzone__icon { font-size: 34px; color: var(--brass); margin-bottom: var(--s2); }
 
 .check { width: 22px; height: 22px; accent-color: var(--brass); flex: none; }
-.check__row { display: flex; align-items: center; gap: var(--s3); }
+.check__row {
+  display: flex; align-items: center; gap: var(--s3);
+  min-height: 44px; cursor: pointer;
+}
 .importrow { cursor: pointer; align-items: center; }
 
 .editrow { grid-template-columns: minmax(0,1fr) 6.5rem auto; align-items: center; gap: var(--s2); padding-right: var(--s3); }
-.field--bare { background: transparent; border-color: transparent; padding-left: 0; padding-right: 0; min-height: 40px; min-width: 0; }
+.field--bare { background: transparent; border-color: transparent; padding-left: 0; padding-right: 0; min-height: 44px; min-width: 0; }
 .field--bare:hover { border-color: var(--rule); }
 .field--num { text-align: right; padding-right: var(--s2); }
-.iconbtn--sm { width: 34px; height: 34px; }
+.iconbtn--sm { width: 44px; height: 44px; margin-right: calc(var(--s2) * -1); }
 .addrow .row__name { color: var(--brass); display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }
 
 /* ═══ VIEW TRANSITIONS ════════════════════════════════════════════════════

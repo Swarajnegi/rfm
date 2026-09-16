@@ -7,12 +7,12 @@
       "type": "Bank FD",
       "issuer": "HDFC Bank",
       "amount": 500000,
-      "interestRate": 7.1,
-      "payoutFrequency": "Cumulative / On Maturity",
       "rating": "Corporate",
       "maturityDate": "2027-03-15",
       "currentValue": 536000,
-      "lastNavUpdate": "2026-09-16T10:00:00.000Z"
+      "lastNavUpdate": "2026-09-16T10:00:00.000Z",
+      "rate": 7.1,
+      "payout": "Cumulative / On Maturity"
     },
     {
       "id": "i2",
@@ -47,11 +47,11 @@
       "type": "Bond",
       "issuer": "RBI",
       "amount": 300000,
-      "interestRate": 8.05,
-      "payoutFrequency": "Half-Yearly",
       "rating": "Government",
       "maturityDate": "2030-01-22",
-      "currentValue": 324150
+      "currentValue": 324150,
+      "rate": 8.05,
+      "payout": "Half-Yearly"
     },
     {
       "id": "i5",
@@ -72,8 +72,8 @@
       "name": "Emergency buffer",
       "type": "Emergency Fund",
       "target": 600000,
-      "saved": 252000,
-      "targetDate": "2027-06-30"
+      "targetDate": "2027-06-30",
+      "current": 252000
     }
   ],
   "sips": [
@@ -134,7 +134,7 @@
   "tax": {
     "regime": "compare",
     "seniorCitizen": false,
-    "otherIncome": 41000,
+    "otherIncome": 920000,
     "deduction80C": 150000
   }
 }

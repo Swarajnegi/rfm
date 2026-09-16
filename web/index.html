@@ -278,10 +278,10 @@ if(t==="light"||t==="dark"){d.setAttribute("data-theme",t);}})();
       <button class="row" @click="activePage = 'goals'">
         <span class="row__label">
           <span class="row__name" x-text="g.name"></span>
-          <span class="meter meter--inline"><span class="meter__fill" :style="`--pct:${Math.min(100, g.progress)}%`"></span></span>
+          <span class="meter meter--inline"><span class="meter__fill" :style="`--pct:${Math.min(100, g.pct)}%`"></span></span>
         </span>
         <span class="row__figures">
-          <span class="row__value tnum" x-text="formatCurrency(g.saved)"></span>
+          <span class="row__value tnum" x-text="formatCurrency(g.current)"></span>
           <span class="row__delta muted tnum" x-text="'of ' + formatCurrency(g.target)"></span>
         </span>
       </button>
@@ -605,10 +605,10 @@ if(t==="light"||t==="dark"){d.setAttribute("data-theme",t);}})();
       <button class="row" @click="openGoalEdit(g)">
         <span class="row__label">
           <span class="row__name" x-text="g.name"></span>
-          <span class="meter meter--inline"><span class="meter__fill" :style="`--pct:${Math.min(100, g.progress)}%`"></span></span>
-          <span class="row__meta" x-text="formatCurrency(g.saved) + ' of ' + formatCurrency(g.target) + (g.targetDate ? ' · by ' + formatDate(g.targetDate) : '')"></span>
+          <span class="meter meter--inline"><span class="meter__fill" :style="`--pct:${Math.min(100, g.pct)}%`"></span></span>
+          <span class="row__meta" x-text="formatCurrency(g.current) + ' of ' + formatCurrency(g.target) + (g.targetDate ? ' · by ' + formatDate(g.targetDate) : '')"></span>
         </span>
-        <span class="row__figures"><span class="row__value tnum" x-text="Math.round(g.progress) + '%'"></span></span>
+        <span class="row__figures"><span class="row__value tnum" x-text="g.pct + '%'"></span></span>
       </button>
     </section>
   </template>
@@ -715,26 +715,70 @@ if(t==="light"||t==="dark"){d.setAttribute("data-theme",t);}})();
     <div class="row"><span class="row__label"><span class="row__name">New regime</span></span>
       <span class="row__value tnum" x-text="formatCurrency(newRegimeTax.tax)"></span></div>
     <div class="rule rule--brass"></div>
+    <!-- Both regimes can land on zero, in which case "cheaper by ₹0" is a
+         nonsense sentence. Each outcome gets its own wording. -->
     <div class="row row--total">
-      <span class="row__label"><span class="row__name" x-text="'The ' + optimalRegime.toLowerCase() + ' regime is cheaper'"></span>
-        <span class="row__meta" x-text="'by ' + formatCurrency(taxSavingByOptimalRegime)"></span></span>
+      <template x-if="oldRegimeTax.tax === 0 && newRegimeTax.tax === 0">
+        <span class="row__label"><span class="row__name">No tax due either way</span>
+          <span class="row__meta">Your income is under the exemption limit.</span></span>
+      </template>
+      <template x-if="!(oldRegimeTax.tax === 0 && newRegimeTax.tax === 0) && taxSavingByOptimalRegime === 0">
+        <span class="row__label"><span class="row__name">Both regimes cost the same</span>
+          <span class="row__meta">Pick either — the new one needs no declarations.</span></span>
+      </template>
+      <template x-if="taxSavingByOptimalRegime > 0">
+        <span class="row__label"><span class="row__name" x-text="'The ' + optimalRegime.toLowerCase() + ' regime is cheaper'"></span>
+          <span class="row__meta" x-text="'Saves you ' + formatCurrency(taxSavingByOptimalRegime) + ' this year'"></span></span>
+      </template>
     </div>
   </section>
+  <!-- Income is DERIVED from pension, interest and cash flow rather than typed
+       again here. Asking twice is how the two drift apart. -->
   <section class="sheet">
-    <div class="sheet__head"><h2 class="sheet__title">Your figures</h2></div>
+    <div class="sheet__head"><h2 class="sheet__title">What you are taxed on</h2></div>
+    <div class="row">
+      <span class="row__label"><span class="row__name">Pension</span>
+        <span class="row__meta">From your pension settings</span></span>
+      <span class="row__value tnum" x-text="formatCurrency(annualPension)"></span>
+    </div>
+    <div class="row">
+      <span class="row__label"><span class="row__name">Interest earned</span>
+        <span class="row__meta">From your deposits and bonds</span></span>
+      <span class="row__value tnum" x-text="formatCurrency(annualInterestIncome)"></span>
+    </div>
+    <div class="row editrow">
+      <span class="row__label"><span class="row__name">Anything else</span>
+        <span class="row__meta">Salary, rent, consulting</span></span>
+      <input class="field field--bare field--num tnum" type="number"
+             x-model.number="tax.otherIncome" @change="saveData()" aria-label="Other income">
+    </div>
+    <div class="rule rule--brass"></div>
+    <div class="row row--total">
+      <span class="row__name">Gross for the year</span>
+      <span class="row__value tnum" x-text="formatCurrency(grossAnnualIncome)"></span>
+    </div>
+  </section>
+
+  <section class="sheet">
+    <div class="sheet__head"><h2 class="sheet__title">What you can deduct</h2></div>
     <div class="form" style="padding-bottom:var(--s5)">
-      <label class="f"><span class="f__label">Salary</span>
-        <input class="field tnum" type="number" x-model.number="tax.salary" @change="saveData()"></label>
       <div class="f__row">
         <label class="f"><span class="f__label">80C</span>
-          <input class="field tnum" type="number" x-model.number="tax.deduction80C" @change="saveData()"></label>
+          <input class="field tnum" type="number" x-model.number="tax.deduction80C" @change="saveData()" placeholder="0"></label>
         <label class="f"><span class="f__label">80D</span>
-          <input class="field tnum" type="number" x-model.number="tax.deduction80D" @change="saveData()"></label>
+          <input class="field tnum" type="number" x-model.number="tax.deduction80D" @change="saveData()" placeholder="0"></label>
+      </div>
+      <div class="f__row">
+        <label class="f"><span class="f__label">Home loan interest</span>
+          <input class="field tnum" type="number" x-model.number="tax.homeLoanInterest" @change="saveData()" placeholder="0"></label>
+        <label class="f"><span class="f__label">HRA</span>
+          <input class="field tnum" type="number" x-model.number="tax.hra" @change="saveData()" placeholder="0"></label>
       </div>
       <label class="f check__row">
         <input type="checkbox" class="check" x-model="tax.seniorCitizen" @change="saveData()">
         <span class="f__label" style="margin:0">I am 60 or older</span>
       </label>
+      <p class="row__meta" x-show="tax.seniorCitizen">Unlocks 80TTB on deposit interest and a higher exemption slab.</p>
     </div>
   </section>
 </main>

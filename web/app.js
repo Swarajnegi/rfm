@@ -1338,9 +1338,17 @@ document.addEventListener('alpine:init', () => {
 
         // Annual interest income derived from investments (monthly non-cumulative income × 12)
         get annualInterestIncome() {
-            return this.investments.reduce((sum, inv) => {
-                if (inv.payout === 'Cumulative') return sum;
-                return sum + (Number(inv.amount) * (Number(inv.rate) / 100));
+            // Every non-finite term used to poison the whole sum: a stock has no
+            // `amount`, so Number(undefined) is NaN, NaN * x is NaN, and one
+            // equity holding turned the ENTIRE tax screen — gross income, both
+            // regimes, the saving — into NaN. Anyone holding a single share saw it.
+            return (this.investments || []).reduce((sum, inv) => {
+                const payout = inv.payout || inv.payoutFrequency || '';
+                if (/cumulative|maturity/i.test(payout)) return sum;   // paid at the end, not yearly
+                const principal = Number(inv.amount);
+                const rate = Number(inv.rate ?? inv.interestRate);
+                if (!Number.isFinite(principal) || !Number.isFinite(rate)) return sum;
+                return sum + (principal * rate / 100);
             }, 0);
         },
 
@@ -1716,9 +1724,10 @@ document.addEventListener('alpine:init', () => {
                 return `${Number(inv.units || 0).toLocaleString('en-IN', { maximumFractionDigits: 3 })} units @ \u20b9${Number(inv.currentPrice || 0).toFixed(2)}`;
             }
             if (t === 'Gold') return `${Number(inv.units || 0)} g`;
-            if (inv.interestRate) {
+            const rate = inv.rate ?? inv.interestRate;
+            if (Number(rate) > 0) {
                 const m = inv.maturityDate ? ` \u00b7 matures ${this.formatDate(inv.maturityDate)}` : '';
-                return `${inv.interestRate}%${m}`;
+                return `${rate}%${m}`;
             }
             return inv.issuer || t;
         },

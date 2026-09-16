@@ -24,6 +24,7 @@ for (const theme of themes) {
       localStorage.setItem('rfm_nw_history', h);
       localStorage.setItem('rfm_usd_inr_rate', '88.41');
       localStorage.setItem('rfm_tour_v1', 'seen');
+      localStorage.setItem('corpus_tour_v1', 'seen');
       localStorage.setItem('corpus_theme', t);
     }, [seedBlob, hist, theme]);
     await p.route('**/*', r => r.request().url().startsWith('file://') ? r.continue() : r.abort());

@@ -102,6 +102,10 @@
 
     function startTour(force) {
         if (!window.driver) return;
+        // Only ever runs from Overview: the steps describe that screen, and a
+        // tour that fires over a detail view is disorienting rather than helpful.
+        const onHome = !!document.querySelector('main[x-show*="\'home\'"]:not([style*="display: none"])');
+        if (!force && !onHome) return;
         try { if (!force && localStorage.getItem(TOUR_KEY)) return; } catch (e) {}
         const steps = buildSteps();
         if (steps.length < 2) return;
@@ -161,10 +165,27 @@
         Haptics.commit();
     }
 
-    window.RFMMotion = { transition, syncSweep, flashValue, enhanceLists, revealInsights, Haptics, startTour, TOUR_KEY, reduced };
+    /* The app bar takes its rule only when content is behind it. Uses an
+       IntersectionObserver on a sentinel rather than a scroll listener, so it
+       costs nothing per frame. */
+    function watchAppBar() {
+        const bar = document.querySelector('.appbar');
+        if (!bar || !('IntersectionObserver' in window)) return;
+        const sentinel = document.createElement('div');
+        sentinel.setAttribute('aria-hidden', 'true');
+        sentinel.style.cssText = 'position:absolute;top:0;height:1px;width:1px;pointer-events:none';
+        document.body.prepend(sentinel);
+        new IntersectionObserver(
+            ([e]) => bar.classList.toggle('is-stuck', !e.isIntersecting),
+            { threshold: 0 }
+        ).observe(sentinel);
+    }
+
+    window.RFMMotion = { transition, syncSweep, flashValue, enhanceLists, revealInsights, watchAppBar, Haptics, startTour, TOUR_KEY, reduced };
 
     // Lists appear as pages are visited, so re-scan after Alpine settles.
     document.addEventListener('alpine:initialized', () => {
+        watchAppBar();
         enhanceLists();
         setInterval(() => enhanceLists(), 1500);
     });
