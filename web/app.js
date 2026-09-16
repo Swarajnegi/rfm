@@ -15,6 +15,9 @@ document.addEventListener('alpine:init', () => {
             if (next === this._activePage) return;
             const apply = () => {
                 this._activePage = next;
+                // Lets the interaction layer re-bind observers that are scoped to
+                // a single surface, without app.js knowing what those are.
+                document.dispatchEvent(new CustomEvent('corpus:navigated', { detail: next }));
                 if (next === 'home') this.$nextTick(() => this.renderNwChart());
                 try { window.scrollTo({ top: 0, behavior: 'instant' }); } catch (e) { window.scrollTo(0, 0); }
             };
@@ -337,6 +340,14 @@ document.addEventListener('alpine:init', () => {
             this.initCapacitor();
             this.fetchUsdInrRate();
             this.syncNativeChrome();
+            this.loadVisit();
+            // Stamp on the way out — visibilitychange fires on Android when the
+            // app is backgrounded, where 'beforeunload' does not.
+            document.addEventListener('visibilitychange', () => {
+                if (document.visibilityState === 'hidden') this.recordVisit();
+            });
+            window.addEventListener('pagehide', () => this.recordVisit());
+            if (!this._visit.at) setTimeout(() => this.recordVisit(), 4000);
 
             // First-run tutorial. Deferred past the first paint so it anchors to
             // laid-out elements rather than a half-built DOM.
@@ -1824,6 +1835,61 @@ document.addEventListener('alpine:init', () => {
                            amount: sip.monthlyAmount, direction: 'out', sort: days });
             }
             return out.sort((a, b) => a.sort - b.sort).slice(0, 5);
+        },
+
+        /* ── Since you last looked ─────────────────────────────────────────
+           Every portfolio app shows what you are worth. Almost none show what
+           CHANGED while you were away, which is the thing a person actually
+           opens the app to find out. Recorded per visit, reported once, and
+           only when the gap is long enough for the answer to be interesting. */
+        _visit: { at: null, value: null },
+
+        loadVisit() {
+            try {
+                const raw = localStorage.getItem('corpus_last_visit');
+                if (raw) this._visit = JSON.parse(raw);
+            } catch (e) { /* first run, or cleared storage */ }
+        },
+
+        /* Written on the way OUT, not on load: stamping it at boot would make
+           the comparison always read zero. */
+        recordVisit() {
+            try {
+                localStorage.setItem('corpus_last_visit', JSON.stringify({
+                    at: new Date().toISOString(),
+                    value: Math.round(this.netWorthTotal),
+                }));
+            } catch (e) {}
+        },
+
+        get sinceLastLook() {
+            const v = this._visit;
+            if (!v || !v.at || !Number.isFinite(Number(v.value))) return null;
+            if (!this.hasAnyPortfolioData) return null;
+
+            const hours = (Date.now() - new Date(v.at).getTime()) / 36e5;
+            if (hours < 8) return null;                 // too soon to be news
+            const delta = Math.round(this.netWorthTotal) - Number(v.value);
+            if (Math.abs(delta) < 1) return null;       // nothing moved
+
+            const days = Math.floor(hours / 24);
+            let when;
+            if (days < 1)      when = 'since this morning';
+            else if (days === 1) when = 'since yesterday';
+            else if (days < 7) when = `since ${new Date(v.at).toLocaleDateString('en-IN', { weekday: 'long' })}`;
+            else if (days < 31) when = `in the last ${Math.round(days / 7)} week${Math.round(days / 7) === 1 ? '' : 's'}`;
+            else               when = `since ${this.formatDate(v.at)}`;
+
+            return { delta, up: delta >= 0, when,
+                     label: `${delta >= 0 ? 'Up' : 'Down'} ${this.formatCurrency(Math.abs(delta))} ${when}` };
+        },
+
+        /* The range chip says "1M"; the sentence needs "past month". Built here
+           rather than with three chained .replace() calls in the template, which
+           is where "1 months" came from. */
+        get rangeLabel() {
+            return ({ '1M': 'past month', '3M': 'past 3 months', '6M': 'past 6 months',
+                      '1Y': 'past year', 'ALL': 'all time' })[this.nwChartRange] || '';
         },
 
         get hasAnyPortfolioData() {

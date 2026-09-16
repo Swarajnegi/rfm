@@ -677,3 +677,72 @@ button.row:active, label.row:active { background: var(--wash); transform: scale(
   background: transparent; color: var(--ink-faint); opacity: 0.5; cursor: default;
 }
 .driver-popover.corpus-tour .driver-popover-close-btn:focus-visible { outline-offset: 0; }
+
+/* A disabled primary action must LOOK unavailable. Without this the button
+   reads as tappable and simply does nothing, which is worse than being greyed. */
+.btn:disabled,
+.btn[disabled] {
+  opacity: 0.38;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+.btn:disabled:active { transform: none; }
+
+/* ═══ COLLAPSING TITLE ════════════════════════════════════════════════════
+   Two identities share one slot. At rest the bar shows the wordmark; once the
+   hero figure has scrolled away the figure takes its place, so the number the
+   app exists to show is never off screen. Both are stacked in a grid cell so
+   the swap costs no layout and cannot shift anything beside it. */
+.titleslot {
+  display: grid;
+  grid-template-areas: 'slot';
+  align-items: center;
+  justify-items: start;
+  min-height: 44px;
+  text-align: left;
+}
+.titleslot > * {
+  grid-area: slot;
+  transition: opacity 260ms var(--ease), transform 340ms var(--spring);
+}
+.titleslot__mark {
+  font-family: var(--display);
+  font-size: 21px; font-weight: 600;
+  font-variation-settings: 'SOFT' 30, 'WONK' 1, 'opsz' 40;
+  letter-spacing: -0.015em;
+  color: var(--ink);
+}
+.titleslot__figure {
+  font-family: var(--display);
+  font-size: 19px; font-weight: 600;
+  font-variation-settings: 'SOFT' 0, 'WONK' 0, 'opsz' 40;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  opacity: 0;
+  transform: translateY(8px);
+  pointer-events: none;
+}
+/* is-collapsed is set only when the hero figure itself has left the viewport,
+   not merely when the page has scrolled — so a short screen with no hero never
+   swaps to a figure that is still visible behind it. */
+.appbar.is-collapsed .titleslot__mark   { opacity: 0; transform: translateY(-8px); }
+.appbar.is-collapsed .titleslot__figure { opacity: 1; transform: translateY(0); }
+
+@media (prefers-reduced-motion: reduce) {
+  .titleslot > * { transition: opacity 1ms; transform: none !important; }
+}
+
+/* "Since you last looked" — set apart from the headline delta by a short brass
+   rule rather than a box, so it reads as a footnote to the figure rather than
+   a second competing statistic. */
+.hero__since {
+  display: flex; align-items: center; gap: var(--s3);
+  margin-top: var(--s3);
+  font-size: var(--t-small); font-weight: 600;
+}
+.hero__since-rule {
+  width: 18px; height: 2px; border-radius: 2px;
+  background: currentColor; opacity: 0.45; flex: none;
+}
+.hero__delta-in { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }

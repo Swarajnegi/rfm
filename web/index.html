@@ -20,7 +20,14 @@ if(t==="light"||t==="dark"){d.setAttribute("data-theme",t);}})();
      ───────────────────────────────────────────────────────────────────── -->
 <header class="appbar">
   <div class="appbar__inner surface">
-    <button class="wordmark" @click="activePage = 'home'" aria-label="Go to overview">Corpus</button>
+    <!-- The bar carries two identities in the same slot: the wordmark at rest,
+         and the corpus figure once you have scrolled past it. Scrolling never
+         costs you sight of the one number the app exists to show. -->
+    <button class="titleslot" @click="activePage = 'home'" aria-label="Go to overview">
+      <span class="titleslot__mark">Corpus</span>
+      <span class="titleslot__figure tnum" x-show="activePage === 'home' && hasAnyPortfolioData"
+            x-text="formatCurrency(netWorthTotal)" aria-hidden="true"></span>
+    </button>
     <div class="appbar__actions">
       <button class="iconbtn" @click="fetchAllPrices()" :disabled="navFetchState === 'fetching'"
               :aria-busy="navFetchState === 'fetching'" aria-label="Sync prices" id="syncButton">
@@ -49,11 +56,33 @@ if(t==="light"||t==="dark"){d.setAttribute("data-theme",t);}})();
                      x-effect="$el.locales='en-IN';
                                $el.format={style:'currency',currency:'INR',maximumFractionDigits:0};
                                $el.update && $el.update(netWorthTotal)"></number-flow>
+        <!-- Two distinct states. With history there is a percentage and a
+             timeframe; without it there is no change to report, and appending a
+             timeframe to "Tracking" produced "Tracking past month". -->
         <p class="hero__delta" :class="nwChartChangePct === null || nwChartChangePct >= 0 ? 'up' : 'down'">
-          <span class="icon icon--sm" x-text="nwChartChangePct === null || nwChartChangePct >= 0 ? 'trending_up' : 'trending_down'"></span>
-          <span x-text="nwChartChangeLabel"></span>
-          <span class="muted" style="font-weight:500" x-text="nwChartRange === 'ALL' ? 'all time' : 'past ' + nwChartRange.toLowerCase().replace('m',' months').replace('1 months','month').replace('y',' year')"></span>
+          <template x-if="nwChartChangePct !== null">
+            <span class="hero__delta-in">
+              <span class="icon icon--sm" x-text="nwChartChangePct >= 0 ? 'trending_up' : 'trending_down'"></span>
+              <span x-text="nwChartChangeLabel"></span>
+              <span class="muted" style="font-weight:500" x-text="rangeLabel"></span>
+            </span>
+          </template>
+          <template x-if="nwChartChangePct === null">
+            <span class="hero__delta-in muted">
+              <span class="icon icon--sm">show_chart</span>
+              <span>Tracking from today — a trend needs a few days of history</span>
+            </span>
+          </template>
         </p>
+        <!-- What changed while you were away. Shown only when there IS an
+             answer — a permanent "Up ₹0 since a moment ago" would be noise. -->
+        <template x-if="sinceLastLook">
+          <p class="hero__since" :class="sinceLastLook.up ? 'up' : 'down'">
+            <span class="hero__since-rule"></span>
+            <span x-text="sinceLastLook.label"></span>
+          </p>
+        </template>
+
         <p class="stamp" :class="portfolioFreshness.stale ? 'stamp--stale' : ''" style="margin-top:var(--s3)">
           <span class="stamp__dot"></span>
           <span x-text="portfolioFreshness.label"></span>
@@ -557,7 +586,7 @@ if(t==="light"||t==="dark"){d.setAttribute("data-theme",t);}})();
     <template x-for="i in cashflow.incomes" :key="i.id">
       <div class="row editrow">
         <input class="field field--bare" type="text" x-model="i.name" @change="saveData()" aria-label="Source">
-        <input class="field field--bare field--num tnum" type="number" x-model.number="i.amount" @change="saveData()" aria-label="Amount">
+        <input class="field field--bare field--num tnum" x-money="i.amount" @change="saveData()" aria-label="Amount">
         <button class="iconbtn iconbtn--sm" @click="deleteIncomeStream(i.id)" aria-label="Remove"><span class="icon icon--sm">close</span></button>
       </div>
     </template>
@@ -574,7 +603,7 @@ if(t==="light"||t==="dark"){d.setAttribute("data-theme",t);}})();
     <template x-for="e in cashflow.expenses" :key="e.id">
       <div class="row editrow">
         <input class="field field--bare" type="text" x-model="e.name" @change="saveData()" aria-label="Expense">
-        <input class="field field--bare field--num tnum" type="number" x-model.number="e.amount" @change="saveData()" aria-label="Amount">
+        <input class="field field--bare field--num tnum" x-money="e.amount" @change="saveData()" aria-label="Amount">
         <button class="iconbtn iconbtn--sm" @click="deleteExpenseItem(e.id)" aria-label="Remove"><span class="icon icon--sm">close</span></button>
       </div>
     </template>
@@ -624,11 +653,11 @@ if(t==="light"||t==="dark"){d.setAttribute("data-theme",t);}})();
   <section class="sheet">
     <div class="form" style="padding-top:var(--s5);padding-bottom:var(--s5)">
       <label class="f"><span class="f__label">A month of essentials</span>
-        <input class="field tnum" type="number" x-model.number="emergency.efMonthly" @change="saveData()"></label>
+        <input class="field tnum" x-money="emergency.efMonthly" @change="saveData()"></label>
       <label class="f"><span class="f__label">Months of cover you want</span>
         <input class="field tnum" type="number" x-model.number="emergency.efMonths" @change="saveData()"></label>
       <label class="f"><span class="f__label">Set aside so far</span>
-        <input class="field tnum" type="number" x-model.number="emergency.efCurrent" @change="saveData()"></label>
+        <input class="field tnum" x-money="emergency.efCurrent" @change="saveData()"></label>
     </div>
     <div class="rule"></div>
     <div class="row">
@@ -651,12 +680,12 @@ if(t==="light"||t==="dark"){d.setAttribute("data-theme",t);}})();
     <div class="form" style="padding-bottom:var(--s5)">
       <div class="f__row">
         <label class="f"><span class="f__label">Bank balance</span>
-          <input class="field tnum" type="number" x-model.number="networth.bankBalance" @change="saveData()"></label>
+          <input class="field tnum" x-money="networth.bankBalance" @change="saveData()"></label>
         <label class="f"><span class="f__label">Cash</span>
-          <input class="field tnum" type="number" x-model.number="networth.cashOnHand" @change="saveData()"></label>
+          <input class="field tnum" x-money="networth.cashOnHand" @change="saveData()"></label>
       </div>
       <label class="f"><span class="f__label">Property</span>
-        <input class="field tnum" type="number" x-model.number="networth.propertyValue" @change="saveData()"></label>
+        <input class="field tnum" x-money="networth.propertyValue" @change="saveData()"></label>
     </div>
   </section>
   <section class="sheet">
@@ -664,12 +693,12 @@ if(t==="light"||t==="dark"){d.setAttribute("data-theme",t);}})();
     <div class="form" style="padding-bottom:var(--s5)">
       <div class="f__row">
         <label class="f"><span class="f__label">Home loan</span>
-          <input class="field tnum" type="number" x-model.number="networth.homeLoan" @change="saveData()"></label>
+          <input class="field tnum" x-money="networth.homeLoan" @change="saveData()"></label>
         <label class="f"><span class="f__label">Personal loan</span>
-          <input class="field tnum" type="number" x-model.number="networth.personalLoan" @change="saveData()"></label>
+          <input class="field tnum" x-money="networth.personalLoan" @change="saveData()"></label>
       </div>
       <label class="f"><span class="f__label">Card dues</span>
-        <input class="field tnum" type="number" x-model.number="networth.credit" @change="saveData()"></label>
+        <input class="field tnum" x-money="networth.credit" @change="saveData()"></label>
     </div>
     <div class="rule rule--brass"></div>
     <div class="row row--total">
@@ -749,8 +778,8 @@ if(t==="light"||t==="dark"){d.setAttribute("data-theme",t);}})();
     <div class="row editrow">
       <span class="row__label"><span class="row__name">Anything else</span>
         <span class="row__meta">Salary, rent, consulting</span></span>
-      <input class="field field--bare field--num tnum" type="number"
-             x-model.number="tax.otherIncome" @change="saveData()" aria-label="Other income">
+      <input class="field field--bare field--num tnum"
+             x-money="tax.otherIncome" @change="saveData()" aria-label="Other income">
     </div>
     <div class="rule rule--brass"></div>
     <div class="row row--total">
@@ -764,15 +793,15 @@ if(t==="light"||t==="dark"){d.setAttribute("data-theme",t);}})();
     <div class="form" style="padding-bottom:var(--s5)">
       <div class="f__row">
         <label class="f"><span class="f__label">80C</span>
-          <input class="field tnum" type="number" x-model.number="tax.deduction80C" @change="saveData()" placeholder="0"></label>
+          <input class="field tnum" x-money="tax.deduction80C" @change="saveData()" placeholder="₹0"></label>
         <label class="f"><span class="f__label">80D</span>
-          <input class="field tnum" type="number" x-model.number="tax.deduction80D" @change="saveData()" placeholder="0"></label>
+          <input class="field tnum" x-money="tax.deduction80D" @change="saveData()" placeholder="₹0"></label>
       </div>
       <div class="f__row">
         <label class="f"><span class="f__label">Home loan interest</span>
-          <input class="field tnum" type="number" x-model.number="tax.homeLoanInterest" @change="saveData()" placeholder="0"></label>
+          <input class="field tnum" x-money="tax.homeLoanInterest" @change="saveData()" placeholder="₹0"></label>
         <label class="f"><span class="f__label">HRA</span>
-          <input class="field tnum" type="number" x-model.number="tax.hra" @change="saveData()" placeholder="0"></label>
+          <input class="field tnum" x-money="tax.hra" @change="saveData()" placeholder="₹0"></label>
       </div>
       <label class="f check__row">
         <input type="checkbox" class="check" x-model="tax.seniorCitizen" @change="saveData()">
@@ -790,7 +819,7 @@ if(t==="light"||t==="dark"){d.setAttribute("data-theme",t);}})();
   <section class="sheet">
     <div class="form" style="padding-top:var(--s5);padding-bottom:var(--s5)">
       <label class="f"><span class="f__label">Monthly pension</span>
-        <input class="field tnum" type="number" x-model.number="pension.monthlyAmount" @change="saveData()"></label>
+        <input class="field tnum" x-money="pension.monthlyAmount" @change="saveData()"></label>
       <label class="f"><span class="f__label">Kind</span>
         <select class="field" x-model="pension.type" @change="saveData()">
           <option>Government</option><option>Corporate</option><option>Military</option><option>Other</option>
@@ -865,7 +894,7 @@ if(t==="light"||t==="dark"){d.setAttribute("data-theme",t);}})();
       <template x-if="!isUnitPriced(newInv.type)">
         <div class="f__row">
           <label class="f"><span class="f__label">Amount</span>
-            <input class="field tnum" type="number" step="any" x-model.number="newInv.amount" placeholder="0"></label>
+            <input class="field tnum" x-money="newInv.amount" placeholder="₹0"></label>
           <label class="f"><span class="f__label">Rate %</span>
             <input class="field tnum" type="number" step="any" x-model.number="newInv.rate" placeholder="0"></label>
         </div>
@@ -909,7 +938,7 @@ if(t==="light"||t==="dark"){d.setAttribute("data-theme",t);}})();
       </div>
       <div class="f__row">
         <label class="f"><span class="f__label">Amount</span>
-          <input class="field tnum" type="number" step="any" x-model.number="editForm.amount"></label>
+          <input class="field tnum" x-money="editForm.amount"></label>
         <label class="f"><span class="f__label">Rate %</span>
           <input class="field tnum" type="number" step="any" x-model.number="editForm.interestRate"></label>
       </div>

@@ -171,6 +171,8 @@
     function watchAppBar() {
         const bar = document.querySelector('.appbar');
         if (!bar || !('IntersectionObserver' in window)) return;
+
+        // Rule: appears as soon as anything is behind the bar.
         const sentinel = document.createElement('div');
         sentinel.setAttribute('aria-hidden', 'true');
         sentinel.style.cssText = 'position:absolute;top:0;height:1px;width:1px;pointer-events:none';
@@ -179,6 +181,24 @@
             ([e]) => bar.classList.toggle('is-stuck', !e.isIntersecting),
             { threshold: 0 }
         ).observe(sentinel);
+
+        // Collapse: keyed to the HERO FIGURE leaving, not to scroll position.
+        // Tying it to a pixel offset would swap the title in while the figure
+        // was still on screen, showing the same number twice.
+        let heroObserver = null;
+        const watchHero = () => {
+            const hero = document.querySelector('#nwHero');
+            if (heroObserver) heroObserver.disconnect();
+            if (!hero) { bar.classList.remove('is-collapsed'); return; }
+            heroObserver = new IntersectionObserver(
+                ([e]) => bar.classList.toggle('is-collapsed', !e.isIntersecting),
+                { rootMargin: '-56px 0px 0px 0px', threshold: 0 }
+            );
+            heroObserver.observe(hero);
+        };
+        watchHero();
+        // The hero belongs to one surface, so re-bind whenever the page changes.
+        document.addEventListener('corpus:navigated', watchHero);
     }
 
     window.RFMMotion = { transition, syncSweep, flashValue, enhanceLists, revealInsights, watchAppBar, Haptics, startTour, TOUR_KEY, reduced };
