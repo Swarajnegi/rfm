@@ -688,9 +688,15 @@ if(t==="light"||t==="dark"){d.setAttribute("data-theme",t);}})();
       <span class="row__label"><span class="row__name">Target</span></span>
       <span class="row__value tnum" x-text="formatCurrency(efRequired)"></span>
     </div>
+    <!-- efGap is clamped at zero, so it cannot express being over-funded —
+         the surplus branch was reading "Surplus ₹0" on a fund ₹60,000 ahead. -->
     <div class="row">
-      <span class="row__label"><span class="row__name" x-text="efGap > 0 ? 'Still to go' : 'Surplus'"></span></span>
-      <span class="row__value tnum" :class="efGap > 0 ? 'down' : 'up'" x-text="formatCurrency(Math.abs(efGap))"></span>
+      <span class="row__label">
+        <span class="row__name" x-text="efSurplus >= 0 ? 'Set aside beyond target' : 'Still to go'"></span>
+        <span class="row__meta" x-show="efSurplus >= 0">Could be earning more somewhere less liquid.</span>
+      </span>
+      <span class="row__value tnum" :class="efSurplus >= 0 ? 'up' : 'down'"
+            x-text="formatCurrency(Math.abs(efSurplus))"></span>
     </div>
   </section>
 </main>

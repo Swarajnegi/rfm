@@ -13,9 +13,20 @@ const seed = readFileSync('scripts/seed.json', 'utf8');
 const findings = [];
 const add = (kind, route, theme, detail) => findings.push({ kind, route, theme, detail });
 
+// Three widths: the narrowest phone still in scope (minSdk 24 reaches 360dp
+// devices), the design target, and a tablet — where a phone layout that simply
+// stretches looks broken rather than adapted.
+const VIEWPORTS = [
+  { w: 360, h: 780, name: '360' },
+  { w: 390, h: 844, name: '390' },
+  { w: 834, h: 1112, name: 'tablet' },
+];
+
 const b = await chromium.launch();
 for (const theme of ['light','dark']) {
-  const p = await b.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 });
+ for (const vp of VIEWPORTS) {
+  if (theme === 'dark' && vp.name !== '390') continue;   // palette is width-independent
+  const p = await b.newPage({ viewport: { width: vp.w, height: vp.h } });
   await p.addInitScript(([s,t]) => {
     localStorage.setItem('rfm_v1', s);
     localStorage.setItem('corpus_theme', t);
@@ -116,9 +127,10 @@ for (const theme of ['light','dark']) {
       return out;
     });
 
-    for (const k of Object.keys(r)) for (const d of new Set(r[k])) add(k, route, theme, d);
+    for (const k of Object.keys(r)) for (const d of new Set(r[k])) add(k, route, `${theme}/${vp.name}`, d);
   }
   await p.close();
+ }
 }
 await b.close();
 
@@ -135,7 +147,7 @@ for (const k of ['garbage','overflow','clipped','tap','rhythm','align']) {
   for (const f of list) {
     const key = f.detail;
     if (!seen.has(key)) seen.set(key, new Set());
-    seen.get(key).add(f.route);
+    seen.get(key).add(`${f.route}@${f.theme}`);
   }
   console.log(`\n${LABEL[k]}  (${seen.size} distinct)`);
   for (const [detail, routes] of [...seen].slice(0, 14)) {

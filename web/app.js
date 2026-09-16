@@ -1892,6 +1892,13 @@ document.addEventListener('alpine:init', () => {
                       '1Y': 'past year', 'ALL': 'all time' })[this.nwChartRange] || '';
         },
 
+        /* Signed, unlike efGap which clamps at zero. Positive means over-funded,
+           which is a real state worth naming: money sitting in a liquid account
+           past what the buffer needs is money not working. */
+        get efSurplus() {
+            return (Number(this.emergency.efCurrent) || 0) - (Number(this.efRequired) || 0);
+        },
+
         get hasAnyPortfolioData() {
             const nz = v => Number(v) > 0;
             return (this.investments || []).length > 0

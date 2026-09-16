@@ -777,3 +777,36 @@ button.row:active, label.row:active { background: var(--wash); transform: scale(
   animation: spin 800ms linear infinite;
 }
 @media (prefers-reduced-motion: reduce) { .syncbar__spinner { animation-duration: 3s; } }
+
+/* ═══ WIDER SCREENS ═══════════════════════════════════════════════════════
+   A phone layout stretched across a tablet reads as unfinished rather than
+   adapted. Content already centres at --measure; these bring the two
+   full-bleed elements — the dock and the chart — back into that column so the
+   page reads as one object instead of a strip floating in a field. */
+@media (min-width: 600px) {
+  .dock {
+    /* Anchored to the content column, with a hairline on the sides so it reads
+       as a deliberate bar rather than a stretched phone control. */
+    left: 50%; transform: translateX(-50%);
+    width: min(100%, 44rem);
+    border-radius: var(--r-sheet) var(--r-sheet) 0 0;
+    box-shadow: inset 0 1px 0 var(--rule), 0 -8px 32px color-mix(in srgb, var(--ink) 6%, transparent);
+  }
+  .dock__item { padding: 12px 4px 14px; }
+
+  /* The chart bleeds to the screen edge on a phone because the screen IS the
+     column. On a tablet it must bleed to the COLUMN edge instead. */
+  .series { margin-inline: 0; border-radius: var(--r-panel); }
+  .series__canvas { height: 200px; }
+
+  .hero { padding-top: var(--s7); }
+  .surface { padding-inline: var(--s5); }
+}
+
+/* Past the point where one column looks lonely, the figure and the chart can
+   share a row — the chart is a restatement of the figure, so pairing them
+   costs nothing and shortens the scroll. */
+@media (min-width: 900px) {
+  main.surface { max-width: 56rem; }
+  .dock { width: min(100%, 56rem); }
+}

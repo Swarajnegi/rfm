@@ -29,8 +29,14 @@ for (const theme of ['light','dark']) {
 
     for (const route of ROUTES) {
       errs.length = 0;
+      // startViewTransition DEFERS the DOM mutation, so a fixed sleep can sample
+      // mid-transition — during which zero or two pages are briefly visible.
+      // Wait for the transition to settle instead of guessing at a duration.
       await p.evaluate(v => { document.querySelector('[x-data]')._x_dataStack[0].activePage = v; }, route);
-      await p.waitForTimeout(260);
+      await p.waitForFunction(() =>
+        [...document.querySelectorAll('main')].filter(m => m.offsetParent !== null).length === 1,
+        null, { timeout: 4000 }).catch(() => {});
+      await p.waitForTimeout(90);   // let the settle frame paint
       const r = await p.evaluate(() => {
         const vis = [...document.querySelectorAll('main')].filter(m => m.offsetParent !== null);
         return { visible: vis.length, height: vis[0]?.getBoundingClientRect().height || 0,
