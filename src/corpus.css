@@ -1,0 +1,443 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   CORPUS — design system
+
+   The material is a STATEMENT SHEET, not a card deck. One surface per screen,
+   content separated by hairline rules rather than nested bordered boxes, and
+   hierarchy carried by type and space instead of elevation. Shadows are used
+   only where something genuinely floats.
+
+   The palette is lacquer green, aged brass and ivory — the inside of a
+   jewellery box and the binding of an old ledger. Light is the shipped
+   default: a light luxury finance app is both rarer and more usable in
+   daylight than another dark one.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* ── Palette ─────────────────────────────────────────────────────────── */
+  --ground:        #E9EDE9;   /* celadon stone. deliberately NOT cream */
+  --ground-sunk:   #DFE5E0;
+  --sheet:         #F7F9F6;
+  --sheet-raised:  #FFFFFF;
+  --ink:           #0E1F19;
+  --ink-soft:      #4A5B54;
+  --ink-faint:     #74857D;
+  --brass:         #8A6D1F;
+  --brass-bright:  #A8862B;
+  --jade:          #1F6B52;
+  --carnelian:     #A33B2A;
+
+  --rule:          color-mix(in srgb, var(--ink) 12%, transparent);
+  --rule-strong:   color-mix(in srgb, var(--ink) 24%, transparent);
+  --brass-rule:    color-mix(in srgb, var(--brass) 38%, transparent);
+  --wash:          color-mix(in srgb, var(--brass) 7%, transparent);
+
+  --lift: 0 1px 2px color-mix(in srgb, var(--ink) 6%, transparent),
+          0 12px 32px color-mix(in srgb, var(--ink) 9%, transparent);
+  --lift-high: 0 -2px 8px color-mix(in srgb, var(--ink) 5%, transparent),
+               0 -24px 60px color-mix(in srgb, var(--ink) 16%, transparent);
+
+  /* ── Type ────────────────────────────────────────────────────────────── */
+  --display: 'Fraunces', 'Iowan Old Style', Georgia, serif;
+  --ui:      'Archivo', system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+  /* Modular scale, major third from a 16px body. 13px is a hard floor. */
+  --t-micro: 13px;  --lh-micro: 18px;
+  --t-small: 14px;  --lh-small: 20px;
+  --t-body:  16px;  --lh-body:  24px;
+  --t-lead:  18px;  --lh-lead:  28px;
+  --t-title: 22px;  --lh-title: 28px;
+  --t-head:  28px;  --lh-head:  34px;
+  --t-figure: clamp(38px, 11vw, 60px);
+
+  /* ── Space ───────────────────────────────────────────────────────────── */
+  --s1: 4px;  --s2: 8px;  --s3: 12px; --s4: 16px;
+  --s5: 24px; --s6: 32px; --s7: 48px; --s8: 64px;
+  --gutter: 20px;
+  --measure: 34rem;
+
+  --r-control: 10px;
+  --r-panel:   16px;
+  --r-sheet:   24px;
+
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --fast: 180ms;
+  --slow: 420ms;
+
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  --ground:        #0C1A15;   /* lacquer */
+  --ground-sunk:   #081310;
+  --sheet:         #13271F;
+  --sheet-raised:  #1A3229;
+  --ink:           #EDEFE8;   /* ivory, never pure white */
+  --ink-soft:      #A9B8B0;
+  --ink-faint:     #7A8C84;
+  --brass:         #C9A227;
+  --brass-bright:  #E0BC4A;
+  --jade:          #4FA083;
+  --carnelian:     #D2705C;
+
+  --rule:        color-mix(in srgb, var(--ink) 14%, transparent);
+  --rule-strong: color-mix(in srgb, var(--ink) 28%, transparent);
+  --brass-rule:  color-mix(in srgb, var(--brass) 34%, transparent);
+  --wash:        color-mix(in srgb, var(--brass) 9%, transparent);
+
+  --lift: 0 1px 2px rgb(0 0 0 / 0.4), 0 16px 40px rgb(0 0 0 / 0.36);
+  --lift-high: 0 -2px 10px rgb(0 0 0 / 0.3), 0 -28px 70px rgb(0 0 0 / 0.5);
+
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground: #0C1A15; --ground-sunk: #081310; --sheet: #13271F; --sheet-raised: #1A3229;
+    --ink: #EDEFE8; --ink-soft: #A9B8B0; --ink-faint: #7A8C84;
+    --brass: #C9A227; --brass-bright: #E0BC4A; --jade: #4FA083; --carnelian: #D2705C;
+    --rule: color-mix(in srgb, var(--ink) 14%, transparent);
+    --rule-strong: color-mix(in srgb, var(--ink) 28%, transparent);
+    --brass-rule: color-mix(in srgb, var(--brass) 34%, transparent);
+    --wash: color-mix(in srgb, var(--brass) 9%, transparent);
+    --lift: 0 1px 2px rgb(0 0 0 / 0.4), 0 16px 40px rgb(0 0 0 / 0.36);
+    --lift-high: 0 -2px 10px rgb(0 0 0 / 0.3), 0 -28px 70px rgb(0 0 0 / 0.5);
+    color-scheme: dark;
+  }
+}
+
+/* ── Reset ─────────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--ui);
+  font-size: var(--t-body);
+  line-height: var(--lh-body);
+  font-variant-numeric: tabular-nums lining-nums;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: contain;
+  padding-bottom: calc(92px + env(safe-area-inset-bottom));
+}
+h1, h2, h3 {
+  margin: 0; font-family: var(--display); font-weight: 600;
+  font-variation-settings: 'SOFT' 20, 'WONK' 1;
+  /* Fraunces' default ampersand is a swash form — striking in the wordmark,
+     noisy inside a heading like "Stocks & ETFs". */
+  font-feature-settings: 'swsh' 0, 'salt' 0;
+}
+p { margin: 0; }
+button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+input, select, textarea { font: inherit; }
+[hidden], [x-cloak] { display: none !important; }
+
+:focus-visible {
+  outline: 2px solid var(--brass);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+/* ── Layout primitives ─────────────────────────────────────────────────── */
+.surface { padding: 0 var(--gutter); max-width: 44rem; margin: 0 auto; }
+.stack > * + * { margin-top: var(--s4); }
+.stack-tight > * + * { margin-top: var(--s3); }
+
+/* The sheet is the material. One per block of related content, no nesting. */
+.sheet {
+  background: var(--sheet);
+  border-radius: var(--r-sheet);
+  border: 1px solid var(--rule);
+  overflow: hidden;
+}
+.sheet--plain { background: transparent; border: 0; border-radius: 0; }
+
+/* Rules carry the structure that borders used to. */
+.rule { height: 1px; background: var(--rule); border: 0; margin: 0; }
+.rule--brass { background: var(--brass-rule); }
+
+/* ── Rows ──────────────────────────────────────────────────────────────── */
+.row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: baseline;
+  gap: var(--s4);
+  padding: var(--s4) var(--s5);
+  min-height: 56px;
+  width: 100%;
+  text-align: left;
+  position: relative;
+}
+.row + .row { box-shadow: inset 0 1px 0 var(--rule); }
+button.row { transition: background var(--fast) var(--ease); }
+button.row:hover { background: var(--wash); }
+button.row:active { background: var(--wash); }
+.row__name { font-size: var(--t-body); font-weight: 500; }
+.row__meta { font-size: var(--t-micro); line-height: var(--lh-micro); color: var(--ink-faint); margin-top: 2px; }
+.row__value { font-size: var(--t-body); font-weight: 600; text-align: right; }
+.row__delta { font-size: var(--t-micro); text-align: right; margin-top: 2px; }
+
+/* ── The figure ────────────────────────────────────────────────────────── */
+.figure {
+  font-family: var(--display);
+  font-size: var(--t-figure);
+  line-height: 1.02;
+  font-weight: 600;
+  font-variation-settings: 'SOFT' 0, 'WONK' 0, 'opsz' 100;
+  letter-spacing: -0.02em;
+  display: block;
+}
+.figure--sm { font-size: var(--t-head); }
+
+/* ── Text roles ────────────────────────────────────────────────────────── */
+.label   { font-size: var(--t-micro); line-height: var(--lh-micro); color: var(--ink-soft); font-weight: 500; }
+.muted   { color: var(--ink-faint); }
+.lead    { font-size: var(--t-lead); line-height: var(--lh-lead); color: var(--ink-soft); max-width: var(--measure); }
+.title   { font-size: var(--t-title); line-height: var(--lh-title); }
+.headline{ font-size: var(--t-head); line-height: var(--lh-head); letter-spacing: -0.01em; }
+.up   { color: var(--jade); }
+.down { color: var(--carnelian); }
+.tnum { font-variant-numeric: tabular-nums; }
+
+/* ── Provenance: where a figure came from and when ─────────────────────── */
+.stamp {
+  font-size: var(--t-micro);
+  line-height: var(--lh-micro);
+  color: var(--ink-faint);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.stamp--stale { color: var(--brass); }
+.stamp__dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; flex: none; }
+
+/* ── Controls ──────────────────────────────────────────────────────────── */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--s2);
+  min-height: 48px; padding: 0 var(--s5);
+  border-radius: var(--r-control);
+  font-size: var(--t-small); font-weight: 600; letter-spacing: 0.01em;
+  transition: transform var(--fast) var(--ease), background var(--fast) var(--ease);
+}
+.btn:active { transform: scale(0.98); }
+.btn--primary { background: var(--ink); color: var(--ground); }
+.btn--brass   { background: var(--brass); color: var(--ground); }
+.btn--quiet   { background: transparent; color: var(--ink); box-shadow: inset 0 0 0 1px var(--rule-strong); }
+.btn--ghost   { background: transparent; color: var(--ink-soft); }
+.btn--block   { width: 100%; }
+
+.chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 12px; border-radius: 999px;
+  font-size: var(--t-micro); font-weight: 600;
+  background: var(--wash); color: var(--brass);
+}
+.chip--up   { background: color-mix(in srgb, var(--jade) 12%, transparent); color: var(--jade); }
+.chip--down { background: color-mix(in srgb, var(--carnelian) 12%, transparent); color: var(--carnelian); }
+
+.field {
+  width: 100%; min-height: 48px;
+  padding: 0 var(--s4);
+  background: var(--ground-sunk);
+  color: var(--ink);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-control);
+  transition: border-color var(--fast) var(--ease), box-shadow var(--fast) var(--ease);
+}
+.field:focus {
+  outline: none;
+  border-color: var(--brass);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brass) 18%, transparent);
+}
+
+/* ── Segmented control ─────────────────────────────────────────────────── */
+.seg { display: flex; gap: var(--s1); padding: 0; background: none; }
+.seg__item {
+  flex: 1; min-height: 34px; padding: 0 var(--s2);
+  border-radius: 999px; font-size: var(--t-micro); font-weight: 600; color: var(--ink-faint);
+  transition: color var(--fast) var(--ease), background var(--fast) var(--ease);
+}
+.seg__item[aria-selected="true"] { background: var(--wash); color: var(--brass); }
+
+/* ── Icons ─────────────────────────────────────────────────────────────── */
+.icon {
+  font-family: 'Material Symbols Rounded';
+  font-weight: normal; font-style: normal;
+  line-height: 1; letter-spacing: normal; text-transform: none;
+  display: inline-block; white-space: nowrap; direction: ltr;
+  font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24;
+  -webkit-font-feature-settings: 'liga'; font-feature-settings: 'liga';
+  font-size: 22px; flex: none;
+}
+.icon--sm { font-size: 18px; }
+.icon--fill { font-variation-settings: 'FILL' 1, 'wght' 400; }
+
+/* ── Motion ────────────────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 1ms !important; transition-duration: 1ms !important; }
+}
+
+/* ═══ SHELL ═══════════════════════════════════════════════════════════════ */
+
+.appbar {
+  position: sticky; top: 0; z-index: 40;
+  padding-top: env(safe-area-inset-top);
+  background: color-mix(in srgb, var(--ground) 86%, transparent);
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  border-bottom: 1px solid transparent;
+  transition: border-color var(--fast) var(--ease);
+}
+.appbar__inner { display: flex; align-items: center; justify-content: space-between; min-height: 60px; }
+
+/* The wordmark IS the brand — set in the display face at a confident size, not
+   shrunk into a logo slot beside an icon. */
+.wordmark {
+  font-family: var(--display);
+  font-size: 21px; font-weight: 600;
+  font-variation-settings: 'SOFT' 30, 'WONK' 1, 'opsz' 40;
+  letter-spacing: -0.015em;
+  color: var(--ink);
+}
+.appbar__actions { display: flex; gap: var(--s1); }
+
+.iconbtn {
+  position: relative;
+  width: 44px; height: 44px;
+  display: grid; place-items: center;
+  border-radius: 999px;
+  color: var(--ink-soft);
+  transition: background var(--fast) var(--ease), color var(--fast) var(--ease);
+}
+.iconbtn:hover { background: var(--wash); color: var(--ink); }
+.iconbtn:disabled { opacity: 0.45; }
+.iconbtn__dot {
+  position: absolute; top: 9px; right: 10px;
+  width: 7px; height: 7px; border-radius: 999px;
+  background: var(--brass); box-shadow: 0 0 0 2px var(--ground);
+}
+.icon.is-spinning { animation: spin 900ms linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ═══ HERO ════════════════════════════════════════════════════════════════
+   The figure sits directly on the page. Giving it a card would make it one
+   more tile among tiles; alone on the ground it is unmistakably the subject. */
+.hero { padding: var(--s6) 0 var(--s2); }
+.hero .figure { margin-top: var(--s2); }
+.hero__delta {
+  display: flex; align-items: center; gap: 6px;
+  margin-top: var(--s3);
+  font-size: var(--t-small); font-weight: 600;
+}
+.hero__empty { padding: var(--s4) 0 0; }
+.hero__cta { display: flex; flex-wrap: wrap; gap: var(--s3); margin-top: var(--s5); }
+
+/* ═══ SERIES ══════════════════════════════════════════════════════════════ */
+/* Full-bleed to the screen edges — a chart boxed inside a card reads as a
+   widget; run to the edge and it reads as the shape of the money itself. */
+.series { margin: 0 calc(var(--gutter) * -1); overflow: hidden; }
+.series__canvas { height: 168px; width: 100%; }
+.series .seg { margin: var(--s4) var(--gutter) 0; }
+
+/* ═══ SHEET ═══════════════════════════════════════════════════════════════ */
+/* A group heading is a signpost, not a headline. Only ONE thing per screen is
+   set in the display face — the page title — or the hierarchy flattens. */
+.sheet__head { padding: var(--s4) var(--s5) var(--s3); }
+.sheet__title {
+  font-family: var(--ui);
+  font-size: var(--t-small); line-height: var(--lh-small);
+  font-weight: 600; letter-spacing: 0.01em;
+  color: var(--ink-soft);
+}
+.row--total { background: var(--wash); }
+.row--total .row__value { font-family: var(--display); font-size: var(--t-lead); font-variation-settings: 'SOFT' 0, 'WONK' 0; }
+
+/* Allocation share as a hairline beneath the name. A six-slice pie is harder
+   to read than six right-aligned numbers, and this costs one pixel of height. */
+.alloc__bar {
+  display: block; height: 2px; margin-top: 7px;
+  width: var(--pct, 0%); min-width: 8px;
+  background: var(--brass); border-radius: 2px;
+  transition: width var(--slow) var(--ease);
+}
+.attention .row__name { font-weight: 600; }
+.attention::before {
+  content: ''; position: absolute; left: 0; top: 0; bottom: 0;
+  width: 3px; background: var(--brass);
+}
+
+/* ═══ DOCK ════════════════════════════════════════════════════════════════
+   Active state is a brass rule above the item. A filled pill would compete
+   with the figure for attention, which is the one thing on screen that
+   should be loud. */
+.dock {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 50;
+  display: grid; grid-auto-flow: column; grid-auto-columns: 1fr;
+  padding-bottom: env(safe-area-inset-bottom);
+  background: color-mix(in srgb, var(--ground) 92%, transparent);
+  backdrop-filter: blur(20px) saturate(140%);
+  -webkit-backdrop-filter: blur(20px) saturate(140%);
+  box-shadow: inset 0 1px 0 var(--rule);
+}
+.dock__item {
+  display: grid; justify-items: center; gap: 3px;
+  padding: 10px 4px 12px;
+  color: var(--ink-faint);
+  position: relative;
+  transition: color var(--fast) var(--ease);
+}
+.dock__item::before {
+  content: ''; position: absolute; top: 0; left: 50%;
+  width: 0; height: 2px; background: var(--brass);
+  transform: translateX(-50%);
+  transition: width var(--fast) var(--ease);
+}
+.dock__item.is-active { color: var(--ink); }
+.dock__item.is-active::before { width: 26px; }
+.dock__label { font-size: var(--t-micro); font-weight: 600; letter-spacing: 0.005em; }
+.dock__item:active { transform: scale(0.96); }
+
+/* The sync sweep, restated for the new material. */
+[data-holding-row] { --sweep: 0; }
+[data-holding-row]::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(90deg, transparent, var(--wash), transparent);
+  opacity: calc(1 - var(--sweep));
+  transform: translateX(calc(-100% + var(--sweep) * 200%));
+}
+
+.row__label   { display: block; min-width: 0; }
+.row__figures { display: block; text-align: right; }
+.row__name    { display: block; }
+.row__value   { display: block; }
+.row__delta   { display: block; }
+
+/* ═══ PAGE HEAD ═══════════════════════════════════════════════════════════ */
+.pagehead { padding: var(--s6) 0 var(--s1); }
+.pagehead .stamp { margin-top: var(--s2); }
+
+.sheet__head--split { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s4); }
+.sheet__head--split .muted { font-size: var(--t-small); font-weight: 600; color: var(--ink-faint); }
+
+/* Horizontally scrollable filter that does not announce its scrollbar. */
+.seg--scroll { overflow-x: auto; scrollbar-width: none; -ms-overflow-style: none; padding-bottom: 2px; }
+.seg--scroll::-webkit-scrollbar { display: none; }
+.seg--scroll .seg__item { flex: 0 0 auto; padding: 0 var(--s4); }
+
+/* A holding's row carries three facts: what it is, what it is worth, and how
+   sure we are of that. The third is the one most apps omit. */
+.holding .row__meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s1) var(--s3); }
+.holding .stamp { font-size: 12px; }
+.holding .stamp__dot { width: 4px; height: 4px; }
+.row__delta { font-size: var(--t-micro); letter-spacing: -0.005em; }
+
+.actions { display: grid; gap: var(--s3); padding-top: var(--s2); }
+
+/* ═══ EMPTY ═══════════════════════════════════════════════════════════════
+   An empty screen is an invitation, so it gets the same care as a full one:
+   a reason it is empty and the two ways out. */
+.empty { text-align: center; padding: var(--s8) var(--s4); }
+.empty__icon { font-size: 40px; color: var(--brass); opacity: 0.55; display: block; margin: 0 auto var(--s4); }
+.empty .lead { margin: var(--s3) auto 0; max-width: 26rem; }
+.empty .hero__cta { justify-content: center; }

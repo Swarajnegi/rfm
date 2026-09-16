@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Corpus</title>
+<script>
+(function(){var d=document.documentElement,t="";try{t=localStorage.getItem("corpus_theme")||localStorage.getItem("rfm_theme")||"";}catch(e){}
+if(t==="light"||t==="dark"){d.setAttribute("data-theme",t);}})();
+</script>
+<link rel="stylesheet" href="fonts.css">
+<link rel="stylesheet" href="corpus.css">
+</head>
+
+<body x-data="appData" x-cloak>
+
+<!-- ─────────────────────────────────────────────────────────────────────────
+     App bar. A wordmark and two affordances. No eyebrow, no breadcrumb, no
+     chrome that repeats what the screen already says.
+     ───────────────────────────────────────────────────────────────────── -->
+<header class="appbar">
+  <div class="appbar__inner surface">
+    <button class="wordmark" @click="activePage = 'home'" aria-label="Go to overview">Corpus</button>
+    <div class="appbar__actions">
+      <button class="iconbtn" @click="fetchAllPrices()" :disabled="navFetchState === 'fetching'"
+              :aria-busy="navFetchState === 'fetching'" aria-label="Sync prices" id="syncButton">
+        <span class="icon" :class="navFetchState === 'fetching' ? 'is-spinning' : ''">sync</span>
+      </button>
+      <button class="iconbtn" @click="showNotifications = !showNotifications" aria-label="Notifications">
+        <span class="icon" x-text="notificationsList.length ? 'notifications_active' : 'notifications'"></span>
+        <span class="iconbtn__dot" x-show="notificationsList.length" x-cloak></span>
+      </button>
+    </div>
+  </div>
+</header>
+
+<!-- ═══════════ OVERVIEW ═══════════ -->
+<main x-show="surface === 'home'" x-cloak class="surface stack">
+
+  <!-- The figure. One number, set large, with its provenance directly beneath.
+       No card, no border — it sits on the page like the first line of a
+       statement. -->
+  <section class="hero">
+    <p class="label">Total corpus</p>
+
+    <template x-if="hasAnyPortfolioData">
+      <div>
+        <number-flow class="figure" id="nwHero"
+                     x-effect="$el.locales='en-IN';
+                               $el.format={style:'currency',currency:'INR',maximumFractionDigits:0};
+                               $el.update && $el.update(netWorthTotal)"></number-flow>
+        <p class="hero__delta" :class="nwChartChangePct === null || nwChartChangePct >= 0 ? 'up' : 'down'">
+          <span class="icon icon--sm" x-text="nwChartChangePct === null || nwChartChangePct >= 0 ? 'trending_up' : 'trending_down'"></span>
+          <span x-text="nwChartChangeLabel"></span>
+          <span class="muted" style="font-weight:500" x-text="nwChartRange === 'ALL' ? 'all time' : 'past ' + nwChartRange.toLowerCase().replace('m',' months').replace('1 months','month').replace('y',' year')"></span>
+        </p>
+        <p class="stamp" :class="portfolioFreshness.stale ? 'stamp--stale' : ''" style="margin-top:var(--s3)">
+          <span class="stamp__dot"></span>
+          <span x-text="portfolioFreshness.label"></span>
+        </p>
+      </div>
+    </template>
+
+    <template x-if="!hasAnyPortfolioData">
+      <div class="hero__empty">
+        <h1 class="headline">Start your corpus</h1>
+        <p class="lead" style="margin-top:var(--s3)">Add a holding, or import a statement and let Corpus read it for you.</p>
+        <div class="hero__cta">
+          <button class="btn btn--primary" @click="addingInv = true">Add a holding</button>
+          <button class="btn btn--quiet" @click="activePage = 'import'">Import a statement</button>
+        </div>
+      </div>
+    </template>
+  </section>
+
+  <!-- The series. Full-bleed under the figure, no frame. -->
+  <template x-if="hasAnyPortfolioData">
+    <section class="series">
+      <div id="nwChart" class="series__canvas"></div>
+      <div class="seg" role="tablist" aria-label="Chart range">
+        <template x-for="r in ['1M','3M','6M','1Y','ALL']" :key="r">
+          <button class="seg__item" role="tab" :aria-selected="nwChartRange === r"
+                  @click="nwChartRange = r; renderNwChart()" x-text="r"></button>
+        </template>
+      </div>
+    </section>
+  </template>
+
+  <!-- What needs you. Only rendered when something actually does — an empty
+       attention list is noise, so it disappears rather than saying "all clear". -->
+  <template x-if="attentionItems.length">
+    <section class="sheet">
+      <h2 class="sheet__head sheet__title">Needs you</h2>
+      <template x-for="a in attentionItems" :key="a.id">
+        <button class="row attention" @click="activePage = a.page">
+          <span class="row__label">
+            <span class="row__name" x-text="a.title"></span>
+            <span class="row__meta" x-text="a.detail"></span>
+          </span>
+          <span class="icon icon--sm muted">chevron_right</span>
+        </button>
+      </template>
+    </section>
+  </template>
+
+  <!-- Allocation. Rows on one sheet, separated by hairlines. The percentage is
+       a rule beneath the name rather than a bar chart — it reads at a glance
+       and costs no vertical space. -->
+  <template x-if="hasAnyPortfolioData">
+    <section class="sheet">
+      <h2 class="sheet__head sheet__title">Holdings</h2>
+      <template x-for="k in allocationRows" :key="k.key">
+        <button class="row alloc" @click="activePage = k.page" data-holding-row>
+          <span class="row__label">
+            <span class="row__name" x-text="k.label"></span>
+            <span class="alloc__bar" :style="`--pct:${k.pct}%`"></span>
+          </span>
+          <span class="row__figures">
+            <span class="row__value tnum" x-text="formatCurrency(k.value)"></span>
+            <template x-if="k.pnlPct !== null">
+              <span class="row__delta tnum" :class="k.pnlPct >= 0 ? 'up' : 'down'"
+                    x-text="(k.pnlPct >= 0 ? '+' : '') + k.pnlPct.toFixed(2) + '%'"></span>
+            </template>
+          </span>
+        </button>
+      </template>
+      <div class="rule rule--brass"></div>
+      <div class="row row--total">
+        <span class="row__name">Total</span>
+        <span class="row__value tnum figure--total" x-text="formatCurrency(totalAssets)"></span>
+      </div>
+    </section>
+  </template>
+
+</main>
+
+<!-- ═══════════ PORTFOLIO / PLANNING / INSIGHTS — built next ═══════════ -->
+<!-- ═══════════ HOLDINGS ═══════════ -->
+<main x-show="surface === 'portfolio'" x-cloak class="surface stack">
+
+  <section class="pagehead">
+    <h1 class="headline">Holdings</h1>
+    <p class="stamp" :class="portfolioFreshness.stale ? 'stamp--stale' : ''">
+      <span class="stamp__dot"></span><span x-text="portfolioFreshness.label"></span>
+    </p>
+  </section>
+
+  <!-- Filter. Sentence case, no all-caps, and it names asset classes the way an
+       Indian investor says them rather than by internal type strings. -->
+  <div class="seg seg--scroll" role="tablist" aria-label="Filter holdings">
+    <template x-for="f in holdingFilters" :key="f.key">
+      <button class="seg__item" role="tab" :aria-selected="invFilter === f.key"
+              @click="invFilter = f.key" x-text="f.label"></button>
+    </template>
+  </div>
+
+  <template x-if="!visibleHoldings.length">
+    <section class="empty">
+      <span class="icon empty__icon">donut_small</span>
+      <h2 class="title" x-text="investments.length ? 'Nothing in this group' : 'No holdings yet'"></h2>
+      <p class="lead" x-text="investments.length ? 'Try another filter, or add a holding to this group.' : 'Add your first holding, or import a statement and Corpus will read it.'"></p>
+      <div class="hero__cta">
+        <button class="btn btn--primary" @click="addingInv = true">Add a holding</button>
+        <button class="btn btn--quiet" @click="activePage = 'import'">Import a statement</button>
+      </div>
+    </section>
+  </template>
+
+  <!-- One sheet per asset class. Grouping by what a thing IS beats one long
+       undifferentiated list, and each group can carry its own subtotal. -->
+  <template x-for="g in groupedHoldings" :key="g.key">
+    <section class="sheet" x-show="g.items.length">
+      <div class="sheet__head sheet__head--split">
+        <h2 class="sheet__title" x-text="g.label"></h2>
+        <span class="tnum muted" x-text="formatCurrency(g.total)"></span>
+      </div>
+
+      <template x-for="inv in g.items" :key="inv.id">
+        <button class="row holding" data-holding-row @click="openEditModal(inv)">
+          <span class="row__label">
+            <span class="row__name" x-text="inv.name"></span>
+            <span class="row__meta">
+              <span x-text="holdingSubtitle(inv)"></span>
+              <template x-if="priceFreshness(inv).state !== 'unknown'">
+                <span class="stamp" :class="priceFreshness(inv).state === 'stale' ? 'stamp--stale' : ''">
+                  <span class="stamp__dot"></span><span x-text="priceFreshness(inv).label"></span>
+                </span>
+              </template>
+            </span>
+          </span>
+          <span class="row__figures">
+            <span class="row__value tnum" x-text="formatCurrency(getInvCurrentValue(inv))"></span>
+            <template x-if="getInvInvestedCost(inv) > 0">
+              <span class="row__delta tnum" :class="getInvPnL(inv) >= 0 ? 'up' : 'down'"
+                    x-text="(getInvPnL(inv) >= 0 ? '+' : '') + formatCurrency(getInvPnL(inv)) + '  ' + (getInvPnLPct(inv) >= 0 ? '+' : '') + Number(getInvPnLPct(inv)).toFixed(2) + '%'"></span>
+            </template>
+          </span>
+        </button>
+      </template>
+    </section>
+  </template>
+
+  <template x-if="visibleHoldings.length">
+    <div class="actions">
+      <button class="btn btn--primary btn--block" @click="addingInv = true">
+        <span class="icon icon--sm">add</span> Add a holding
+      </button>
+      <button class="btn btn--quiet btn--block" @click="activePage = 'import'">
+        <span class="icon icon--sm">document_scanner</span> Import a statement
+      </button>
+    </div>
+  </template>
+</main>
+<main x-show="surface === 'planning'"  x-cloak class="surface stack"><p class="lead">Planning</p></main>
+<main x-show="surface === 'insights'"  x-cloak class="surface stack"><p class="lead">Insights</p></main>
+
+<!-- ─────────────────────────────────────────────────────────────────────────
+     Dock. Four destinations, the whole app. The active one is marked by a
+     brass rule above the label, not a filled pill.
+     ───────────────────────────────────────────────────────────────────── -->
+<nav class="dock" aria-label="Main">
+  <template x-for="s in SURFACES" :key="s.id">
+    <button class="dock__item" @click="activePage = s.root"
+            :aria-current="surface === s.id ? 'page' : null"
+            :class="surface === s.id ? 'is-active' : ''"
+            :id="'nav' + s.id">
+      <span class="icon" :class="surface === s.id ? 'icon--fill' : ''" x-text="s.icon"></span>
+      <span class="dock__label" x-text="s.label"></span>
+    </button>
+  </template>
+</nav>
+
+<script defer src="vendor.js"></script>
+<script defer src="plugins.js"></script>
+<script defer src="parser.js"></script>
+<script defer src="regenWealth.js"></script>
+<script defer src="motion.js"></script>
+<script defer src="app.js"></script>
+<script defer src="boot.js"></script>
+</body>
+</html>

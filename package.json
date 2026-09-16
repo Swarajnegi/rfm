@@ -8,9 +8,10 @@
     "build:vendor": "esbuild src/vendor.js --bundle --format=iife --outfile=web/vendor.js --minify",
     "build:boot": "esbuild src/boot.js --bundle --format=iife --outfile=web/boot.js --minify",
     "build:bridge": "esbuild src/capacitor-bridge.js --bundle --outfile=web/plugins.js --minify",
-    "build": "npm run build:css && npm run build:vendor && npm run build:boot && npm run build:bridge",
+    "build": "npm run build:css && npm run build:corpus && npm run build:vendor && npm run build:boot && npm run build:bridge",
     "verify": "node scripts/verify-offline.mjs",
-    "test": "npm run verify"
+    "test": "npm run verify",
+    "build:corpus": "cp src/corpus.css web/corpus.css"
   },
   "repository": {
     "type": "git",

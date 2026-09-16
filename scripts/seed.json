@@ -1,17 +1,140 @@
 {
   "version": "3.0",
   "investments": [
-    {"id":"i1","name":"HDFC Bank FD","type":"Bank FD","issuer":"HDFC Bank","amount":500000,"interestRate":7.1,"payoutFrequency":"Cumulative / On Maturity","rating":"Corporate","maturityDate":"2027-03-15","currentValue":536000,"lastNavUpdate":"2026-09-16T10:00:00.000Z"},
-    {"id":"i2","name":"Quant Small Cap Fund","type":"Mutual Fund","schemeCode":"120828","units":842.115,"buyPrice":178.2,"currentPrice":241.86,"lastNavUpdate":"2026-09-16T12:31:00.000Z"},
-    {"id":"i3","name":"NVIDIA Corp","type":"Stock (US)","ticker":"NVDA","currency":"USD","units":1.895487,"buyPrice":121.4,"currentPrice":178.42,"lastNavUpdate":"2026-09-15T20:05:00.000Z"},
-    {"id":"i4","name":"RBI Floating Rate Bond","type":"Bond","issuer":"RBI","amount":300000,"interestRate":8.05,"payoutFrequency":"Half-Yearly","rating":"Government","maturityDate":"2030-01-22","currentValue":324150},
-    {"id":"i5","name":"Sovereign Gold Bond 2024","type":"Gold","units":22,"buyPrice":6132,"currentPrice":7845,"lastNavUpdate":"2026-09-16T11:02:00.000Z"}
+    {
+      "id": "i1",
+      "name": "HDFC Bank FD",
+      "type": "Bank FD",
+      "issuer": "HDFC Bank",
+      "amount": 500000,
+      "interestRate": 7.1,
+      "payoutFrequency": "Cumulative / On Maturity",
+      "rating": "Corporate",
+      "maturityDate": "2027-03-15",
+      "currentValue": 536000,
+      "lastNavUpdate": "2026-09-16T10:00:00.000Z"
+    },
+    {
+      "id": "i2",
+      "name": "Quant Small Cap Fund",
+      "type": "Mutual Fund",
+      "schemeCode": "120828",
+      "units": 842.115,
+      "buyPrice": 178.2,
+      "currentPrice": 241.86,
+      "lastNavUpdate": "2026-09-16T12:31:00.000Z",
+      "priceSource": "AMFI",
+      "priceAsOf": "2026-09-16T00:44:22.379503+00:00",
+      "priceIsClose": true
+    },
+    {
+      "id": "i3",
+      "name": "NVIDIA Corp",
+      "type": "Stock (US)",
+      "ticker": "NVDA",
+      "currency": "USD",
+      "units": 1.895487,
+      "buyPrice": 121.4,
+      "currentPrice": 178.42,
+      "lastNavUpdate": "2026-09-15T20:05:00.000Z",
+      "priceSource": "Yahoo",
+      "priceAsOf": "2026-09-15T13:44:22.379503+00:00",
+      "priceIsClose": true
+    },
+    {
+      "id": "i4",
+      "name": "RBI Floating Rate Bond",
+      "type": "Bond",
+      "issuer": "RBI",
+      "amount": 300000,
+      "interestRate": 8.05,
+      "payoutFrequency": "Half-Yearly",
+      "rating": "Government",
+      "maturityDate": "2030-01-22",
+      "currentValue": 324150
+    },
+    {
+      "id": "i5",
+      "name": "Sovereign Gold Bond 2024",
+      "type": "Gold",
+      "units": 22,
+      "buyPrice": 6132,
+      "currentPrice": 7845,
+      "lastNavUpdate": "2026-09-16T11:02:00.000Z",
+      "priceSource": "AMFI",
+      "priceAsOf": "2026-09-16T00:44:22.379503+00:00",
+      "priceIsClose": true
+    }
   ],
-  "goals": [{"id":"g1","name":"Emergency buffer","type":"Emergency Fund","target":600000,"saved":252000,"targetDate":"2027-06-30"}],
-  "sips": [{"id":"s1","name":"Quant Small Cap Fund","type":"SIP","monthlyAmount":15000,"dayOfMonth":3,"status":"Active","schemeCode":"120828"}],
-  "pension": {"monthlyAmount":0,"type":"Government","revisions":[]},
-  "cashflow": {"incomes":[{"id":"inc_salary","name":"Monthly Salary","amount":74000,"category":"Salary"}],"expenses":[{"id":"exp_housing","name":"Rent & Housing","amount":18000,"category":"Housing"},{"id":"exp_food","name":"Food & Groceries","amount":9500,"category":"Food"}],"salaryDay":1},
-  "networth": {"bankBalance":185000,"cashOnHand":12000,"propertyValue":0,"homeLoan":0,"personalLoan":0,"credit":0,"otherDebt":0},
-  "emergency": {"efMonthly":32000,"efMonths":6,"efCurrent":252000},
-  "tax": {"regime":"compare","seniorCitizen":false,"otherIncome":41000,"deduction80C":150000}
+  "goals": [
+    {
+      "id": "g1",
+      "name": "Emergency buffer",
+      "type": "Emergency Fund",
+      "target": 600000,
+      "saved": 252000,
+      "targetDate": "2027-06-30"
+    }
+  ],
+  "sips": [
+    {
+      "id": "s1",
+      "name": "Quant Small Cap Fund",
+      "type": "SIP",
+      "monthlyAmount": 15000,
+      "dayOfMonth": 3,
+      "status": "Active",
+      "schemeCode": "120828"
+    }
+  ],
+  "pension": {
+    "monthlyAmount": 0,
+    "type": "Government",
+    "revisions": []
+  },
+  "cashflow": {
+    "incomes": [
+      {
+        "id": "inc_salary",
+        "name": "Monthly Salary",
+        "amount": 74000,
+        "category": "Salary"
+      }
+    ],
+    "expenses": [
+      {
+        "id": "exp_housing",
+        "name": "Rent & Housing",
+        "amount": 18000,
+        "category": "Housing"
+      },
+      {
+        "id": "exp_food",
+        "name": "Food & Groceries",
+        "amount": 9500,
+        "category": "Food"
+      }
+    ],
+    "salaryDay": 1
+  },
+  "networth": {
+    "bankBalance": 185000,
+    "cashOnHand": 12000,
+    "propertyValue": 0,
+    "homeLoan": 0,
+    "personalLoan": 0,
+    "credit": 0,
+    "otherDebt": 0
+  },
+  "emergency": {
+    "efMonthly": 32000,
+    "efMonths": 6,
+    "efCurrent": 252000
+  },
+  "tax": {
+    "regime": "compare",
+    "seniorCitizen": false,
+    "otherIncome": 41000,
+    "deduction80C": 150000
+  }
 }

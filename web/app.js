@@ -509,14 +509,15 @@ document.addEventListener('alpine:init', () => {
                                                 .map(([time, value]) => ({ time, value }));
 
             const rising = points.length < 2 || points[points.length - 1].value >= points[0].value;
-            const stroke = rising ? '#a7b8ff' : '#f87171';
+            const stroke = rising ? this._token('--jade', '#1F6B52') : this._token('--carnelian', '#A33B2A');
+            const ink    = this._token('--ink-faint', '#74857D');
 
             if (window._rfmNwChart) { window._rfmNwChart.remove(); window._rfmNwChart = null; }
 
             const chart = window.LW.createChart(el, {
                 width: el.clientWidth,
                 height: el.clientHeight || 140,
-                layout: { background: { color: 'transparent' }, textColor: 'rgba(255,255,255,0.45)', attributionLogo: false },
+                layout: { background: { color: 'transparent' }, textColor: ink, attributionLogo: false },
                 grid: { vertLines: { visible: false }, horzLines: { visible: false } },
                 rightPriceScale: { visible: false },
                 leftPriceScale: { visible: false },
@@ -534,7 +535,7 @@ document.addEventListener('alpine:init', () => {
             const series = chart.addSeries(window.LW.AreaSeries, {
                 lineColor: single ? 'rgba(0,0,0,0)' : stroke,
                 lineWidth: single ? 0 : 2,
-                topColor: single ? 'rgba(0,0,0,0)' : (rising ? 'rgba(167,184,255,0.35)' : 'rgba(248,113,113,0.35)'),
+                topColor: single ? 'rgba(0,0,0,0)' : `color-mix(in srgb, ${stroke} 26%, transparent)`,
                 bottomColor: 'rgba(0,0,0,0)',
                 priceLineVisible: false,
                 lastValueVisible: false,
@@ -1607,6 +1608,146 @@ document.addEventListener('alpine:init', () => {
                         && window.matchMedia('(prefers-color-scheme: dark)').matches);
                 P.StatusBar.setStyle({ style: dark ? P.Style.Dark : P.Style.Light });
             } catch (e) {}
+        },
+
+        /* ── CORPUS shell ────────────────────────────────────────────────
+           Four destinations replace the previous fifteen pages. Every old page
+           id still resolves — it simply belongs to a surface now, so existing
+           `activePage = 'x'` writes keep working and deep links stay valid. */
+        SURFACES: [
+            { id: 'home',      label: 'Overview',  icon: 'account_balance',          root: 'home',        views: ['home'] },
+            { id: 'portfolio', label: 'Holdings',  icon: 'donut_small',              root: 'investments', views: ['investments','stocks','mutualfunds','gold','maturity','import'] },
+            { id: 'planning',  label: 'Planning',  icon: 'calendar_month',           root: 'cashflow',    views: ['cashflow','pension','emergency','goals','networth','tax'] },
+            { id: 'insights',  label: 'Insights',  icon: 'auto_awesome',             root: 'regen',       views: ['regen','more'] },
+        ],
+
+        get surface() {
+            const p = this.activePage;
+            const hit = this.SURFACES.find(s => s.views.includes(p));
+            return hit ? hit.id : 'home';
+        },
+
+        /* One line describing how fresh the WHOLE portfolio is. The hero states
+           it directly rather than making the user open each holding to find out,
+           and it names the worst case — a portfolio is only as current as its
+           stalest quote. */
+        get portfolioFreshness() {
+            const priced = (this.investments || []).filter(i => i.priceAsOf);
+            if (!priced.length) return { stale: false, label: 'Not synced yet' };
+            const states = priced.map(i => this.priceFreshness(i));
+            const stale = states.filter(s => s.state === 'stale').length;
+            const close = states.filter(s => s.state === 'close').length;
+            if (stale) return { stale: true, label: `${stale} holding${stale > 1 ? 's' : ''} not refreshed today` };
+            const newest = priced.map(i => new Date(i.priceAsOf).getTime()).sort((a, b) => b - a)[0];
+            const t = new Date(newest).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' });
+            return { stale: false, label: close ? `Valued ${t} · ${close} at closing price` : `Verified ${t}` };
+        },
+
+        /* Things that genuinely need a decision. Deliberately capped and
+           deliberately empty-able: a permanent "all clear" row trains people to
+           ignore the section. */
+        get attentionItems() {
+            const out = [];
+            const f = this.portfolioFreshness;
+            if (f.stale) out.push({ id: 'stale', title: 'Prices need a refresh', detail: f.label, page: 'investments' });
+
+            for (const inv of (this.maturingInvestments || []).slice(0, 2)) {
+                const days = Math.ceil((new Date(inv.maturityDate) - Date.now()) / 864e5);
+                if (days >= 0 && days <= 30) {
+                    out.push({ id: 'mat' + inv.id, title: `${inv.name} matures in ${days} day${days === 1 ? '' : 's'}`,
+                               detail: `${this.formatCurrency(this.getInvCurrentValue(inv))} · plan the reinvestment`, page: 'maturity' });
+                }
+            }
+            if (Number(this.efGap) > 0 && Number(this.emergency.efMonthly) > 0) {
+                out.push({ id: 'ef', title: 'Emergency fund is short',
+                           detail: `${this.formatCurrency(this.efGap)} below a ${this.emergency.efMonths}-month buffer`, page: 'emergency' });
+            }
+            for (const w of (this.concentrationWarnings || []).slice(0, 1)) {
+                out.push({ id: 'conc', title: 'Concentrated position', detail: typeof w === 'string' ? w : (w.message || ''), page: 'investments' });
+            }
+            return out.slice(0, 4);
+        },
+
+        /* Allocation as rows rather than a pie. A pie of six slices is harder to
+           read than six right-aligned figures, and it cannot show gain. */
+        get allocationRows() {
+            const total = this.totalAssets || 0;
+            const defs = [
+                { key: 'equity', label: 'Stocks',        page: 'stocks',      value: this.totalStockValuation, pnlPct: this.totalStockPnLPct },
+                { key: 'mf',     label: 'Mutual funds',  page: 'mutualfunds', value: this.totalMfValuation,    pnlPct: this.totalMfPnLPct },
+                { key: 'gold',   label: 'Gold',          page: 'gold',        value: this.totalGoldValuation,  pnlPct: this.totalGoldPnLPct },
+                { key: 'debt',   label: 'Deposits and bonds', page: 'investments',
+                  value: (this.debtAndEpfList || []).reduce((a, i) => a + this.getInvCurrentValue(i), 0), pnlPct: null },
+                { key: 'cash',   label: 'Cash and bank',   page: 'networth',
+                  value: (Number(this.networth.bankBalance) || 0) + (Number(this.networth.cashOnHand) || 0), pnlPct: null },
+            ];
+            return defs
+                .filter(d => Number(d.value) > 0)
+                .map(d => ({ ...d, value: Number(d.value), pct: total ? (Number(d.value) / total) * 100 : 0,
+                             pnlPct: d.pnlPct === null ? null : Number(d.pnlPct) }))
+                .sort((a, b) => b.value - a.value);
+        },
+
+        _token(name, fallback) {
+            try {
+                const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+                return v || fallback;
+            } catch (e) { return fallback; }
+        },
+
+        holdingFilters: [
+            { key: 'all',    label: 'Everything' },
+            { key: 'equity', label: 'Stocks' },
+            { key: 'mf',     label: 'Mutual funds' },
+            { key: 'debt',   label: 'Deposits and bonds' },
+            { key: 'gold',   label: 'Gold' },
+        ],
+
+        /* One line under a holding's name saying what it actually is, in the
+           terms the user entered it in — units and price for market
+           instruments, rate and maturity for fixed income. */
+        holdingSubtitle(inv) {
+            const t = inv.type || '';
+            if (t.includes('Stock') || t.includes('ETF')) {
+                const cur = inv.currency === 'USD' ? '$' : '\u20b9';
+                return `${Number(inv.units || 0).toLocaleString('en-IN', { maximumFractionDigits: 4 })} @ ${cur}${Number(inv.currentPrice || 0).toLocaleString('en-IN')}`;
+            }
+            if (t === 'Mutual Fund') {
+                return `${Number(inv.units || 0).toLocaleString('en-IN', { maximumFractionDigits: 3 })} units @ \u20b9${Number(inv.currentPrice || 0).toFixed(2)}`;
+            }
+            if (t === 'Gold') return `${Number(inv.units || 0)} g`;
+            if (inv.interestRate) {
+                const m = inv.maturityDate ? ` \u00b7 matures ${this.formatDate(inv.maturityDate)}` : '';
+                return `${inv.interestRate}%${m}`;
+            }
+            return inv.issuer || t;
+        },
+
+        _classOf(inv) {
+            const t = inv.type || '';
+            if (t.includes('Stock') || t.includes('ETF')) return 'equity';
+            if (t === 'Mutual Fund') return 'mf';
+            if (t === 'Gold') return 'gold';
+            return 'debt';
+        },
+
+        get visibleHoldings() {
+            const all = this.investments || [];
+            return this.invFilter === 'all' ? all : all.filter(i => this._classOf(i) === this.invFilter);
+        },
+
+        get groupedHoldings() {
+            const defs = [
+                { key: 'equity', label: 'Stocks and ETFs' },
+                { key: 'mf',     label: 'Mutual funds' },
+                { key: 'debt',   label: 'Deposits, bonds and schemes' },
+                { key: 'gold',   label: 'Gold' },
+            ];
+            const vis = this.visibleHoldings;
+            return defs.map(d => {
+                const items = vis.filter(i => this._classOf(i) === d.key);
+                return { ...d, items, total: items.reduce((a, i) => a + this.getInvCurrentValue(i), 0) };
+            }).filter(g => g.items.length);
         },
 
         get hasAnyPortfolioData() {
