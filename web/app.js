@@ -116,7 +116,7 @@ document.addEventListener('alpine:init', () => {
 
         // ── Add Forms ───────────────────────────────────────────────
         newInv: {
-            name: '', type: 'Stock', issuer: '', amount: '',
+            name: '', type: 'Bank FD', issuer: '', amount: '',
             rate: '', payout: 'Monthly', rating: '', maturityDate: '',
             ticker: '', units: '', buyPrice: '', currentPrice: '',
             purchaseDate: '', assetClass: 'equity', schemeCode: ''
@@ -1616,8 +1616,8 @@ document.addEventListener('alpine:init', () => {
            `activePage = 'x'` writes keep working and deep links stay valid. */
         SURFACES: [
             { id: 'home',      label: 'Overview',  icon: 'account_balance',          root: 'home',        views: ['home'] },
-            { id: 'portfolio', label: 'Holdings',  icon: 'donut_small',              root: 'investments', views: ['investments','stocks','mutualfunds','gold','maturity','import'] },
-            { id: 'planning',  label: 'Planning',  icon: 'calendar_month',           root: 'cashflow',    views: ['cashflow','pension','emergency','goals','networth','tax'] },
+            { id: 'portfolio', label: 'Holdings',  icon: 'donut_small',              root: 'investments', views: ['investments','maturity','import'] },
+            { id: 'planning',  label: 'Planning',  icon: 'calendar_month',           root: 'cashflow',    views: ['cashflow','income','pension','emergency','goals','networth','tax'] },
             { id: 'insights',  label: 'Insights',  icon: 'auto_awesome',             root: 'regen',       views: ['regen','more'] },
         ],
 
@@ -1673,12 +1673,12 @@ document.addEventListener('alpine:init', () => {
         get allocationRows() {
             const total = this.totalAssets || 0;
             const defs = [
-                { key: 'equity', label: 'Stocks',        page: 'stocks',      value: this.totalStockValuation, pnlPct: this.totalStockPnLPct },
-                { key: 'mf',     label: 'Mutual funds',  page: 'mutualfunds', value: this.totalMfValuation,    pnlPct: this.totalMfPnLPct },
-                { key: 'gold',   label: 'Gold',          page: 'gold',        value: this.totalGoldValuation,  pnlPct: this.totalGoldPnLPct },
-                { key: 'debt',   label: 'Deposits and bonds', page: 'investments',
+                { key: 'equity', label: 'Stocks',        filter: 'equity', value: this.totalStockValuation, pnlPct: this.totalStockPnLPct },
+                { key: 'mf',     label: 'Mutual funds',  filter: 'mf',     value: this.totalMfValuation,    pnlPct: this.totalMfPnLPct },
+                { key: 'gold',   label: 'Gold',          filter: 'gold',   value: this.totalGoldValuation,  pnlPct: this.totalGoldPnLPct },
+                { key: 'debt',   label: 'Deposits and bonds', filter: 'debt', page: 'investments',
                   value: (this.debtAndEpfList || []).reduce((a, i) => a + this.getInvCurrentValue(i), 0), pnlPct: null },
-                { key: 'cash',   label: 'Cash and bank',   page: 'networth',
+                { key: 'cash',   label: 'Cash and bank',   page: 'networth', filter: 'all',
                   value: (Number(this.networth.bankBalance) || 0) + (Number(this.networth.cashOnHand) || 0), pnlPct: null },
             ];
             return defs
@@ -1748,6 +1748,73 @@ document.addEventListener('alpine:init', () => {
                 const items = vis.filter(i => this._classOf(i) === d.key);
                 return { ...d, items, total: items.reduce((a, i) => a + this.getInvCurrentValue(i), 0) };
             }).filter(g => g.items.length);
+        },
+
+        sipDaysUntil(sip) {
+            const today = new Date().getDate();
+            const debit = Number(sip.dayOfMonth);
+            if (!debit) return null;
+            return debit >= today ? debit - today : (31 - today) + debit;
+        },
+
+        get isDetailView() {
+            const s = this.SURFACES.find(x => x.views.includes(this.activePage));
+            return !!s && this.activePage !== s.root;
+        },
+
+        get detailParent() {
+            const s = this.SURFACES.find(x => x.views.includes(this.activePage));
+            return s ? s.root : 'home';
+        },
+
+        goBack() {
+            if (this.isDetailView) { this.activePage = this.detailParent; return true; }
+            if (this.activePage !== 'home') { this.activePage = 'home'; return true; }
+            return false;
+        },
+
+        isUnitPriced(type) {
+            const t = type || '';
+            return t.includes('Stock') || t.includes('ETF') || t === 'Mutual Fund' || t === 'Gold';
+        },
+        needsTicker(type) {
+            const t = type || '';
+            return t.includes('Stock') || t.includes('ETF');
+        },
+
+        /* The canonical instrument list, in the order an Indian investor is
+           likely to hold them rather than alphabetically. */
+        investmentTypes: [
+            'Bank FD', 'Bond', 'Government Scheme', 'Mutual Fund',
+            'Stock (IND)', 'Stock (US)', 'ETF (IND)', 'ETF (US)',
+            'Gold', 'Real Estate', 'Other',
+        ],
+
+        ordinal(n) {
+            const v = Number(n) || 0;
+            const s = ['th', 'st', 'nd', 'rd'], k = v % 100;
+            return v + (s[(k - 20) % 10] || s[k] || s[0]);
+        },
+
+        /* Money that moves without anyone doing anything — maturities and SIP
+           debits — on one timeline. This is the "what did I forget" surface. */
+        get upcomingEvents() {
+            const out = [];
+            for (const inv of (this.maturingInvestments || []).slice(0, 4)) {
+                const days = Math.ceil((new Date(inv.maturityDate) - Date.now()) / 864e5);
+                if (days < 0 || days > 120) continue;
+                out.push({ id: 'm' + inv.id, title: `${inv.name} matures`,
+                           when: days === 0 ? 'Today' : `In ${days} day${days === 1 ? '' : 's'} · ${this.formatDate(inv.maturityDate)}`,
+                           amount: this.getInvCurrentValue(inv), direction: 'in', sort: days });
+            }
+            for (const sip of (this.activeSips || []).slice(0, 4)) {
+                const days = this.sipDaysUntil(sip);
+                if (days === null || days > 45) continue;
+                out.push({ id: 's' + sip.id, title: `${sip.name}`,
+                           when: days === 0 ? 'Debits today' : `Debits in ${days} day${days === 1 ? '' : 's'}`,
+                           amount: sip.monthlyAmount, direction: 'out', sort: days });
+            }
+            return out.sort((a, b) => a.sort - b.sort).slice(0, 5);
         },
 
         get hasAnyPortfolioData() {

@@ -1,3 +1,6 @@
+/* driver.js base styles, then the Corpus design system. Concatenated at build so the tutorial overlay works offline. */
+.driver-popover{all:unset;font-family:var(--driver-popover-font-family,"Helvetica Neue", Inter, ui-sans-serif, "Apple Color Emoji", Helvetica, Arial, sans-serif);box-sizing:border-box;color:#2d2d2d;z-index:1000000000;background-color:#fff;border-radius:5px;min-width:250px;max-width:300px;margin:0;padding:15px;position:fixed;top:0;right:0;box-shadow:0 1px 10px #0006}.driver-popover-title{zoom:1;margin:0;font-size:19px;font-weight:700;line-height:1.5;display:block;position:relative}.driver-popover-close-btn{all:unset;cursor:pointer;color:#d2d2d2;z-index:1;text-align:center;width:32px;height:28px;font-size:18px;font-weight:500;transition:color .2s;position:absolute;top:0;right:0}.driver-popover-close-btn:hover,.driver-popover-close-btn:focus{color:#2d2d2d}.driver-popover-title[style*=block]+.driver-popover-description{margin-top:5px}.driver-popover-description{zoom:1;margin-bottom:0;font-size:14px;font-weight:400;line-height:1.5}.driver-popover-footer{text-align:right;zoom:1;justify-content:space-between;align-items:center;margin-top:15px;display:flex}.driver-popover-progress-text{color:#727272;zoom:1;font-size:13px;font-weight:400}.driver-popover-footer-btn{all:unset;box-sizing:border-box;color:#2d2d2d;cursor:pointer;zoom:1;background-color:#fff;border:1px solid #ccc;border-radius:3px;outline:0;padding:3px 7px;font-size:12px;line-height:1.3;text-decoration:none;display:inline-block}.driver-popover-footer .driver-popover-btn-disabled{opacity:.5;pointer-events:none}.driver-popover-footer-btn:hover,.driver-popover-footer-btn:focus{background-color:#f7f7f7}.driver-popover-navigation-btns{flex-grow:1;justify-content:flex-end;display:flex}.driver-popover-navigation-btns button+button{margin-left:4px}.driver-popover-arrow{content:"";border:5px solid #fff;position:absolute}.driver-popover-arrow-side-over{display:none}.driver-popover-arrow-side-left{border-top-color:#0000;border-bottom-color:#0000;border-right-color:#0000;left:100%}.driver-popover-arrow-side-right{border-top-color:#0000;border-bottom-color:#0000;border-left-color:#0000;right:100%}.driver-popover-arrow-side-top{border-bottom-color:#0000;border-left-color:#0000;border-right-color:#0000;top:100%}.driver-popover-arrow-side-bottom{border-top-color:#0000;border-left-color:#0000;border-right-color:#0000;bottom:100%}.driver-popover-arrow-side-center,.driver-popover-arrow-none{display:none}.driver-active .driver-overlay{pointer-events:none}.driver-active.driver-no-scroll{overflow:hidden}.driver-active *{pointer-events:none}.driver-active .driver-active-element,.driver-active .driver-active-element *,.driver-popover,.driver-popover *{pointer-events:auto}@keyframes animate-fade-in{0%{opacity:0}to{opacity:1}}.driver-fade .driver-overlay{animation:animate-fade-in var(--driver-animation-duration,.4s) ease-in-out}.driver-fade .driver-popover{animation:animate-fade-in var(--driver-animation-duration,.4s)}.driver-active-element-parent-no-scroll{overflow:hidden!important}.driver-no-interaction,.driver-no-interaction *{pointer-events:none!important}
+
 /* ═══════════════════════════════════════════════════════════════════════════
    CORPUS — design system
 
@@ -20,7 +23,7 @@
   --sheet-raised:  #FFFFFF;
   --ink:           #0E1F19;
   --ink-soft:      #4A5B54;
-  --ink-faint:     #74857D;
+  --ink-faint:     #5C6E66;
   --brass:         #8A6D1F;
   --brass-bright:  #A8862B;
   --jade:          #1F6B52;
@@ -73,7 +76,7 @@
   --sheet-raised:  #1A3229;
   --ink:           #EDEFE8;   /* ivory, never pure white */
   --ink-soft:      #A9B8B0;
-  --ink-faint:     #7A8C84;
+  --ink-faint:     #93A49C;
   --brass:         #C9A227;
   --brass-bright:  #E0BC4A;
   --jade:          #4FA083;
@@ -93,7 +96,7 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --ground: #0C1A15; --ground-sunk: #081310; --sheet: #13271F; --sheet-raised: #1A3229;
-    --ink: #EDEFE8; --ink-soft: #A9B8B0; --ink-faint: #7A8C84;
+    --ink: #EDEFE8; --ink-soft: #A9B8B0; --ink-faint: #93A49C;
     --brass: #C9A227; --brass-bright: #E0BC4A; --jade: #4FA083; --carnelian: #D2705C;
     --rule: color-mix(in srgb, var(--ink) 14%, transparent);
     --rule-strong: color-mix(in srgb, var(--ink) 28%, transparent);
@@ -441,3 +444,189 @@ button.row:active { background: var(--wash); }
 .empty__icon { font-size: 40px; color: var(--brass); opacity: 0.55; display: block; margin: 0 auto var(--s4); }
 .empty .lead { margin: var(--s3) auto 0; max-width: 26rem; }
 .empty .hero__cta { justify-content: center; }
+
+/* ═══ PLANNING ════════════════════════════════════════════════════════════ */
+.figures { padding: 0 var(--s5) var(--s5); display: grid; gap: var(--s5); }
+.figures__main .figure { margin: var(--s1) 0 4px; }
+.figures__side { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--s4); }
+.figures__val { font-size: var(--t-body); font-weight: 600; margin-top: 2px; }
+
+/* A filled rule reads as progress without spending the vertical space a donut
+   needs, and it sits naturally under the label it describes. */
+.meter { height: 3px; background: var(--rule); border-radius: 3px; overflow: hidden; margin: 0 var(--s5) var(--s2); }
+.meter--inline { margin: 7px 0 0; }
+.meter__fill { display: block; height: 100%; width: var(--pct, 0%); background: var(--brass); border-radius: 3px; transition: width var(--slow) var(--ease); }
+
+.linkbtn { font-size: var(--t-micro); font-weight: 600; color: var(--brass); }
+.linkbtn:hover { text-decoration: underline; text-underline-offset: 3px; }
+.sheet__note { padding: 0 var(--s5) var(--s5); color: var(--ink-faint); font-size: var(--t-small); max-width: var(--measure); }
+
+/* ═══ INSIGHTS ════════════════════════════════════════════════════════════ */
+.score { display: flex; align-items: center; justify-content: space-between; gap: var(--s5); padding: 0 var(--s5) var(--s5); }
+.score .figure { margin: var(--s1) 0 2px; }
+
+/* A conic ring reads the score at a glance without a chart library. */
+.score__ring {
+  width: 64px; height: 64px; flex: none;
+  border-radius: 999px;
+  display: grid; place-items: center;
+  background: conic-gradient(color-mix(in srgb, var(--brass) 78%, transparent) calc(var(--pct) * 1%), var(--rule) 0);
+  position: relative;
+}
+.score__ring::after {
+  content: ''; position: absolute; inset: 6px;
+  background: var(--sheet); border-radius: 999px;
+}
+.score__glyph { position: relative; z-index: 1; color: var(--brass); font-size: 22px; }
+
+.aicard { padding: 0 var(--s5) var(--s5); }
+.meter__fill--indeterminate {
+  width: 38%; animation: slide 1.4s var(--ease) infinite;
+}
+@keyframes slide { 0% { transform: translateX(-100%); } 100% { transform: translateX(280%); } }
+
+.disclaimer {
+  padding: var(--s3) var(--s5) var(--s5);
+  font-size: 12px; line-height: 17px; color: var(--ink-faint);
+  border-top: 1px solid var(--rule); margin-top: var(--s2);
+}
+
+/* ═══ SHEETS ══════════════════════════════════════════════════════════════ */
+.scrim {
+  position: fixed; inset: 0; z-index: 60;
+  display: flex; align-items: flex-end; justify-content: center;
+  background: color-mix(in srgb, var(--ground-sunk) 72%, transparent);
+  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  animation: scrim-in var(--fast) var(--ease);
+}
+.scrim--top { align-items: flex-start; }
+@keyframes scrim-in { from { opacity: 0; } }
+
+.bsheet {
+  width: 100%; max-width: 34rem;
+  max-height: 88vh; overflow-y: auto;
+  background: var(--sheet);
+  border-radius: var(--r-sheet) var(--r-sheet) 0 0;
+  box-shadow: var(--lift-high);
+  padding-bottom: calc(var(--s5) + env(safe-area-inset-bottom));
+  animation: sheet-up 320ms var(--ease);
+}
+.bsheet--top {
+  border-radius: 0 0 var(--r-sheet) var(--r-sheet);
+  margin-top: env(safe-area-inset-top);
+  animation: sheet-down 320ms var(--ease);
+}
+@keyframes sheet-up   { from { transform: translateY(100%); } }
+@keyframes sheet-down { from { transform: translateY(-100%); } }
+
+.bsheet__grip { width: 36px; height: 4px; border-radius: 999px; background: var(--rule-strong); margin: var(--s3) auto var(--s1); }
+.bsheet__head { display: flex; align-items: center; justify-content: space-between; gap: var(--s4); padding: var(--s4) var(--s5) var(--s2); }
+.bsheet__head .title { font-size: var(--t-title); }
+
+.form { padding: var(--s3) var(--s5) 0; display: grid; gap: var(--s4); }
+.f { display: grid; gap: 6px; }
+.f__label { font-size: var(--t-micro); font-weight: 600; color: var(--ink-soft); }
+.f__row { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s3); }
+
+.typeahead { list-style: none; margin: 0; padding: 0; border: 1px solid var(--rule); border-radius: var(--r-control); overflow: hidden; background: var(--sheet-raised); }
+.typeahead__item { display: block; width: 100%; text-align: left; padding: var(--s3) var(--s4); font-size: var(--t-small); }
+.typeahead__item:hover { background: var(--wash); }
+.typeahead li + li .typeahead__item { box-shadow: inset 0 1px 0 var(--rule); }
+
+.bsheet__foot { display: flex; justify-content: flex-end; gap: var(--s3); padding-top: var(--s4); }
+.bsheet__foot--split { justify-content: space-between; align-items: center; }
+.bsheet__footactions { display: flex; gap: var(--s3); }
+
+/* ═══ DETAIL ══════════════════════════════════════════════════════════════ */
+/* A back affordance that names its destination. A bare arrow makes the user
+   guess where they are about to land. */
+.backlink {
+  display: inline-flex; align-items: center; gap: 6px;
+  margin-top: var(--s5); padding: 6px 0;
+  font-size: var(--t-small); font-weight: 600; color: var(--ink-soft);
+}
+.backlink:hover { color: var(--ink); }
+.pagehead + * { margin-top: var(--s4); }
+
+.dropzone {
+  display: grid; justify-items: center; gap: 4px;
+  padding: var(--s7) var(--s5);
+  margin: var(--s4) var(--s5) 0;
+  border: 1px dashed var(--rule-strong);
+  border-radius: var(--r-panel);
+  text-align: center; cursor: pointer;
+  transition: border-color var(--fast) var(--ease), background var(--fast) var(--ease);
+}
+.dropzone:hover { border-color: var(--brass); background: var(--wash); }
+.dropzone__icon { font-size: 34px; color: var(--brass); margin-bottom: var(--s2); }
+
+.check { width: 22px; height: 22px; accent-color: var(--brass); flex: none; }
+.check__row { display: flex; align-items: center; gap: var(--s3); }
+.importrow { cursor: pointer; align-items: center; }
+
+.editrow { grid-template-columns: minmax(0,1fr) 6.5rem auto; align-items: center; gap: var(--s2); padding-right: var(--s3); }
+.field--bare { background: transparent; border-color: transparent; padding-left: 0; padding-right: 0; min-height: 40px; min-width: 0; }
+.field--bare:hover { border-color: var(--rule); }
+.field--num { text-align: right; padding-right: var(--s2); }
+.iconbtn--sm { width: 34px; height: 34px; }
+.addrow .row__name { color: var(--brass); display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }
+
+/* ═══ VIEW TRANSITIONS ════════════════════════════════════════════════════
+   The browser snapshots both states and cross-fades on the compositor. The
+   corpus figure is the one element that exists across surfaces, so it gets a
+   name and MORPHS between them rather than fading out and back in. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 240ms;
+  animation-timing-function: var(--ease);
+}
+.figure { view-transition-name: corpus-figure; }
+.wordmark { view-transition-name: corpus-mark; }
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(root),
+  ::view-transition-new(root) { animation: none !important; }
+}
+
+/* ═══ TUTORIAL ════════════════════════════════════════════════════════════ */
+.driver-popover.corpus-tour {
+  background: var(--sheet);
+  color: var(--ink);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-panel);
+  box-shadow: var(--lift);
+  font-family: var(--ui);
+  max-width: 19rem;
+  padding: var(--s5);
+}
+.driver-popover.corpus-tour .driver-popover-title {
+  font-family: var(--display); font-size: var(--t-title); line-height: var(--lh-title);
+  font-weight: 600; font-variation-settings: 'SOFT' 20, 'WONK' 1; margin-bottom: 6px;
+}
+.driver-popover.corpus-tour .driver-popover-description {
+  font-size: var(--t-small); line-height: 21px; color: var(--ink-soft);
+}
+.driver-popover.corpus-tour .driver-popover-footer { margin-top: var(--s4); gap: var(--s2); }
+.driver-popover.corpus-tour .driver-popover-progress-text { color: var(--ink-faint); font-size: var(--t-micro); }
+.driver-popover.corpus-tour button:not(.driver-popover-close-btn) {
+  background: var(--ink); color: var(--ground);
+  border: 0; border-radius: var(--r-control);
+  font-family: var(--ui); font-size: var(--t-micro); font-weight: 600;
+  padding: 9px 16px; text-shadow: none;
+}
+.driver-popover.corpus-tour .driver-popover-prev-btn { background: transparent; color: var(--ink-soft); }
+.driver-popover.corpus-tour .driver-popover-close-btn {
+  background: transparent; color: var(--ink-faint); font-size: 18px;
+  width: 30px; height: 30px; padding: 0; line-height: 1; border-radius: var(--r-control);
+}
+.driver-popover.corpus-tour .driver-popover-arrow-side-top    { border-top-color: var(--sheet); }
+.driver-popover.corpus-tour .driver-popover-arrow-side-bottom { border-bottom-color: var(--sheet); }
+.driver-popover.corpus-tour .driver-popover-arrow-side-left   { border-left-color: var(--sheet); }
+.driver-popover.corpus-tour .driver-popover-arrow-side-right  { border-right-color: var(--sheet); }
+/* Driver marks an unavailable step button with its own class; without this it
+   inherits the primary fill and reads as an equal, tappable choice. */
+.driver-popover.corpus-tour button.driver-popover-btn-disabled,
+.driver-popover.corpus-tour .driver-popover-prev-btn:disabled {
+  background: transparent; color: var(--ink-faint); opacity: 0.5; cursor: default;
+}
+.driver-popover.corpus-tour .driver-popover-close-btn:focus-visible { outline-offset: 0; }

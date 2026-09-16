@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">RFM</string>
-    <string name="title_activity_main">RFM</string>
-    <string name="package_name">com.rajendernegi.rfm</string>
-    <string name="custom_url_scheme">com.rajendernegi.rfm</string>
+    <string name="app_name">Corpus</string>
+    <string name="title_activity_main">Corpus</string>
+    <string name="package_name">com.swarajnegi.corpus</string>
+    <string name="custom_url_scheme">com.swarajnegi.corpus</string>
 </resources>

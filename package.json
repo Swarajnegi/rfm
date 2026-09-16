@@ -1,17 +1,17 @@
 {
-  "name": "dadfinanceapp",
+  "name": "corpus",
   "version": "1.0.0",
-  "description": "Open web/index.html in Chrome, Edge, Safari, or Firefox.",
+  "description": "A private, offline-first portfolio manager for Indian investors.",
   "main": "index.js",
   "scripts": {
-    "build:css": "tailwindcss -i src/app.css -o web/tailwind.css --minify",
     "build:vendor": "esbuild src/vendor.js --bundle --format=iife --outfile=web/vendor.js --minify",
     "build:boot": "esbuild src/boot.js --bundle --format=iife --outfile=web/boot.js --minify",
     "build:bridge": "esbuild src/capacitor-bridge.js --bundle --outfile=web/plugins.js --minify",
-    "build": "npm run build:css && npm run build:corpus && npm run build:vendor && npm run build:boot && npm run build:bridge",
-    "verify": "node scripts/verify-offline.mjs",
+    "build": "npm run build:corpus && npm run build:vendor && npm run build:boot && npm run build:bridge",
+    "verify": "node scripts/verify-offline.mjs && node scripts/verify-routes.mjs",
     "test": "npm run verify",
-    "build:corpus": "cp src/corpus.css web/corpus.css"
+    "build:corpus": "node -e \"const fs=require('fs');fs.writeFileSync('web/corpus.css','/* driver.js base styles, then the Corpus design system. Concatenated at build so the tutorial overlay works offline. */\\n'+fs.readFileSync('node_modules/driver.js/dist/driver.css','utf8')+'\\n'+fs.readFileSync('src/corpus.css','utf8'))\"",
+    "fonts": "node scripts/vendor-fonts.mjs --icons"
   },
   "repository": {
     "type": "git",
@@ -46,10 +46,7 @@
     "pdfjs-dist": "^6.3.289"
   },
   "devDependencies": {
-    "@tailwindcss/cli": "^4.3.3",
-    "@tailwindcss/forms": "^0.5.11",
     "esbuild": "^0.28.1",
-    "playwright": "^1.63.0",
-    "tailwindcss": "^4.3.3"
+    "playwright": "^1.63.0"
   }
 }

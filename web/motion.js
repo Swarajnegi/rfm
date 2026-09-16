@@ -85,15 +85,15 @@
        walkthrough of a portfolio the user has not built yet is the pattern
        everyone skips. Steps that point at absent elements are dropped
        rather than shown against nothing. */
-    const TOUR_KEY = 'rfm_tour_v1';
+    const TOUR_KEY = 'corpus_tour_v1';
 
     function buildSteps() {
         const want = [
-            ['#nwHero',        'Your net worth',       'Everything you own, minus what you owe. It updates as you add holdings and sync prices.'],
-            ['#navPortfolio',  'Your holdings',        'Add fixed deposits, mutual funds, stocks and gold here — or import a CAS or bank statement instead of typing them in.'],
-            ['#navPlanning',   'Planning',             'Goals, SIPs, emergency fund and tax sit here.'],
+            ['#nwHero',        'Your corpus',          'Everything you own, minus what you owe. It moves as you add holdings and refresh prices.'],
+            ['#navportfolio',  'Your holdings',        'Deposits, funds, stocks and gold live here — add them by hand, or import a CAS or bank statement and Corpus will read it.'],
+            ['#navplanning',   'Planning',             'What comes in, what goes out, your goals, your emergency fund and your tax.'],
             ['#syncButton',    'Live prices',          'Pulls NAVs from AMFI and quotes for your stocks. Every figure shows where it came from and when, so you can always tell a live price from yesterday’s close.'],
-            ['#navMore',       'Everything else',      'Import, insights and settings. You can replay this tour from here any time.'],
+            ['#navinsights',   'Insights',             'What your own numbers say — and where your backup, theme and this tour live.'],
         ];
         return want
             .filter(([sel]) => document.querySelector(sel))
@@ -112,7 +112,7 @@
             nextBtnText: 'Next',
             prevBtnText: 'Back',
             doneBtnText: 'Got it',
-            popoverClass: 'rfm-tour',
+            popoverClass: 'corpus-tour',
             steps,
             onDestroyed() { try { localStorage.setItem(TOUR_KEY, new Date().toISOString()); } catch (e) {} },
             onHighlightStarted() { Haptics.tap(); },

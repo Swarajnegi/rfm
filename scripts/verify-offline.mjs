@@ -51,7 +51,7 @@ if (SEED) {
 }
 
 if (THEME) {
-    await page.addInitScript(t => localStorage.setItem('rfm_theme', t), THEME);
+    await page.addInitScript(t => { localStorage.setItem('rfm_theme', t); localStorage.setItem('corpus_theme', t); }, THEME);
 }
 
 // Hard-block anything not on disk. This is the whole point of the test.
@@ -119,22 +119,29 @@ const styled = await page.evaluate(() => {
 // styles.css sets `background:` as a shorthand with gradients, so
 // backgroundColor is legitimately transparent. Probe a generated utility
 // instead: if Tailwind compiled, text-primary resolves to the token colour.
+// Corpus has no utility framework: the design system is hand-authored, so the
+// check is that its tokens resolve and its primitives compute.
 const tw = await page.evaluate(() => {
     const p = document.createElement('div');
-    p.className = 'text-primary bg-surface-container rounded-2xl';
+    p.className = 'sheet';
     document.body.appendChild(p);
     const cs = getComputedStyle(p);
-    const out = { color: cs.color, bg: cs.backgroundColor, radius: cs.borderRadius };
+    const root = getComputedStyle(document.documentElement);
+    const out = {
+        sheetBg: cs.backgroundColor,
+        radius: cs.borderRadius,
+        brass: root.getPropertyValue('--brass').trim(),
+        ink: root.getPropertyValue('--ink').trim(),
+        display: root.getPropertyValue('--display').trim(),
+    };
     p.remove();
     return out;
 });
-const expectPrimary = await page.evaluate(() =>
-    getComputedStyle(document.documentElement).getPropertyValue('--c-primary').trim());
-const expectRgb = 'rgb(' + expectPrimary.split(/\s+/).join(', ') + ')';
-ok('Tailwind utilities resolve through tokens', tw.color === expectRgb,
-   `text-primary -> ${tw.color} (--c-primary ${expectPrimary})`);
+ok('design tokens resolve', !!tw.brass && !!tw.ink, `--brass ${tw.brass}, --ink ${tw.ink}`);
+ok('sheet primitive computes', tw.radius !== '0px' && tw.sheetBg !== 'rgba(0, 0, 0, 0)', `radius ${tw.radius}, bg ${tw.sheetBg}`);
+ok('display face declared', /Fraunces/.test(tw.display), tw.display.split(',')[0]);
 ok('body ground painted', styled.bg !== 'rgba(0, 0, 0, 0)' || /gradient/.test(styled.bgImage), styled.bg);
-ok('webfont applied', /Manrope|Serif/i.test(styled.font), styled.font.split(',')[0]);
+ok('webfont applied', /Archivo/i.test(styled.font), styled.font.split(',')[0]);
 ok('exactly one page visible', styled.visibleMains === 1, `${styled.visibleMains} of ${styled.mainCount}`);
 ok('content has height', styled.rendered);
 
@@ -143,7 +150,8 @@ ok('content has height', styled.rendered);
 // actually loaded rather than merely that the element exists.
 const iconFont = await page.evaluate(async () => {
     await document.fonts.ready;
-    return document.fonts.check('24px "Material Symbols Outlined"');
+    return document.fonts.check('24px "Material Symbols Rounded"')
+        && document.fonts.check('40px "Fraunces"');
 });
 ok('icon font loaded (subset)', iconFont, iconFont ? '' : 'icons would render as words');
 
@@ -157,7 +165,7 @@ if (SEED) {
         heroWidth: document.querySelector('number-flow')?.getBoundingClientRect().width ?? 0,
         chartCanvas: !!document.querySelector('#nwChart canvas'),
         holdingRows: document.querySelectorAll('[data-holding-row]').length,
-        emptyState: !!document.querySelector('.nw-empty'),
+        emptyState: !!document.querySelector('.hero__empty'),
     }));
     ok('hero renders <number-flow>', populated.numberFlow);
     ok('hero has a numeric value', Number.isFinite(populated.heroValue), String(populated.heroValue));

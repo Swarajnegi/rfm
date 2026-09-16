@@ -1,4 +1,4 @@
-package com.rajendernegi.rfm;
+package com.swarajnegi.corpus;
 
 import com.getcapacitor.BridgeActivity;
 
