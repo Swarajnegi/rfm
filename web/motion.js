@@ -53,7 +53,16 @@
             }
             return;
         }
-        document.startViewTransition(mutate);
+        // Starting a transition while one is running ABORTS the old one, and its
+        // ready/finished promises reject with "Transition was skipped". Nothing
+        // was catching them, so tapping two destinations in quick succession —
+        // which people do constantly — produced an unhandled rejection. The
+        // abort itself is correct and expected; only the noise is a bug.
+        const vt = document.startViewTransition(mutate);
+        const swallow = (e) => { if (!e || e.name !== 'AbortError') throw e; };
+        vt.ready.catch(swallow);
+        vt.finished.catch(swallow);
+        vt.updateCallbackDone.catch(swallow);
     }
 
     /* ── The price-sync sweep ────────────────────────────────────────────

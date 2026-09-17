@@ -40,7 +40,15 @@
                0 -24px 60px color-mix(in srgb, var(--ink) 16%, transparent);
 
   /* ── Type ────────────────────────────────────────────────────────────── */
-  --display: 'Fraunces', 'Iowan Old Style', Georgia, serif;
+  /* Newsreader. Chosen for the money, not for the mood: its figures are
+     TABULAR — every digit the same width — so the total does not change width
+     as it counts, and it carries a rupee sign. The face it replaced had
+     neither, and its headline figure visibly jittered between values. It is a
+     newspaper serif, which is the letterform tradition financial pages are
+     actually set in. `opsz` is a real optical-size axis: the same face is drawn
+     with more contrast and tighter spacing for a 60px total than for a 13px
+     label, the way metal type was cut per size. */
+  --display: 'Newsreader', 'Iowan Old Style', Georgia, serif;
   --ui:      'Archivo', system-ui, -apple-system, 'Segoe UI', sans-serif;
 
   /* Modular scale, major third from a 16px body. 13px is a hard floor. */
@@ -141,10 +149,7 @@ body {
 }
 h1, h2, h3 {
   margin: 0; font-family: var(--display); font-weight: 600;
-  font-variation-settings: 'SOFT' 20, 'WONK' 1;
-  /* Fraunces' default ampersand is a swash form — striking in the wordmark,
-     noisy inside a heading like "Stocks & ETFs". */
-  font-feature-settings: 'swsh' 0, 'salt' 0;
+  font-variation-settings: 'opsz' 32;
 }
 p { margin: 0; }
 button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
@@ -212,8 +217,10 @@ button.row:active, label.row:active { background: var(--wash); transform: scale(
   font-size: var(--t-figure);
   line-height: 1.02;
   font-weight: 600;
-  font-variation-settings: 'SOFT' 0, 'WONK' 0, 'opsz' 100;
-  letter-spacing: -0.02em;
+  /* Newsreader's opsz tops out at 72; 100 silently clamped on the old face. */
+  font-variation-settings: 'opsz' 72;
+  font-variant-numeric: tabular-nums lining-nums;
+  letter-spacing: -0.015em;
   display: block;
 }
 .figure--sm { font-size: var(--t-head); }
@@ -339,7 +346,7 @@ button.row:active, label.row:active { background: var(--wash); transform: scale(
 .wordmark {
   font-family: var(--display);
   font-size: 21px; font-weight: 600;
-  font-variation-settings: 'SOFT' 30, 'WONK' 1, 'opsz' 40;
+  font-variation-settings: 'opsz' 30;
   letter-spacing: -0.015em;
   color: var(--ink);
 }
@@ -391,7 +398,7 @@ button.row:active, label.row:active { background: var(--wash); transform: scale(
   border-bottom: 1px solid var(--brass-rule);
 }
 .sheet__title {
-  font-family: var(--ui);
+  font-family: var(--ui); font-variation-settings: normal;
   font-size: var(--t-micro); line-height: var(--lh-micro);
   font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase;
   color: var(--brass);
@@ -400,9 +407,9 @@ button.row:active, label.row:active { background: var(--wash); transform: scale(
 .stack > .sheet + .sheet { margin-top: var(--s6); }
 .sheet .row { padding-left: 0; padding-right: 0; }
 .sheet .row--total { background: transparent; box-shadow: inset 0 1px 0 var(--brass-rule); }
-.sheet .sheet__note { padding-left: 0; padding-right: 0; }
 .row--total { background: var(--wash); }
-.row--total .row__value { font-family: var(--display); font-size: var(--t-lead); font-variation-settings: 'SOFT' 0, 'WONK' 0; }
+.row--total .row__value { font-family: var(--display); font-size: var(--t-lead);
+  font-variation-settings: 'opsz' 20; font-variant-numeric: tabular-nums lining-nums; }
 
 /* Allocation share as a hairline beneath the name. A six-slice pie is harder
    to read than six right-aligned numbers, and this costs one pixel of height. */
@@ -436,10 +443,18 @@ button.row:active, label.row:active { background: var(--wash); transform: scale(
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 50;
   display: grid; grid-auto-flow: column; grid-auto-columns: 1fr;
   padding-bottom: env(safe-area-inset-bottom);
-  background: color-mix(in srgb, var(--ground) 92%, transparent);
-  backdrop-filter: blur(20px) saturate(140%);
-  -webkit-backdrop-filter: blur(20px) saturate(140%);
+  /* Opaque by default. The frosted treatment below is applied only where the
+     engine can actually blur — without the blur, 8% translucency is not depth,
+     it is legible ghost text sliding under the navigation. */
+  background: var(--ground);
   box-shadow: inset 0 1px 0 var(--rule);
+}
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .dock {
+    background: color-mix(in srgb, var(--ground) 92%, transparent);
+    backdrop-filter: blur(20px) saturate(140%);
+    -webkit-backdrop-filter: blur(20px) saturate(140%);
+  }
 }
 .dock__item {
   display: grid; justify-items: center; gap: 3px;
@@ -523,7 +538,7 @@ button.row:active, label.row:active { background: var(--wash); transform: scale(
 .empty .hero__cta { justify-content: center; }
 
 /* ═══ PLANNING ════════════════════════════════════════════════════════════ */
-.figures { padding: 0 var(--s5) var(--s5); display: grid; gap: var(--s5); }
+.figures { padding: 0 0 var(--s5); display: grid; gap: var(--s5); }
 .figures__main .figure { margin: var(--s1) 0 4px; }
 .figures__side { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--s4); }
 .figures__val { font-size: var(--t-body); font-weight: 600; margin-top: 2px; }
@@ -546,10 +561,10 @@ button.row:active, label.row:active { background: var(--wash); transform: scale(
   border-radius: var(--r-control);
 }
 .linkbtn:hover { text-decoration: underline; text-underline-offset: 3px; }
-.sheet__note { padding: 0 var(--s5) var(--s5); color: var(--ink-faint); font-size: var(--t-small); max-width: var(--measure); }
+.sheet__note { padding: 0 0 var(--s5); color: var(--ink-faint); font-size: var(--t-small); max-width: var(--measure); }
 
 /* ═══ INSIGHTS ════════════════════════════════════════════════════════════ */
-.score { display: flex; align-items: center; justify-content: space-between; gap: var(--s5); padding: 0 var(--s5) var(--s5); }
+.score { display: flex; align-items: center; justify-content: space-between; gap: var(--s5); padding: 0 0 var(--s5); }
 .score .figure { margin: var(--s1) 0 2px; }
 
 /* A conic ring reads the score at a glance without a chart library. */
@@ -566,14 +581,14 @@ button.row:active, label.row:active { background: var(--wash); transform: scale(
 }
 .score__glyph { position: relative; z-index: 1; color: var(--brass); font-size: 22px; }
 
-.aicard { padding: 0 var(--s5) var(--s5); }
+.aicard { padding: 0 0 var(--s5); }
 .meter__fill--indeterminate {
   width: 38%; animation: slide 1.4s var(--ease) infinite;
 }
 @keyframes slide { 0% { transform: translateX(-100%); } 100% { transform: translateX(280%); } }
 
 .disclaimer {
-  padding: var(--s3) var(--s5) var(--s5);
+  padding: var(--s3) 0 var(--s5);
   font-size: 12px; line-height: 17px; color: var(--ink-faint);
   border-top: 1px solid var(--rule); margin-top: var(--s2);
 }
@@ -610,7 +625,11 @@ button.row:active, label.row:active { background: var(--wash); transform: scale(
 .bsheet__head { display: flex; align-items: center; justify-content: space-between; gap: var(--s4); padding: var(--s4) var(--s5) var(--s2); }
 .bsheet__head .title { font-size: var(--t-title); }
 
-.form { padding: var(--s3) var(--s5) 0; display: grid; gap: var(--s4); }
+/* On a page surface the gutter is already supplied, so the form adds none. A
+   BOTTOM SHEET is still a real panel with its own edges, so there it keeps the
+   inner padding — same class, two contexts, and only one of them wants it. */
+.form { padding: var(--s3) 0 0; display: grid; gap: var(--s4); }
+.bsheet .form { padding-inline: var(--s5); }
 .f { display: grid; gap: 6px; }
 .f__label { font-size: var(--t-micro); font-weight: 600; color: var(--ink-soft); }
 .f__row { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s3); }
@@ -725,7 +744,7 @@ button.row:active, label.row:active { background: var(--wash); transform: scale(
 }
 .driver-popover.corpus-tour .driver-popover-title {
   font-family: var(--display); font-size: var(--t-title); line-height: var(--lh-title);
-  font-weight: 600; font-variation-settings: 'SOFT' 20, 'WONK' 1; margin-bottom: 6px;
+  font-weight: 600; font-variation-settings: 'opsz' 32; margin-bottom: 6px;
 }
 .driver-popover.corpus-tour .driver-popover-description {
   font-size: var(--t-small); line-height: 21px; color: var(--ink-soft);
@@ -786,14 +805,14 @@ button.row:active, label.row:active { background: var(--wash); transform: scale(
 .titleslot__mark {
   font-family: var(--display);
   font-size: 21px; font-weight: 600;
-  font-variation-settings: 'SOFT' 30, 'WONK' 1, 'opsz' 40;
+  font-variation-settings: 'opsz' 30;
   letter-spacing: -0.015em;
   color: var(--ink);
 }
 .titleslot__figure {
   font-family: var(--display);
   font-size: 19px; font-weight: 600;
-  font-variation-settings: 'SOFT' 0, 'WONK' 0, 'opsz' 40;
+  font-variation-settings: 'opsz' 30; font-variant-numeric: tabular-nums lining-nums;
   letter-spacing: -0.02em;
   color: var(--ink);
   opacity: 0;

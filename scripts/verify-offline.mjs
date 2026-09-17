@@ -154,7 +154,7 @@ ok('design tokens resolve', !!tw.brass && !!tw.ink, `--brass ${tw.brass}, --ink 
 ok('sheet primitive computes', tw.headRule === '1px' && tw.headRuleColor !== 'rgba(0, 0, 0, 0)'
    && tw.titleCase === 'uppercase' && tw.titleColor !== 'rgba(0, 0, 0, 0)',
    `rule ${tw.headRule} ${tw.headRuleColor}, label ${tw.titleColor} ${tw.titleCase}`);
-ok('display face declared', /Fraunces/.test(tw.display), tw.display.split(',')[0]);
+ok('display face declared', /Newsreader/.test(tw.display), tw.display.split(',')[0]);
 ok('body ground painted', styled.bg !== 'rgba(0, 0, 0, 0)' || /gradient/.test(styled.bgImage), styled.bg);
 ok('webfont applied', /Archivo/i.test(styled.font), styled.font.split(',')[0]);
 ok('exactly one page visible', styled.visibleMains === 1, `${styled.visibleMains} of ${styled.mainCount}`);
