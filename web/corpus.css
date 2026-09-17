@@ -581,6 +581,91 @@ button.row:active, label.row:active { background: var(--wash); transform: scale(
 }
 .score__glyph { position: relative; z-index: 1; color: var(--brass); font-size: 22px; }
 
+/* ═══ THE AI PANEL ════════════════════════════════════════════════════════
+   Deliberately the only raised, filled, bordered surface left in the app, and
+   deliberately NOT the app's green: navy and gold. Everything else here is a
+   flat statement you read; this is the one thing you ASK. Making it the single
+   exception is what makes it legible as an action rather than as more content.
+
+   Its colours are fixed rather than tokenised to the theme — a "console" that
+   changes its identity between light and dark would just be another panel. */
+.sheet--ai {
+  --ai-navy:   #0B182E;
+  --ai-navy-2: #16294A;
+  --ai-gold:   #C9A227;
+  --ai-gold-2: #E6D08A;
+  --ai-ink:    #EEF2F8;
+
+  position: relative;
+  padding: var(--s5);
+  border-radius: var(--r-sheet);
+  color: var(--ai-ink);
+  background:
+    radial-gradient(120% 90% at 88% -10%, color-mix(in srgb, var(--ai-gold) 22%, transparent) 0%, transparent 62%),
+    linear-gradient(160deg, var(--ai-navy-2) 0%, var(--ai-navy) 58%);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--ai-gold) 30%, transparent),
+    0 1px 2px rgb(0 0 0 / 0.30),
+    0 18px 44px rgb(0 0 0 / 0.30);
+  overflow: hidden;
+}
+/* A hairline of gold along the top edge, the way a good box is lined. */
+.sheet--ai::before {
+  content: ''; position: absolute; inset: 0 0 auto; height: 1px;
+  background: linear-gradient(90deg, transparent, var(--ai-gold-2), transparent);
+  opacity: 0.55;
+}
+.sheet--ai .aicard { padding: var(--s4) 0 0; }
+.sheet--ai .sheet__note, .sheet--ai .aipanel__note { color: color-mix(in srgb, var(--ai-ink) 72%, transparent); }
+
+.aipanel { display: flex; align-items: flex-start; gap: var(--s4); }
+.aipanel__body { display: flex; align-items: baseline; justify-content: space-between;
+                 gap: var(--s3); flex: 1; min-width: 0; flex-wrap: wrap; }
+.aipanel__title {
+  font-family: var(--display); font-size: var(--t-lead); line-height: var(--lh-lead);
+  font-weight: 600; font-variation-settings: 'opsz' 24; color: var(--ai-ink);
+  letter-spacing: -0.005em;
+  /* Two short lines beat one long line and one orphan. */
+  text-wrap: balance;
+}
+.aipanel__note { font-size: var(--t-small); line-height: 21px; max-width: var(--measure); padding: 0 0 var(--s4); }
+.sheet--ai .linkbtn { color: var(--ai-gold-2); }
+.sheet--ai .btn--brass {
+  background: linear-gradient(180deg, var(--ai-gold-2), var(--ai-gold));
+  color: #1A1405; border: 0;
+}
+.sheet--ai .meter { background: color-mix(in srgb, var(--ai-ink) 16%, transparent); }
+.sheet--ai .meter__fill, .sheet--ai .meter__fill--indeterminate { background: var(--ai-gold); }
+.sheet--ai .row__name { color: var(--ai-ink); }
+
+/* The mark: an aperture, not a robot. Two rings around a lit core, with a
+   single point travelling the outer ring — the visual idea is something
+   LOOKING at your position, which is exactly what the feature does. */
+.aimark { flex: none; width: 56px; height: 56px; display: block; margin-top: -2px; }
+.aimark svg { width: 100%; height: 100%; overflow: visible; }
+.aimark__ring {
+  fill: none; stroke: var(--ai-gold); stroke-width: 1.25; opacity: 0.55;
+  stroke-dasharray: 26 14; stroke-linecap: round;
+  transform-origin: 32px 32px;
+  animation: aimark-spin 18s linear infinite;
+}
+.aimark__ring--in {
+  opacity: 0.38; stroke-dasharray: 12 20; stroke-width: 1;
+  animation: aimark-spin 11s linear infinite reverse;
+}
+.aimark__core { filter: drop-shadow(0 0 7px color-mix(in srgb, var(--ai-gold) 70%, transparent)); }
+.aimark__orbit {
+  fill: var(--ai-gold-2); transform-origin: 32px 32px;
+  animation: aimark-spin 7s linear infinite;
+}
+@keyframes aimark-spin { to { transform: rotate(360deg); } }
+
+/* A mark that spins forever is motion nobody asked for. Held still, the
+   composition still reads as an aperture. */
+@media (prefers-reduced-motion: reduce) {
+  .aimark__ring, .aimark__ring--in, .aimark__orbit { animation: none; }
+}
+
 .aicard { padding: 0 0 var(--s5); }
 .meter__fill--indeterminate {
   width: 38%; animation: slide 1.4s var(--ease) infinite;

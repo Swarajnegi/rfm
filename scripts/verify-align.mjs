@@ -39,6 +39,11 @@ for (const page of PAGES) {
       if (box.width < 4 || box.height < 4) continue;
       // Ignore anything inside a right-aligned figures column or a control.
       if (el.closest('.row__figures, .dock, .appbar, .seg, .bsheet')) continue;
+      // .sheet--ai is a PANEL on purpose — the one raised surface in the app —
+      // so its contents are inset from the gutter by design, not by leftover
+      // padding. Excluding it is the difference between a probe that knows the
+      // rule and one that just forbids indentation.
+      if (el.closest('.sheet--ai')) continue;
       // Icon glyphs, values and the second column of a grid are SUPPOSED to sit
       // away from the gutter — a probe that flags them reports noise and buries
       // the one real signal. What is being looked for is a BLOCK of text that

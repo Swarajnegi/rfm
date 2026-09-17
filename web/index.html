@@ -448,15 +448,37 @@ d.setAttribute("data-theme",(t==="light"||t==="dark")?t:"dark");})();/* Deep gre
 
   <!-- AI reading. Gated behind the user's own key; framed as a reading of their
        position, never as a recommendation to buy or sell. -->
-  <section class="sheet">
-    <div class="sheet__head sheet__head--split">
-      <h2 class="sheet__title">Ask an AI to read your position</h2>
-      <button class="linkbtn" x-show="regenWealth.apiKeySet" @click="activePage = 'regen'">Settings</button>
+  <!-- The ONE panel in a layout that otherwise has none. Everywhere else Corpus
+       is a flat statement; this section is raised, and set in navy and gold
+       rather than the app's green, because it is the only place where something
+       reads your position back to you. The contrast IS the invitation — it
+       looks like a thing to open because nothing else on the screen does. -->
+  <section class="sheet sheet--ai">
+    <div class="aipanel">
+      <span class="aimark" aria-hidden="true">
+        <svg viewBox="0 0 64 64" role="presentation" focusable="false">
+          <defs>
+            <radialGradient id="aiCore" cx="50%" cy="42%" r="58%">
+              <stop offset="0%"  stop-color="#F0DCA0"/>
+              <stop offset="55%" stop-color="#C9A227"/>
+              <stop offset="100%" stop-color="#8A6D1F"/>
+            </radialGradient>
+          </defs>
+          <circle class="aimark__ring" cx="32" cy="32" r="27"/>
+          <circle class="aimark__ring aimark__ring--in" cx="32" cy="32" r="19"/>
+          <circle class="aimark__core" cx="32" cy="32" r="8" fill="url(#aiCore)"/>
+          <circle class="aimark__orbit" cx="32" cy="5" r="2.6"/>
+        </svg>
+      </span>
+      <div class="aipanel__body">
+        <h2 class="aipanel__title">Ask an AI to read your position</h2>
+        <button class="linkbtn" x-show="regenWealth.apiKeySet" @click="activePage = 'regen'">Settings</button>
+      </div>
     </div>
 
     <template x-if="!regenWealth.apiKeySet">
       <div class="aicard">
-        <p class="sheet__note" style="padding:0 0 var(--s4)">Connect your own API key and Corpus will summarise what your holdings imply — concentration, coverage, upcoming maturities. It reads your data; it never recommends what to buy.</p>
+        <p class="aipanel__note">Connect your own API key and Corpus will summarise what your holdings imply — concentration, coverage, upcoming maturities. It reads your data; it never recommends what to buy.</p>
         <button class="btn btn--brass btn--block" @click="activePage = 'regen'">
           <span class="icon icon--sm">key</span> Connect a key
         </button>
