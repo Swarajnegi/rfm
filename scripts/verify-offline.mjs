@@ -122,14 +122,27 @@ const styled = await page.evaluate(() => {
 // Corpus has no utility framework: the design system is hand-authored, so the
 // check is that its tokens resolve and its primitives compute.
 const tw = await page.evaluate(() => {
+    // The sheet is a STATEMENT, not a card: it is deliberately transparent and
+    // square, and its sections are delimited by a brass hairline under a brass
+    // label. This probe used to assert the opposite (a filled, 24px-radius
+    // panel) and so encoded the card design it was meant to outlive. What must
+    // hold either way is that the primitive STYLES — so it asserts the rule and
+    // the label colour, which is what carries the structure now.
     const p = document.createElement('div');
     p.className = 'sheet';
+    const head = document.createElement('div');
+    head.className = 'sheet__head';
+    const title = document.createElement('h2');
+    title.className = 'sheet__title';
+    head.appendChild(title); p.appendChild(head);
     document.body.appendChild(p);
-    const cs = getComputedStyle(p);
+    const hs = getComputedStyle(head), ts = getComputedStyle(title);
     const root = getComputedStyle(document.documentElement);
     const out = {
-        sheetBg: cs.backgroundColor,
-        radius: cs.borderRadius,
+        headRule: hs.borderBottomWidth,
+        headRuleColor: hs.borderBottomColor,
+        titleColor: ts.color,
+        titleCase: ts.textTransform,
         brass: root.getPropertyValue('--brass').trim(),
         ink: root.getPropertyValue('--ink').trim(),
         display: root.getPropertyValue('--display').trim(),
@@ -138,7 +151,9 @@ const tw = await page.evaluate(() => {
     return out;
 });
 ok('design tokens resolve', !!tw.brass && !!tw.ink, `--brass ${tw.brass}, --ink ${tw.ink}`);
-ok('sheet primitive computes', tw.radius !== '0px' && tw.sheetBg !== 'rgba(0, 0, 0, 0)', `radius ${tw.radius}, bg ${tw.sheetBg}`);
+ok('sheet primitive computes', tw.headRule === '1px' && tw.headRuleColor !== 'rgba(0, 0, 0, 0)'
+   && tw.titleCase === 'uppercase' && tw.titleColor !== 'rgba(0, 0, 0, 0)',
+   `rule ${tw.headRule} ${tw.headRuleColor}, label ${tw.titleColor} ${tw.titleCase}`);
 ok('display face declared', /Fraunces/.test(tw.display), tw.display.split(',')[0]);
 ok('body ground painted', styled.bg !== 'rgba(0, 0, 0, 0)' || /gradient/.test(styled.bgImage), styled.bg);
 ok('webfont applied', /Archivo/i.test(styled.font), styled.font.split(',')[0]);

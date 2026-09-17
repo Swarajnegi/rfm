@@ -17,16 +17,16 @@
 
 :root {
   /* ── Palette ─────────────────────────────────────────────────────────── */
-  --ground:        #E9EDE9;   /* celadon stone. deliberately NOT cream */
-  --ground-sunk:   #DFE5E0;
-  --sheet:         #F7F9F6;
+  --ground:        #E2E9E3;   /* celadon stone, deepened. deliberately NOT cream */
+  --ground-sunk:   #D6DFD8;
+  --sheet:         #F4F7F3;
   --sheet-raised:  #FFFFFF;
-  --ink:           #0E1F19;
-  --ink-soft:      #4A5B54;
-  --ink-faint:     #5C6E66;
-  --brass:         #8A6D1F;
-  --brass-bright:  #A8862B;
-  --jade:          #1F6B52;
+  --ink:           #08170F;
+  --ink-soft:      #44554E;
+  --ink-faint:     #56685F;
+  --brass:         #7E6524;   /* the same antique gold, darkened to carry on white */
+  --brass-bright:  #9A7D33;
+  --jade:          #12543E;
   --carnelian:     #A33B2A;
 
   --rule:          color-mix(in srgb, var(--ink) 12%, transparent);
@@ -84,16 +84,17 @@
 }
 
 :root[data-theme="dark"] {
-  --ground:        #0C1A15;   /* lacquer */
-  --ground-sunk:   #081310;
-  --sheet:         #13271F;
-  --sheet-raised:  #1A3229;
-  --ink:           #EDEFE8;   /* ivory, never pure white */
-  --ink-soft:      #A9B8B0;
-  --ink-faint:     #93A49C;
-  --brass:         #C9A227;
-  --brass-bright:  #E0BC4A;
-  --jade:          #4FA083;
+  --ground:        #061A12;   /* lacquer, taken deeper — green, not near-black */
+  --ground-sunk:   #03110B;
+  --sheet:         #0C2418;
+  --sheet-raised:  #133021;
+  --ink:           #F6F9F6;   /* reads as white; a hair off pure so it does not
+                                 halate against the dark green at body size */
+  --ink-soft:      #B9C8BF;
+  --ink-faint:     #94A79B;
+  --brass:         #BFA05C;   /* soft antique gold, not the bright yellow one */
+  --brass-bright:  #D9BF83;
+  --jade:          #3FA47A;
   --carnelian:     #D2705C;
 
   --rule:        color-mix(in srgb, var(--ink) 14%, transparent);
@@ -109,9 +110,9 @@
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --ground: #0C1A15; --ground-sunk: #081310; --sheet: #13271F; --sheet-raised: #1A3229;
-    --ink: #EDEFE8; --ink-soft: #A9B8B0; --ink-faint: #93A49C;
-    --brass: #C9A227; --brass-bright: #E0BC4A; --jade: #4FA083; --carnelian: #D2705C;
+    --ground: #061A12; --ground-sunk: #03110B; --sheet: #0C2418; --sheet-raised: #133021;
+    --ink: #F6F9F6; --ink-soft: #B9C8BF; --ink-faint: #94A79B;
+    --brass: #BFA05C; --brass-bright: #D9BF83; --jade: #3FA47A; --carnelian: #D2705C;
     --rule: color-mix(in srgb, var(--ink) 14%, transparent);
     --rule-strong: color-mix(in srgb, var(--ink) 28%, transparent);
     --brass-rule: color-mix(in srgb, var(--brass) 34%, transparent);
@@ -161,12 +162,17 @@ input, select, textarea { font: inherit; }
 .stack > * + * { margin-top: var(--s4); }
 .stack-tight > * + * { margin-top: var(--s3); }
 
-/* The sheet is the material. One per block of related content, no nesting. */
+/* The sheet is the material — and it is a STATEMENT, not a card.
+   This used to be a filled, bordered, 24px-radius panel, and a screen of them
+   stacked read as a deck of boxes: every group announced its own edges, so the
+   eye counted containers instead of reading figures. A statement has no boxes.
+   Groups are delimited by a brass hairline and a small tracked label, the way a
+   printed holding statement delimits its sections, and the page reads as one
+   continuous surface. */
 .sheet {
-  background: var(--sheet);
-  border-radius: var(--r-sheet);
-  border: 1px solid var(--rule);
-  overflow: hidden;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
 }
 .sheet--plain { background: transparent; border: 0; border-radius: 0; }
 
@@ -281,7 +287,15 @@ button.row:active, label.row:active { background: var(--wash); transform: scale(
   border-radius: 999px; font-size: var(--t-micro); font-weight: 600; color: var(--ink-faint);
   transition: color var(--fast) var(--ease), background var(--fast) var(--ease);
 }
-.seg__item[aria-selected="true"] { background: var(--wash); color: var(--brass); }
+/* Marked by a brass rule under the label, not a filled pill — the same mark the
+   dock uses for the active surface. A pill is a blob at this size and made the
+   range selector the heaviest thing on a screen whose subject is a number. */
+.seg__item { position: relative; }
+.seg__item[aria-selected="true"] { color: var(--brass); background: none; }
+.seg__item[aria-selected="true"]::after {
+  content: ''; position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%);
+  width: 18px; height: 2px; border-radius: 2px; background: var(--brass);
+}
 
 /* ── Icons ─────────────────────────────────────────────────────────────── */
 .icon {
@@ -372,21 +386,39 @@ button.row:active, label.row:active { background: var(--wash); transform: scale(
 /* ═══ SHEET ═══════════════════════════════════════════════════════════════ */
 /* A group heading is a signpost, not a headline. Only ONE thing per screen is
    set in the display face — the page title — or the hierarchy flattens. */
-.sheet__head { padding: var(--s4) var(--s5) var(--s3); }
+.sheet__head {
+  padding: 0 0 var(--s2);
+  border-bottom: 1px solid var(--brass-rule);
+}
 .sheet__title {
   font-family: var(--ui);
-  font-size: var(--t-small); line-height: var(--lh-small);
-  font-weight: 600; letter-spacing: 0.01em;
-  color: var(--ink-soft);
+  font-size: var(--t-micro); line-height: var(--lh-micro);
+  font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--brass);
 }
+/* Air between sections does the work the borders used to. */
+.stack > .sheet + .sheet { margin-top: var(--s6); }
+.sheet .row { padding-left: 0; padding-right: 0; }
+.sheet .row--total { background: transparent; box-shadow: inset 0 1px 0 var(--brass-rule); }
+.sheet .sheet__note { padding-left: 0; padding-right: 0; }
 .row--total { background: var(--wash); }
 .row--total .row__value { font-family: var(--display); font-size: var(--t-lead); font-variation-settings: 'SOFT' 0, 'WONK' 0; }
 
 /* Allocation share as a hairline beneath the name. A six-slice pie is harder
    to read than six right-aligned numbers, and this costs one pixel of height. */
+/* A CONSTANT track with a variable fill. It used to be a bare bar whose width
+   was the share, which meant two small holdings showed as two short stubs with
+   nothing to measure them against — proportion you cannot compare is decoration.
+   Against a fixed track the same two are instantly rankable. */
 .alloc__bar {
   display: block; height: 2px; margin-top: 7px;
-  width: var(--pct, 0%); min-width: 8px;
+  width: 100%; max-width: 180px; position: relative;
+  background: color-mix(in srgb, var(--brass) 16%, transparent);
+  border-radius: 2px; overflow: hidden;
+}
+.alloc__bar::after {
+  content: ''; position: absolute; inset: 0 auto 0 0;
+  width: var(--pct, 0%); min-width: 2px;
   background: var(--brass); border-radius: 2px;
   transition: width var(--slow) var(--ease);
 }
@@ -463,6 +495,14 @@ button.row:active, label.row:active { background: var(--wash); transform: scale(
   overscroll-behavior-x: contain;
 }
 .seg--scroll::-webkit-scrollbar { display: none; }
+/* The filter ran off the right edge with a chip sliced clean in half and nothing
+   to say it could be scrolled — it just looked like a layout bug. A soft edge
+   reads as "there is more this way". Masked rather than overlaid with a
+   gradient block, so it works on any background including mid-transition. */
+.seg--scroll {
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 44px), transparent 100%);
+          mask-image: linear-gradient(to right, #000 calc(100% - 44px), transparent 100%);
+}
 .seg--scroll .seg__item { flex: 0 0 auto; padding: 0 var(--s4); scroll-snap-align: start; }
 
 /* A holding's row carries three facts: what it is, what it is worth, and how
@@ -579,6 +619,37 @@ button.row:active, label.row:active { background: var(--wash); transform: scale(
 .typeahead__item { display: block; width: 100%; text-align: left; padding: var(--s3) var(--s4); font-size: var(--t-small); }
 .typeahead__item:hover { background: var(--wash); }
 .typeahead li + li .typeahead__item { box-shadow: inset 0 1px 0 var(--rule); }
+
+/* A market result carries three facts and they rank in this order: the company
+   you were looking for, the ticker the app will actually quote, and the venue
+   that settles the ambiguity between two listings of the same name. */
+.typeahead__item--mark { display: flex; align-items: center; gap: var(--s3); padding: var(--s3) var(--s4); }
+.typeahead__body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.typeahead__ttl { font-size: var(--t-small); color: var(--ink); line-height: 1.3;
+                  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.typeahead__sub { display: flex; align-items: center; gap: var(--s2); font-size: var(--t-micro); color: var(--ink-faint); }
+.typeahead__sub b { font-family: var(--ui); font-variant-numeric: tabular-nums;
+                    letter-spacing: 0.04em; color: var(--brass); font-weight: 600; }
+.typeahead__note { padding: var(--s3) var(--s4); font-size: var(--t-micro); color: var(--ink-faint); }
+
+/* Stands in for a logo. Generated from the symbol, so it is always present and
+   always the same colour for the same holding — no broken image, ever. */
+.mark { flex: none; display: grid; place-items: center; width: 34px; height: 34px;
+        border-radius: 10px; font-size: var(--t-micro); font-weight: 600;
+        letter-spacing: 0.02em; font-family: var(--ui);
+        color: hsl(var(--mark-h) 42% 30%);
+        background: hsl(var(--mark-h) 38% 88%);
+        box-shadow: inset 0 0 0 1px hsl(var(--mark-h) 30% 78%); }
+:root[data-theme="dark"] .mark {
+        color: hsl(var(--mark-h) 55% 78%);
+        background: hsl(var(--mark-h) 30% 20%);
+        box-shadow: inset 0 0 0 1px hsl(var(--mark-h) 28% 30%); }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .mark {
+        color: hsl(var(--mark-h) 55% 78%);
+        background: hsl(var(--mark-h) 30% 20%);
+        box-shadow: inset 0 0 0 1px hsl(var(--mark-h) 28% 30%); }
+}
 
 .bsheet__foot { display: flex; justify-content: flex-end; gap: var(--s3); padding-top: var(--s4); }
 .bsheet__foot--split { justify-content: space-between; align-items: center; }

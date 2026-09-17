@@ -21,12 +21,11 @@ document.addEventListener('alpine:init', () => {
                 if (next === 'home') this.$nextTick(() => this.renderNwChart());
                 try { window.scrollTo({ top: 0, behavior: 'instant' }); } catch (e) { window.scrollTo(0, 0); }
             };
-            if (window.RFMMotion) {
-                window.RFMMotion.Haptics.tap();
-                window.RFMMotion.transition(apply);
-            } else {
-                apply();
-            }
+            // No haptic here on purpose. Feedback belongs on COMMITTED actions —
+            // saving, syncing, confirming — not on moving between pages, which a
+            // person does dozens of times a minute.
+            if (window.RFMMotion) window.RFMMotion.transition(apply);
+            else apply();
         },
 
         showNotifications: false,
@@ -112,6 +111,12 @@ document.addEventListener('alpine:init', () => {
         editForm: {},
         addingInv: false,
         addingGoal: false,
+
+        // Haptics are a preference, not a fact about the device. Persisted
+        // separately from the portfolio blob so a restore cannot clobber it.
+        haptics: (function () {
+            try { return localStorage.getItem('corpus_haptics') !== 'off'; } catch (e) { return true; }
+        })(),
         moreMenuOpen: false,
 
         // ── Goal Edit State (Deliverable 3) ─────────────────────────
@@ -524,6 +529,18 @@ document.addEventListener('alpine:init', () => {
             const stroke = rising ? this._token('--jade', '#1F6B52') : this._token('--carnelian', '#A33B2A');
             const ink    = this._token('--ink-faint', '#74857D');
 
+            // Lightweight Charts parses colour strings itself and understands
+            // neither color-mix() nor a bare hex with alpha. The area fill was
+            // declared as color-mix(...) and therefore silently never drew — the
+            // line floated over nothing, which is why the chart read as a
+            // squiggle rather than as the shape of the money.
+            const alpha = (hex, a) => {
+                const m = /^#?([0-9a-f]{6})$/i.exec(String(hex).trim());
+                if (!m) return `rgba(63,164,122,${a})`;
+                const n = parseInt(m[1], 16);
+                return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},${a})`;
+            };
+
             if (window._rfmNwChart) { window._rfmNwChart.remove(); window._rfmNwChart = null; }
 
             const chart = window.LW.createChart(el, {
@@ -547,8 +564,8 @@ document.addEventListener('alpine:init', () => {
             const series = chart.addSeries(window.LW.AreaSeries, {
                 lineColor: single ? 'rgba(0,0,0,0)' : stroke,
                 lineWidth: single ? 0 : 2,
-                topColor: single ? 'rgba(0,0,0,0)' : `color-mix(in srgb, ${stroke} 26%, transparent)`,
-                bottomColor: 'rgba(0,0,0,0)',
+                topColor: single ? 'rgba(0,0,0,0)' : alpha(stroke, 0.28),
+                bottomColor: alpha(stroke, 0),
                 priceLineVisible: false,
                 lastValueVisible: false,
                 crosshairMarkerRadius: 4,
@@ -1599,8 +1616,11 @@ document.addEventListener('alpine:init', () => {
             setTimeout(() => window.RFMMotion && window.RFMMotion.startTour(true), 450);
         },
 
+        // Defaults to 'dark', not 'system': the deep green IS the product's
+        // identity, and a first launch that resolves to the light theme because
+        // the phone is in day mode shows a new user the wrong app.
         theme: (function () {
-            try { return localStorage.getItem('rfm_theme') || 'system'; } catch (e) { return 'system'; }
+            try { return localStorage.getItem('rfm_theme') || 'dark'; } catch (e) { return 'dark'; }
         })(),
 
         // Cycles light -> dark. 'system' resolves to whatever the OS currently
@@ -1901,6 +1921,116 @@ document.addEventListener('alpine:init', () => {
         },
 
         goalTypes: ['Emergency Fund', 'Retirement', 'House', 'Education', 'Travel', 'New Car', 'Other'],
+
+        toggleHaptics() {
+            this.haptics = !this.haptics;
+            try { localStorage.setItem('corpus_haptics', this.haptics ? 'on' : 'off'); } catch (e) {}
+            if (this.haptics && window.RFMMotion) window.RFMMotion.Haptics.commit();
+        },
+
+        /* ── Symbol search ─────────────────────────────────────────────────
+           Typing "nvidia" should produce NVDA — NVIDIA Corporation — NASDAQ,
+           not leave the user to know the ticker themselves. Yahoo's search
+           endpoint covers US listings and Indian ones (NSE arrives as
+           RELIANCE.NS), so one lookup serves stocks and ETFs on both markets.
+
+           Results are filtered to the market the form is asking for: choosing
+           "Stock (US)" and typing "reliance" should NOT offer an NSE listing,
+           because the price path and the currency both differ. */
+        symbolSearch: { query: '', results: [], loading: false, error: '', _timer: null, _seq: 0 },
+
+        _marketOf(type) {
+            const t = type || '';
+            if (t.includes('(US)')) return 'US';
+            if (t.includes('(IND)')) return 'IND';
+            return null;
+        },
+
+        searchSymbol(query, form) {
+            const q = (query || '').trim();
+            this.symbolSearch.query = q;
+            clearTimeout(this.symbolSearch._timer);
+            if (q.length < 2) {
+                this.symbolSearch.results = [];
+                this.symbolSearch.error = '';
+                this.symbolSearch.loading = false;
+                return;
+            }
+            // Debounced: a lookup per keystroke would hammer a public endpoint
+            // and the answer for a 2-character prefix is never the one wanted.
+            this.symbolSearch._timer = setTimeout(() => this._runSymbolSearch(q, form), 280);
+        },
+
+        async _runSymbolSearch(q, form) {
+            const seq = ++this.symbolSearch._seq;
+            this.symbolSearch.loading = true;
+            this.symbolSearch.error = '';
+            const want = this._marketOf(form && form.type);
+            const wantEtf = (form && form.type || '').includes('ETF');
+
+            const url = `https://query2.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(q)}&quotesCount=14&newsCount=0&listsCount=0`;
+            try {
+                const data = await this.firstSuccessful([
+                    () => this.httpGetJson(url, 4000),
+                    () => this.httpGetJson(`https://corsproxy.io/?${encodeURIComponent(url)}`, 5000),
+                    () => this.httpGetJson(`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`, 6000),
+                ]);
+                // A later keystroke already superseded this lookup.
+                if (seq !== this.symbolSearch._seq) return;
+
+                const rows = (data && data.quotes || [])
+                    .filter(r => r.symbol && (r.quoteType === 'EQUITY' || r.quoteType === 'ETF'))
+                    .map(r => {
+                        const isNse = /\.(NS|BO)$/i.test(r.symbol);
+                        return {
+                            symbol: r.symbol,
+                            ticker: r.symbol.replace(/\.(NS|BO)$/i, ''),
+                            name: r.longname || r.shortname || r.symbol,
+                            exchange: r.exchDisp || (isNse ? 'NSE' : ''),
+                            market: isNse ? 'IND' : 'US',
+                            isEtf: r.quoteType === 'ETF',
+                        };
+                    })
+                    .filter(r => !want || r.market === want)
+                    .filter(r => !wantEtf || r.isEtf)
+                    .slice(0, 7);
+
+                this.symbolSearch.results = rows;
+                this.symbolSearch.error = rows.length ? '' :
+                    (want === 'IND' ? `Nothing on NSE or BSE matching "${q}".`
+                                    : `No ${wantEtf ? 'ETF' : 'listing'} found for "${q}".`);
+            } catch (e) {
+                if (seq !== this.symbolSearch._seq) return;
+                this.symbolSearch.results = [];
+                this.symbolSearch.error = 'Could not reach the symbol lookup. You can still type the ticker yourself.';
+            } finally {
+                if (seq === this.symbolSearch._seq) this.symbolSearch.loading = false;
+            }
+        },
+
+        selectSymbol(form, r) {
+            if (!form || !r) return;
+            form.name   = r.name;
+            form.ticker = r.ticker;
+            form.type   = r.isEtf ? (r.market === 'US' ? 'ETF (US)' : 'ETF (IND)')
+                                  : (r.market === 'US' ? 'Stock (US)' : 'Stock (IND)');
+            form.currency = r.market === 'US' ? 'USD' : 'INR';
+            this.symbolSearch.results = [];
+            this.symbolSearch.query = '';
+            if (this.haptics && window.RFMMotion) window.RFMMotion.Haptics.commit();
+        },
+
+        /* A monogram, generated from the symbol itself. Deliberately not a
+           remote logo: a logo service that 404s leaves a broken image in a
+           finance app, and there is no free source that covers NSE listings
+           reliably. Deterministic hue means the same holding always reads the
+           same colour, which is most of what a logo does at this size. */
+        symbolMark(sym) {
+            const s = String(sym || '?').toUpperCase();
+            let h = 0;
+            for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 360;
+            return { text: s.slice(0, 2), hue: h };
+        },
 
         get hasAnyPortfolioData() {
             const nz = v => Number(v) > 0;
@@ -2833,11 +2963,16 @@ RULES: Return ONLY valid JSON. No markdown, no explanation. If a field is unknow
         selectMfScheme(targetForm, scheme) {
             if (!targetForm) return;
             targetForm.schemeCode = String(scheme.schemeCode);
-            if (!targetForm.name || targetForm.name === 'Stock' || targetForm.name === 'Mutual Fund') {
-                targetForm.name = scheme.schemeName;
-            }
+            // Unconditionally. This used to write the name only when the field
+            // was still empty — but the field is never empty at this point,
+            // because typing is how the list appeared. Picking a scheme then
+            // silently kept the half-typed query ("invesco mid") and submitted
+            // THAT as the holding's name. Choosing from the list is an explicit
+            // act and always wins over what was typed to find it.
+            targetForm.name = scheme.schemeName;
             this.mfSearchResults = [];
             this.mfSearchQuery = '';
+            if (this.haptics && window.RFMMotion) window.RFMMotion.Haptics.commit();
         },
 
         async fetchJsonWithTimeout(url, timeoutMs = 4500) {

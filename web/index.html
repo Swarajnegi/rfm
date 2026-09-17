@@ -6,7 +6,7 @@
 <title>Corpus</title>
 <script>
 (function(){var d=document.documentElement,t="";try{t=localStorage.getItem("corpus_theme")||localStorage.getItem("rfm_theme")||"";}catch(e){}
-if(t==="light"||t==="dark"){d.setAttribute("data-theme",t);}})();
+d.setAttribute("data-theme",(t==="light"||t==="dark")?t:"dark");})();/* Deep green is the identity, so an untouched install lands on it rather than on whatever the OS happens to prefer. A stored choice always wins. */
 </script>
 <link rel="stylesheet" href="fonts.css">
 <link rel="stylesheet" href="corpus.css">
@@ -515,6 +515,11 @@ if(t==="light"||t==="dark"){d.setAttribute("data-theme",t);}})();
       <span class="row__label"><span class="row__name" x-text="theme === 'dark' ? 'Switch to light' : 'Switch to dark'"></span></span>
       <span class="icon icon--sm muted" x-text="theme === 'dark' ? 'light_mode' : 'dark_mode'"></span>
     </button>
+    <button class="row" @click="toggleHaptics()" :aria-pressed="haptics ? 'true' : 'false'">
+      <span class="row__label"><span class="row__name">Haptic feedback</span>
+        <span class="row__meta" x-text="haptics ? 'A short pulse when something is saved, synced or confirmed.' : 'Off. Corpus will not vibrate.'"></span></span>
+      <span class="row__value stamp" x-text="haptics ? 'On' : 'Off'"></span>
+    </button>
     <button class="row" @click="replayTutorial()">
       <span class="row__label"><span class="row__name">Replay the tour</span></span>
       <span class="icon icon--sm muted">history</span>
@@ -902,16 +907,46 @@ if(t==="light"||t==="dark"){d.setAttribute("data-theme",t);}})();
       </label>
 
       <label class="f">
-        <span class="f__label">Name</span>
+        <span class="f__label" x-text="needsTicker(newInv.type) ? 'Search the market' : 'Name'"></span>
         <input class="field" type="text" x-model="newInv.name" required
-               :placeholder="newInv.type === 'Mutual Fund' ? 'Start typing to search AMFI' : 'HDFC Bank FD'"
-               @input="mfSearchQuery = newInv.name; newInv.type === 'Mutual Fund' && searchMfScheme(newInv.name)">
+               autocomplete="off" autocorrect="off" spellcheck="false"
+               :placeholder="newInv.type === 'Mutual Fund' ? 'Start typing to search AMFI'
+                           : needsTicker(newInv.type) ? (newInv.type.includes('US') ? 'nvidia, or NVDA' : 'reliance, or RELIANCE')
+                           : 'HDFC Bank FD'"
+               @input="mfSearchQuery = newInv.name;
+                       newInv.type === 'Mutual Fund' ? searchMfScheme(newInv.name, newInv)
+                       : needsTicker(newInv.type) && searchSymbol(newInv.name, newInv)">
       </label>
 
-      <template x-if="mfSearchResults.length">
+      <!-- Mutual funds resolve against AMFI, listed instruments against the
+           market. Two sources, one place in the form, because to the person
+           filling it in there is only one question: which holding is this? -->
+      <template x-if="newInv.type === 'Mutual Fund' && mfSearchResults.length">
         <ul class="typeahead">
           <template x-for="r in mfSearchResults.slice(0,6)" :key="r.schemeCode">
-            <li><button type="button" class="typeahead__item" @click="selectMfScheme(r)" x-text="r.schemeName"></button></li>
+            <li><button type="button" class="typeahead__item" @click="selectMfScheme(newInv, r)" x-text="r.schemeName"></button></li>
+          </template>
+        </ul>
+      </template>
+
+      <template x-if="needsTicker(newInv.type) && (symbolSearch.results.length || symbolSearch.loading || symbolSearch.error)">
+        <ul class="typeahead">
+          <template x-if="symbolSearch.loading && !symbolSearch.results.length">
+            <li class="typeahead__note">Searching…</li>
+          </template>
+          <template x-for="r in symbolSearch.results" :key="r.symbol">
+            <li>
+              <button type="button" class="typeahead__item typeahead__item--mark" @click="selectSymbol(newInv, r)">
+                <span class="mark" :style="`--mark-h:${symbolMark(r.ticker).hue}`" x-text="symbolMark(r.ticker).text"></span>
+                <span class="typeahead__body">
+                  <span class="typeahead__ttl" x-text="r.name"></span>
+                  <span class="typeahead__sub"><b x-text="r.ticker"></b><span x-text="r.exchange"></span></span>
+                </span>
+              </button>
+            </li>
+          </template>
+          <template x-if="symbolSearch.error && !symbolSearch.results.length">
+            <li class="typeahead__note" x-text="symbolSearch.error"></li>
           </template>
         </ul>
       </template>

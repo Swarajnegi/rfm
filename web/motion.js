@@ -23,8 +23,16 @@
         window.addEventListener(evt, () => { activated = true; }, { once: true, passive: true });
     }
 
+    // One choke point for the user's on/off preference, rather than a check at
+    // each of the six call sites. Read live from storage instead of cached at
+    // load, so flipping the switch takes effect on the very next tap without a
+    // reload — and so app.js remains the single owner of the setting.
+    function hapticsEnabled() {
+        try { return localStorage.getItem('corpus_haptics') !== 'off'; } catch (e) { return true; }
+    }
+
     const Haptics = {
-        _p: () => (activated || (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()))
+        _p: () => (hapticsEnabled() && (activated || (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform())))
                   ? (window.AppPlugins && window.AppPlugins.Haptics) : null,
         tap()     { try { this._p() && this._p().impact({ style: 'Light'  }); } catch (e) {} },
         commit()  { try { this._p() && this._p().impact({ style: 'Medium' }); } catch (e) {} },
@@ -201,7 +209,7 @@
         document.addEventListener('corpus:navigated', watchHero);
     }
 
-    window.RFMMotion = { transition, syncSweep, flashValue, enhanceLists, revealInsights, watchAppBar, Haptics, startTour, TOUR_KEY, reduced };
+    window.RFMMotion = { transition, hapticsEnabled, syncSweep, flashValue, enhanceLists, revealInsights, watchAppBar, Haptics, startTour, TOUR_KEY, reduced };
 
     // Lists appear as pages are visited, so re-scan after Alpine settles.
     document.addEventListener('alpine:initialized', () => {
