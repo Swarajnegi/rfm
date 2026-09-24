@@ -1,4 +1,4 @@
-import { Capacitor, CapacitorHttp } from '@capacitor/core';
+import { Capacitor, CapacitorHttp, registerPlugin } from '@capacitor/core';
 import { App } from '@capacitor/app';
 import { NativeBiometric } from '@capgo/capacitor-native-biometric';
 import { SplashScreen } from '@capacitor/splash-screen';
@@ -6,6 +6,7 @@ import { StatusBar, Style } from '@capacitor/status-bar';
 import { Haptics, ImpactStyle, NotificationType } from '@capacitor/haptics';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { LocalNotifications } from '@capacitor/local-notifications';
+import { Share } from '@capacitor/share';
 
 // ── pdf.js for client-side PDF parsing (Phase 5) ──
 import * as pdfjsLib from 'pdfjs-dist';
@@ -26,6 +27,7 @@ try {
 window.AppPlugins = {
     Capacitor,
     CapacitorHttp,
+    AnalysisJob: registerPlugin('AnalysisJob'),
     App,
     NativeBiometric,
     SplashScreen,
@@ -36,7 +38,8 @@ window.AppPlugins = {
     LocalNotifications,
     Haptics,
     ImpactStyle,
-    NotificationType
+    NotificationType,
+    Share
 };
 
 window.pdfjsLib = pdfjsLib;

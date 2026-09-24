@@ -14,7 +14,7 @@ import path from 'node:path';
 const b = await chromium.launch();
 const p = await b.newPage({ viewport: { width: 360, height: 844 } });
 const errs = []; p.on('pageerror', e => errs.push(e.message));
-await p.addInitScript(s => { localStorage.setItem('rfm_v1', s); localStorage.setItem('corpus_tour_v1','x'); },
+await p.addInitScript(s => { localStorage.setItem('rfm_v1', s); localStorage.setItem('corpus_tour_v1','x'); localStorage.setItem('rfm_v1', JSON.stringify((v => ({ ...v, profile: v.profile || { completedAt: '2026-09-01T00:00:00.000Z', name: 'Test', age: 40, goal: 'balanced', risk: 'medium', horizon: '7to15', interests: ['stocks'] } }))(JSON.parse(localStorage.getItem('rfm_v1') || '{}')))); },
                       readFileSync('scripts/seed.json','utf8'));
 await p.route('**/*', r => r.request().url().startsWith('file://') ? r.continue() : r.abort());
 await p.goto(pathToFileURL(path.resolve('web/index.html')).href, { waitUntil: 'load' });

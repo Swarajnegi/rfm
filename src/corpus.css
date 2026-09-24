@@ -1,10 +1,16 @@
 /* ═══════════════════════════════════════════════════════════════════════════
    CORPUS — design system
 
-   The material is a STATEMENT SHEET, not a card deck. One surface per screen,
-   content separated by hairline rules rather than nested bordered boxes, and
-   hierarchy carried by type and space instead of elevation. Shadows are used
-   only where something genuinely floats.
+   The material is a LIT SLAB. A card is the page pressed outward: its fill is
+   identical to the ground, and only a lit upper edge, a dark undercut and two
+   cast shadows separate it. There are no borders anywhere, and nothing nests
+   inside anything — the rule that survived from the statement-sheet material
+   this replaced. Hierarchy is carried by type, space and elevation together.
+
+   Depth is NOT symmetric between themes, and that is deliberate. On the light
+   ground a shadow has room to darken, so it does the separating on its own. On
+   the dark ground a shadow onto #061A12 has nothing left to darken, so the
+   undercut has to be drawn in black. See --card-under.
 
    The palette is lacquer green, aged brass and ivory — the inside of a
    jewellery box and the binding of an old ledger. Light is the shipped
@@ -36,6 +42,33 @@
   --lift-high: 0 -2px 8px color-mix(in srgb, var(--ink) 5%, transparent),
                0 -24px 60px color-mix(in srgb, var(--ink) 16%, transparent);
 
+  /* ── Card material ───────────────────────────────────────────────────
+     A card is the page pressed outward, not a lighter panel laid on top.
+     Its fill is IDENTICAL to the ground; only light and shadow separate the
+     two. A lighter fill reads as a separate object stuck on — which is what
+     this replaced.
+
+     The bottom edge differs per theme and that asymmetry is the whole point.
+     On this pale ground a shadow has plenty of room to darken, so it does the
+     work and no line is drawn. On the dark theme a shadow onto #061A12 has
+     almost nothing left to darken, so the undercut must be DRAWN in black or
+     the card's lower half simply does not read. See the dark block below. */
+  --card-fill:   var(--ground);
+  --card-lit:    rgb(255 255 255 / 0.70);   /* the lit upper lip */
+  --card-under:  transparent;               /* nothing drawn — shadow suffices */
+  --card-grad:   linear-gradient(180deg, rgb(255 255 255 / 0.03), rgb(0 0 0 / 0.02));
+  --card-cast:   0 1px 2px rgb(8 23 15 / 0.06), 0 12px 32px rgb(8 23 15 / 0.09);
+
+  /* Warm off-white for the wordmark, page label and dock. On the dark theme it
+     is the one non-gold highlight; on light it has no role, so it is ink. */
+  --skin: var(--ink);
+
+  /* The AI console keeps its navy and gold in BOTH themes on purpose, but its
+     shadow cannot. On a pale page a dark object with a weak shadow reads as a
+     hole punched through the page rather than a slab resting on it, so light
+     mode carries noticeably more weight than dark mode needs. */
+  --ai-cast: 0 2px 4px rgb(8 23 15 / 0.10), 0 18px 44px rgb(8 23 15 / 0.14);
+
   /* ── Type ────────────────────────────────────────────────────────────── */
   /* Newsreader. Chosen for the money, not for the mood: its figures are
      TABULAR — every digit the same width — so the total does not change width
@@ -48,19 +81,19 @@
   --display: 'Newsreader', 'Iowan Old Style', Georgia, serif;
   --ui:      'Archivo', system-ui, -apple-system, 'Segoe UI', sans-serif;
 
-  /* Modular scale, major third from a 16px body. 13px is a hard floor. */
-  --t-micro: 13px;  --lh-micro: 18px;
-  --t-small: 14px;  --lh-small: 20px;
-  --t-body:  16px;  --lh-body:  24px;
-  --t-lead:  18px;  --lh-lead:  28px;
-  --t-title: 22px;  --lh-title: 28px;
-  --t-head:  28px;  --lh-head:  34px;
-  --t-figure: clamp(38px, 11vw, 60px);
+  /* Modular scale with fluid mobile adaptability. 13px is a strict hard floor. */
+  --t-micro: 13px;  --lh-micro: 17px;
+  --t-small: clamp(13px, 3.4vw, 14px);  --lh-small: 19px;
+  --t-body:  clamp(14.5px, 3.6vw, 16px);  --lh-body: clamp(20px, 4.8vw, 24px);
+  --t-lead:  clamp(15px, 3.8vw, 18px);  --lh-lead: clamp(21px, 5vw, 26px);
+  --t-title: clamp(18px, 4.5vw, 22px);  --lh-title: clamp(23px, 5.5vw, 28px);
+  --t-head:  clamp(22px, 5.5vw, 28px);  --lh-head: clamp(27px, 6.5vw, 34px);
+  --t-figure: clamp(28px, 7.8vw, 44px);
 
   /* ── Space ───────────────────────────────────────────────────────────── */
   --s1: 4px;  --s2: 8px;  --s3: 12px; --s4: 16px;
   --s5: 24px; --s6: 32px; --s7: 48px; --s8: 64px;
-  --gutter: 20px;
+  --gutter: clamp(14px, 4vw, 20px);
   --measure: 34rem;
 
   --r-control: 10px;
@@ -110,6 +143,19 @@
   --lift: 0 1px 2px rgb(0 0 0 / 0.4), 0 16px 40px rgb(0 0 0 / 0.36);
   --lift-high: 0 -2px 10px rgb(0 0 0 / 0.3), 0 -28px 70px rgb(0 0 0 / 0.5);
 
+  /* The drawn undercut. A shadow cast onto #061A12 has nowhere left to go, so
+     the card's lower boundary is a black line rather than an absence of light.
+     Counter-intuitive on a dark UI, and the single thing that makes the depth
+     read at all — without it the lit top edge is the only visible edge and the
+     card looks like it stops halfway. */
+  --card-lit:   rgb(255 255 255 / 0.14);
+  --card-under: rgb(0 0 0 / 0.70);
+  --card-grad:  linear-gradient(180deg, rgb(255 255 255 / 0.04), rgb(0 0 0 / 0.04));
+  --card-cast:  0 3px 5px rgb(0 0 0 / 0.90), 0 18px 40px rgb(0 0 0 / 0.75);
+
+  --skin: #F2ECE3;
+  --ai-cast: 0 1px 2px rgb(0 0 0 / 0.30), 0 18px 44px rgb(0 0 0 / 0.30);
+
   color-scheme: dark;
 }
 
@@ -124,6 +170,12 @@
     --wash: color-mix(in srgb, var(--brass) 9%, transparent);
     --lift: 0 1px 2px rgb(0 0 0 / 0.4), 0 16px 40px rgb(0 0 0 / 0.36);
     --lift-high: 0 -2px 10px rgb(0 0 0 / 0.3), 0 -28px 70px rgb(0 0 0 / 0.5);
+    --card-lit:   rgb(255 255 255 / 0.14);
+    --card-under: rgb(0 0 0 / 0.70);
+    --card-grad:  linear-gradient(180deg, rgb(255 255 255 / 0.04), rgb(0 0 0 / 0.04));
+    --card-cast:  0 3px 5px rgb(0 0 0 / 0.90), 0 18px 40px rgb(0 0 0 / 0.75);
+    --skin: #F2ECE3;
+    --ai-cast: 0 1px 2px rgb(0 0 0 / 0.30), 0 18px 44px rgb(0 0 0 / 0.30);
     color-scheme: dark;
   }
 }
@@ -142,7 +194,7 @@ body {
   -webkit-font-smoothing: antialiased;
   -webkit-tap-highlight-color: transparent;
   overscroll-behavior-y: contain;
-  padding-bottom: calc(92px + env(safe-area-inset-bottom));
+  padding-bottom: calc(76px + env(safe-area-inset-bottom));
 }
 h1, h2, h3 {
   margin: 0; font-family: var(--display); font-weight: 600;
@@ -164,19 +216,44 @@ input, select, textarea { font: inherit; }
 .stack > * + * { margin-top: var(--s4); }
 .stack-tight > * + * { margin-top: var(--s3); }
 
-/* The sheet is the material — and it is a STATEMENT, not a card.
-   This used to be a filled, bordered, 24px-radius panel, and a screen of them
-   stacked read as a deck of boxes: every group announced its own edges, so the
-   eye counted containers instead of reading figures. A statement has no boxes.
-   Groups are delimited by a brass hairline and a small tracked label, the way a
-   printed holding statement delimits its sections, and the page reads as one
-   continuous surface. */
+/* The sheet is the material, and it is now a LIT SLAB.
+   It has been both things. It began as a filled, bordered, 24px-radius panel,
+   and a screen of those read as a deck of boxes — every group announcing its
+   own edges, so the eye counted containers instead of reading figures. It was
+   then stripped to a bare statement: transparent, delimited only by hairlines.
+
+   Neither survived use. The bordered version was cluttered; the bare version
+   gave a long screen no structure to grip. What replaced both keeps the one
+   property that mattered — NO GROUP ANNOUNCES ITS OWN EDGES — while restoring
+   physical grouping, by making the card the same colour as the page and
+   separating it with light alone. There is still no border anywhere. */
 .sheet {
-  background: transparent;
+  position: relative;
+  background-color: var(--card-fill);
+  background-image: var(--card-grad);
   border: 0;
-  border-radius: 0;
+  border-radius: var(--r-panel);
+  /* 24px inside the card is right at 390px and wrong at 360px: with the 20px
+     page gutter it takes 88px off the line, which clipped a text input on the
+     income page. The inset scales down with the viewport instead of holding a
+     figure that only suits one device. */
+  padding: var(--s2) clamp(var(--s3), 3.8vw, var(--s4));
+  box-shadow:
+    inset 0 -1px 0 var(--card-under),
+    var(--card-cast);
 }
-.sheet--plain { background: transparent; border: 0; border-radius: 0; }
+/* The lit upper lip, faded at the corners. A full-width inset line reads as a
+   drawn border; a gradient that dies before the radius reads as light falling
+   on a curved edge, which is the whole illusion. */
+.sheet::before {
+  content: ''; position: absolute; inset: 0 0 auto; height: 1px;
+  border-radius: var(--r-panel) var(--r-panel) 0 0;
+  background: linear-gradient(90deg,
+    transparent, var(--card-lit) 18%, var(--card-lit) 82%, transparent);
+  pointer-events: none;
+}
+/* Pressed. The slab sinks toward the page and its contact shadow tightens. */
+button.sheet:active, .sheet--press:active { transform: translateY(2px); }
 
 /* Rules carry the structure that borders used to. */
 .rule { height: 1px; background: var(--rule); border: 0; margin: 0; }
@@ -187,14 +264,20 @@ input, select, textarea { font: inherit; }
   display: grid;
   grid-template-columns: 1fr auto;
   align-items: baseline;
-  gap: var(--s4);
-  padding: var(--s4) var(--s5);
-  min-height: 56px;
+  gap: var(--s3);
+  padding: var(--s3) clamp(var(--s3), 3.5vw, var(--s4));
+  min-height: 48px;
   width: 100%;
   text-align: left;
   position: relative;
 }
 .row + .row { box-shadow: inset 0 1px 0 var(--rule); }
+
+/* A row that carries a mark needs a third column for it. The base row aligns on the
+   text baseline, which is right for two columns of type and wrong once a disc joins
+   them, so a marked row centres instead. */
+.row--marked { grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; }
+
 button.row, label.row {
   transition: background var(--fast) var(--ease), transform 120ms var(--ease);
   -webkit-tap-highlight-color: transparent;
@@ -336,7 +419,7 @@ button.row:active, label.row:active { background: var(--wash); transform: scale(
   border-bottom-color: var(--rule);
   background: color-mix(in srgb, var(--ground) 94%, transparent);
 }
-.appbar__inner { display: flex; align-items: center; justify-content: space-between; min-height: 60px; }
+.appbar__inner { display: flex; align-items: center; justify-content: space-between; min-height: 52px; }
 
 /* The wordmark IS the brand — set in the display face at a confident size, not
    shrunk into a logo slot beside an icon. */
@@ -345,9 +428,41 @@ button.row:active, label.row:active { background: var(--wash); transform: scale(
   font-size: 21px; font-weight: 600;
   font-variation-settings: 'opsz' 30;
   letter-spacing: -0.015em;
-  color: var(--ink);
+  color: var(--skin);
 }
 .appbar__actions { display: flex; gap: var(--s1); }
+.appbar__context { display: flex; align-items: center; gap: var(--s3); }
+.appbar__label {
+  color: var(--skin);
+  font-size: var(--t-micro);
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.avatarbtn {
+  position: relative;
+  width: 44px; height: 44px;
+  display: grid; place-items: center;
+  color: var(--skin);
+  border-radius: 999px;
+}
+.avatarbtn__face {
+  width: 24px; height: 24px;
+  display: grid; place-items: center;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+}
+.avatarbtn__glyph { position: relative; width: 12px; height: 13px; }
+.avatarbtn__glyph::before {
+  content: ''; position: absolute; left: 50%; top: 0;
+  width: 5px; height: 5px; border: 1px solid currentColor; border-radius: 50%;
+  transform: translateX(-50%);
+}
+.avatarbtn__glyph::after {
+  content: ''; position: absolute; left: 50%; bottom: 0;
+  width: 10px; height: 6px; border: 1px solid currentColor; border-radius: 8px 8px 4px 4px;
+  transform: translateX(-50%);
+}
 
 .iconbtn {
   position: relative;
@@ -370,12 +485,20 @@ button.row:active, label.row:active { background: var(--wash); transform: scale(
 /* ═══ HERO ════════════════════════════════════════════════════════════════
    The figure sits directly on the page. Giving it a card would make it one
    more tile among tiles; alone on the ground it is unmistakably the subject. */
-.hero { padding: var(--s6) 0 var(--s2); }
+.hero { padding: var(--s5) 0 var(--s2); }
 .hero .figure { margin-top: var(--s2); }
 .hero__delta {
   display: flex; align-items: center; gap: 6px;
-  margin-top: var(--s3);
+  margin-top: var(--s2);
   font-size: var(--t-small); font-weight: 600;
+}
+/* The standing caveat under the delta. A change in a TOTAL is not a return,
+   and this line is the only thing in the app that says so — so it is quiet but
+   it is never conditional on anything except a delta being shown at all. */
+.hero__caveat {
+  margin-top: 4px;
+  font-size: var(--t-micro); line-height: var(--lh-micro);
+  color: var(--ink-faint); font-weight: 500;
 }
 .hero__empty { padding: var(--s4) 0 0; }
 .hero__cta { display: flex; flex-wrap: wrap; gap: var(--s3); margin-top: var(--s5); }
@@ -384,8 +507,70 @@ button.row:active, label.row:active { background: var(--wash); transform: scale(
 /* Full-bleed to the screen edges — a chart boxed inside a card reads as a
    widget; run to the edge and it reads as the shape of the money itself. */
 .series { margin: 0 calc(var(--gutter) * -1); overflow: hidden; }
-.series__canvas { height: 168px; width: 100%; }
-.series .seg { margin: var(--s4) var(--gutter) 0; }
+.series__canvas { height: clamp(120px, 20vh, 145px); width: 100%; }
+.series .seg { margin: var(--s2) var(--gutter) 0; }
+
+/* The chart carries no axis and no price scale — that is the design — so the
+   dates live here instead: the real span of what is drawn at rest, and the
+   exact observation under your finger while you hold it. Indented to the gutter
+   so it lands on the same left edge as every other line on the page, which is
+   what the alignment audit measures. */
+.series__foot {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--s3);
+  margin: var(--s2) var(--gutter) 0;
+}
+.series__stamp {
+  margin: 0;
+  font-size: var(--t-micro); line-height: var(--lh-micro);
+  color: var(--ink-faint); font-weight: 500;
+  min-height: var(--lh-micro);
+}
+
+/* An empty window is stated, not drawn. The box keeps the canvas's height so
+   the range pills do not jump between a period that has points and one that
+   does not. */
+.series__empty {
+  display: flex; align-items: center;
+  height: clamp(120px, 20vh, 145px);
+  margin: 0 var(--gutter);
+  font-size: var(--t-micro); line-height: var(--lh-micro);
+  color: var(--ink-faint); font-weight: 500;
+}
+
+/* ═══ PULL TO SYNC ════════════════════════════════════════════════════════ */
+/* Parked above the viewport and dragged down by the gesture. It is moved with
+   inline transform/opacity only — never by a class change and never by Alpine —
+   because the version that wrote reactive state per touchmove froze the phone. */
+.ptr {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 60;
+  height: 56px; margin-top: -56px;
+  display: flex; align-items: center; justify-content: center; gap: var(--s2);
+  font-size: var(--t-micro); line-height: var(--lh-micro);
+  font-weight: 600; color: var(--ink-soft);
+  background: var(--ground);
+  opacity: 0;
+  pointer-events: none;
+  will-change: transform, opacity;
+}
+.ptr__spin {
+  width: 14px; height: 14px; border-radius: 50%;
+  border: 2px solid var(--brass-rule);
+  border-top-color: var(--brass);
+  transition: transform .2s linear;
+}
+/* Past the commit point the ring closes up and takes the accent, so the finger
+   knows it has crossed the threshold before it lifts. */
+.ptr[data-armed="1"] .ptr__spin { border-color: var(--brass); transform: scale(1.15); }
+.ptr[data-armed="1"] { color: var(--brass); }
+
+body.is-syncing .ptr__spin { animation: ptr-spin .7s linear infinite; }
+@keyframes ptr-spin { to { transform: rotate(360deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+  body.is-syncing .ptr__spin { animation: none; }
+  .ptr { transition-duration: 1ms !important; }
+}
 
 /* ═══ SHEET ═══════════════════════════════════════════════════════════════ */
 /* A group heading is a signpost, not a headline. Only ONE thing per screen is
@@ -394,12 +579,20 @@ button.row:active, label.row:active { background: var(--wash); transform: scale(
   padding: 0 0 var(--s2);
   border-bottom: 1px solid var(--brass-rule);
 }
-.sheet__title {
+/* .market-label shares this exactly: a market band over the holdings list is
+   the same kind of signpost as a card's title, and giving it its own brass
+   would be a second gold that has to be kept in step with the first. */
+.sheet__title,
+.market-label {
   font-family: var(--ui); font-variation-settings: normal;
   font-size: var(--t-micro); line-height: var(--lh-micro);
   font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase;
   color: var(--brass);
 }
+/* Sits on the ground between cards, not inside one, so it needs its own air
+   above and the same left edge as every other line on the page. */
+.market-label { margin: var(--s2) 0 calc(var(--s1) * -1); }
+.holdings-list + .holdings-list { margin-top: var(--s4); }
 /* Air between sections does the work the borders used to. */
 .stack > .sheet + .sheet { margin-top: var(--s6); }
 .sheet .row { padding-left: 0; padding-right: 0; }
@@ -408,28 +601,38 @@ button.row:active, label.row:active { background: var(--wash); transform: scale(
 .row--total .row__value { font-family: var(--display); font-size: var(--t-lead);
   font-variation-settings: 'opsz' 20; font-variant-numeric: tabular-nums lining-nums; }
 
-/* Allocation share as a hairline beneath the name. A six-slice pie is harder
-   to read than six right-aligned numbers, and this costs one pixel of height. */
-/* A CONSTANT track with a variable fill. It used to be a bare bar whose width
-   was the share, which meant two small holdings showed as two short stubs with
-   nothing to measure them against — proportion you cannot compare is decoration.
-   Against a fixed track the same two are instantly rankable. */
-.alloc__bar {
-  display: block; height: 2px; margin-top: 7px;
-  width: 100%; max-width: 180px; position: relative;
-  background: color-mix(in srgb, var(--brass) 16%, transparent);
-  border-radius: 2px; overflow: hidden;
+.allocation-section { display: grid; gap: var(--s3); }
+.section-label {
+  font-family: var(--ui); font-size: var(--t-micro); line-height: var(--lh-micro);
+  font-weight: 600; color: var(--skin);
 }
-.alloc__bar::after {
-  content: ''; position: absolute; inset: 0 auto 0 0;
-  width: var(--pct, 0%); min-width: 2px;
-  background: var(--brass); border-radius: 2px;
-  transition: width var(--slow) var(--ease);
+.card-list { display: grid; gap: var(--s3); }
+.card-row {
+  min-height: 62px;
+  padding: var(--s2) clamp(var(--s3), 3.8vw, var(--s4));
+}
+.card-list > .card-row + .card-row {
+  box-shadow: inset 0 -1px 0 var(--card-under), var(--card-cast);
+}
+.holding-card { min-height: 72px; }
+.planning-card {
+  min-height: 64px;
+  align-items: center;
+  padding-top: var(--s2);
+  padding-bottom: var(--s2);
+}
+.planning-summary { padding-top: var(--s3); }
+.planning-summary .figure { margin-top: var(--s1); }
+.planning-card__figure { display: block; text-align: left; margin-top: 2px; }
+.facts-list .row { min-height: 52px; padding-top: var(--s3); padding-bottom: var(--s3); }
+.attention {
+  padding-left: 18px !important;
 }
 .attention .row__name { font-weight: 600; }
 .attention::before {
-  content: ''; position: absolute; left: 0; top: 0; bottom: 0;
+  content: ''; position: absolute; left: 0; top: 6px; bottom: 6px;
   width: 3px; background: var(--brass);
+  border-radius: 2px;
 }
 
 /* ═══ DOCK ════════════════════════════════════════════════════════════════
@@ -437,14 +640,21 @@ button.row:active, label.row:active { background: var(--wash); transform: scale(
    with the figure for attention, which is the one thing on screen that
    should be loud. */
 .dock {
-  position: fixed; left: 0; right: 0; bottom: 0; z-index: 50;
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(calc(100% - 24px), 24rem);
+  bottom: calc(10px + env(safe-area-inset-bottom));
+  z-index: 50;
   display: grid; grid-auto-flow: column; grid-auto-columns: 1fr;
-  padding-bottom: env(safe-area-inset-bottom);
+  min-height: 52px;
+  border-radius: 9999px;
+  overflow: hidden;
   /* Opaque by default. The frosted treatment below is applied only where the
      engine can actually blur — without the blur, 8% translucency is not depth,
      it is legible ghost text sliding under the navigation. */
   background: var(--ground);
-  box-shadow: inset 0 1px 0 var(--rule);
+  box-shadow: inset 0 1px 0 var(--rule), var(--card-cast);
 }
 @supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .dock {
@@ -454,26 +664,28 @@ button.row:active, label.row:active { background: var(--wash); transform: scale(
   }
 }
 .dock__item {
-  display: grid; justify-items: center; gap: 3px;
-  padding: 10px 4px 12px;
-  color: var(--ink-faint);
+  display: grid; justify-items: center; align-content: center; gap: 2px;
+  padding: 6px 4px 7px;
+  min-height: 52px;
+  color: var(--skin);
+  opacity: 0.68;
   position: relative;
   transition: color var(--fast) var(--ease);
   -webkit-tap-highlight-color: transparent;
 }
-.dock__item .icon { transition: transform 320ms var(--spring); }
-.dock__item.is-active .icon { transform: translateY(-1px) scale(1.06); }
+.dock__item .icon { font-size: 20px; transition: transform 320ms var(--spring); }
+.dock__item.is-active .icon { transform: translateY(-1px) scale(1.05); }
 .dock__item::before {
   content: ''; position: absolute; top: 0; left: 50%;
-  width: 26px; height: 2px; background: var(--brass);
+  width: 22px; height: 2px; background: var(--brass);
   transform: translateX(-50%) scaleX(0);
   transform-origin: center;
   transition: transform 340ms var(--spring), opacity var(--fast) var(--ease);
   opacity: 0;
 }
-.dock__item.is-active { color: var(--ink); }
+.dock__item.is-active { color: var(--skin); opacity: 1; }
 .dock__item.is-active::before { transform: translateX(-50%) scaleX(1); opacity: 1; }
-.dock__label { font-size: var(--t-micro); font-weight: 600; letter-spacing: 0.005em; }
+.dock__label { font-size: var(--t-micro); font-weight: 600; letter-spacing: 0.005em; line-height: 14px; }
 .dock__item:active .icon { transform: scale(0.9); }
 
 /* The sync sweep, restated for the new material. */
@@ -492,11 +704,16 @@ button.row:active, label.row:active { background: var(--wash); transform: scale(
 .row__delta   { display: block; }
 
 /* ═══ PAGE HEAD ═══════════════════════════════════════════════════════════ */
-.pagehead { padding: var(--s6) 0 var(--s1); }
+.pagehead { padding: var(--s5) 0 var(--s1); }
 .pagehead .stamp { margin-top: var(--s2); }
 
 .sheet__head--split { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s4); }
-.sheet__head--split .muted { font-size: var(--t-small); font-weight: 600; color: var(--ink-faint); }
+/* The typography hangs off the figure itself, not off `muted`. They were one
+   rule, so a head figure that wanted a colour of its own — Coming in is green,
+   Going out is red — silently lost its size and weight along with the grey. */
+.sheet__head--split .tnum,
+.sheet__head--split .muted { font-size: var(--t-small); font-weight: 600; }
+.sheet__head--split .muted { color: var(--ink-faint); }
 
 /* Horizontally scrollable filter that does not announce its scrollbar. */
 .seg--scroll {
@@ -520,7 +737,7 @@ button.row:active, label.row:active { background: var(--wash); transform: scale(
 /* A holding's row carries three facts: what it is, what it is worth, and how
    sure we are of that. The third is the one most apps omit. */
 .holding .row__meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s1) var(--s3); }
-.holding .stamp { font-size: 12px; }
+.holding .stamp { font-size: var(--t-micro); }
 .holding .stamp__dot { width: 4px; height: 4px; }
 .row__delta { font-size: var(--t-micro); letter-spacing: -0.005em; }
 
@@ -561,22 +778,22 @@ button.row:active, label.row:active { background: var(--wash); transform: scale(
 .sheet__note { padding: 0 0 var(--s5); color: var(--ink-faint); font-size: var(--t-small); max-width: var(--measure); }
 
 /* ═══ INSIGHTS ════════════════════════════════════════════════════════════ */
-.score { display: flex; align-items: center; justify-content: space-between; gap: var(--s5); padding: 0 0 var(--s5); }
+.score { display: flex; align-items: center; justify-content: space-between; gap: var(--s4); padding: 0 0 var(--s4); }
 .score .figure { margin: var(--s1) 0 2px; }
 
 /* A conic ring reads the score at a glance without a chart library. */
 .score__ring {
-  width: 64px; height: 64px; flex: none;
+  width: 54px; height: 54px; flex: none;
   border-radius: 999px;
   display: grid; place-items: center;
   background: conic-gradient(color-mix(in srgb, var(--brass) 78%, transparent) calc(var(--pct) * 1%), var(--rule) 0);
   position: relative;
 }
 .score__ring::after {
-  content: ''; position: absolute; inset: 6px;
+  content: ''; position: absolute; inset: 5px;
   background: var(--sheet); border-radius: 999px;
 }
-.score__glyph { position: relative; z-index: 1; color: var(--brass); font-size: 22px; }
+.score__glyph { position: relative; z-index: 1; color: var(--brass); font-size: 20px; }
 
 /* ═══ THE AI PANEL ════════════════════════════════════════════════════════
    Deliberately the only raised, filled, bordered surface left in the app, and
@@ -592,9 +809,13 @@ button.row:active, label.row:active { background: var(--wash); transform: scale(
   --ai-gold:   #C9A227;
   --ai-gold-2: #E6D08A;
   --ai-ink:    #EEF2F8;
-
+}
+.sheet--ai {
   position: relative;
-  padding: var(--s5);
+  /* Matches .sheet's responsive inset. A fixed 24px here while every other
+     card scales left the console's text 4-6px right of its neighbours — a
+     misalignment that only shows when the two are read down a column. */
+  padding: var(--s4) clamp(var(--s3), 3.8vw, var(--s4));
   border-radius: var(--r-sheet);
   color: var(--ai-ink);
   background:
@@ -602,8 +823,7 @@ button.row:active, label.row:active { background: var(--wash); transform: scale(
     linear-gradient(160deg, var(--ai-navy-2) 0%, var(--ai-navy) 58%);
   box-shadow:
     inset 0 0 0 1px color-mix(in srgb, var(--ai-gold) 30%, transparent),
-    0 1px 2px rgb(0 0 0 / 0.30),
-    0 18px 44px rgb(0 0 0 / 0.30);
+    var(--ai-cast);
   overflow: hidden;
 }
 /* A hairline of gold along the top edge, the way a good box is lined. */
@@ -634,11 +854,151 @@ button.row:active, label.row:active { background: var(--wash); transform: scale(
 .sheet--ai .meter { background: color-mix(in srgb, var(--ai-ink) 16%, transparent); }
 .sheet--ai .meter__fill, .sheet--ai .meter__fill--indeterminate { background: var(--ai-gold); }
 .sheet--ai .row__name { color: var(--ai-ink); }
+/* The console keeps its palette in both themes, so its secondary text must
+   too. Left to the theme, light mode painted .row__meta and .label in the
+   page's dark-green ink — near-invisible on navy. */
+.sheet--ai .row__meta { color: color-mix(in srgb, var(--ai-ink) 76%, transparent); }
+.sheet--ai .label { color: color-mix(in srgb, var(--ai-ink) 70%, transparent); }
+.sheet--ai .disclaimer { color: color-mix(in srgb, var(--ai-ink) 58%, transparent); }
+
+/* ═══ THE READING ═════════════════════════════════════════════════════════ */
+/* Everything below renders a field the model was already returning and the
+   screen was already throwing away. All of it stays inside the navy console,
+   which keeps its own palette in both themes on purpose. */
+.ai__macro {
+  margin: var(--s2) 0 0;
+  font-size: var(--t-small); line-height: 1.5;
+  color: color-mix(in srgb, var(--ai-ink) 82%, transparent);
+}
+
+/* How the book serves this person's goal: a status pill and one sentence. */
+.ai__fit {
+  display: flex; align-items: baseline; gap: var(--s2); flex-wrap: wrap;
+  margin: var(--s2) 0 0;
+  font-size: var(--t-small); line-height: 1.5; font-weight: 600;
+  color: var(--ai-ink);
+}
+
+.ai__rec { align-items: flex-start; }
+.ai__rechead { display: flex; align-items: center; gap: var(--s2); flex-wrap: wrap; }
+/* The verdict on a holding. A bordered pill rather than bare text, because it
+   is the one word on the card a thumb scrolls looking for. */
+.ai__verdict {
+  flex: none;
+  padding: 2px 10px; border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--ai-ink) 26%, transparent);
+  font-size: var(--t-micro); line-height: var(--lh-micro); font-weight: 600;
+  letter-spacing: 0.06em; text-transform: uppercase;
+  color: color-mix(in srgb, var(--ai-ink) 72%, transparent);
+}
+.ai__verdict.is-add { color: var(--ai-gold); border-color: color-mix(in srgb, var(--ai-gold) 48%, transparent); }
+.ai__verdict.is-cut { color: #E8A0A0; border-color: color-mix(in srgb, #E8A0A0 40%, transparent); }
+
+/* The figures an insight leaned on. Without these a reader cannot tell a
+   researched claim from a remembered one — which was the whole complaint. */
+.ai__evidence { display: flex; flex-wrap: wrap; gap: 6px; margin-top: var(--s2); }
+.ai__chip {
+  padding: 3px 9px; border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--ai-gold) 34%, transparent);
+  font-size: var(--t-micro); line-height: var(--lh-micro);
+  color: var(--ai-gold-2);
+}
+
+.ai__sources {
+  margin: var(--s2) 0 0;
+  font-size: var(--t-micro); line-height: var(--lh-micro);
+  color: color-mix(in srgb, var(--ai-ink) 56%, transparent);
+}
+
+/* A finding's rank, set as a figure: the order IS the message. */
+.ai__rank {
+  flex: none; min-width: 22px; height: 22px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid color-mix(in srgb, var(--ai-gold) 48%, transparent);
+  font-size: var(--t-micro); font-weight: 600; color: var(--ai-gold);
+}
+.ai__consider {
+  display: block; margin-top: var(--s1);
+  font-size: var(--t-micro); line-height: var(--lh-micro);
+  color: color-mix(in srgb, var(--ai-ink) 82%, transparent);
+}
+.ai__consider strong { color: var(--ai-gold-2); font-weight: 600; margin-right: 4px; }
+.ai__chip--name {
+  border-color: color-mix(in srgb, var(--ai-ink) 22%, transparent);
+  color: color-mix(in srgb, var(--ai-ink) 78%, transparent);
+}
+
+/* Per-holding calls, closed by default so the findings stay the answer. */
+.ai__more { margin-top: var(--s3); border-top: 1px solid color-mix(in srgb, var(--ai-ink) 14%, transparent); }
+.ai__more > summary {
+  list-style: none; cursor: pointer;
+  display: flex; align-items: center; gap: var(--s2);
+  min-height: 44px;
+  font-size: var(--t-micro); font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--ai-gold-2);
+}
+.ai__more > summary::-webkit-details-marker { display: none; }
+.ai__more > summary .icon { margin-left: auto; transition: transform 200ms var(--spring-soft, ease); }
+.ai__more[open] > summary .icon { transform: rotate(180deg); }
+.ai__count { color: color-mix(in srgb, var(--ai-ink) 56%, transparent); }
+.ai__line { padding-block: var(--s2); }
+
+/* ═══ THE DAILY BRIEF ═════════════════════════════════════════════════════ */
+/* Under the console, on the page's own material — it is something you read,
+   not something you ask. The on-device score sits at its foot. */
+.brief__head { display: flex; align-items: center; justify-content: space-between; gap: var(--s3); }
+.brief__item { align-items: flex-start; gap: var(--s3); }
+.brief__icon { color: var(--brass); margin-top: 2px; }
+.brief__stamp {
+  margin: var(--s2) 0 0;
+  font-size: var(--t-micro); line-height: var(--lh-micro);
+  color: var(--ink-soft);
+}
+.brief__score .score { margin-top: var(--s3); }
+.brief__ask { width: 100%; text-align: left; }
+
+/* ═══ FIRST RUN ═══════════════════════════════════════════════════════════ */
+/* One question per screen. Full-bleed, on the ground colour, so it reads as
+   the app beginning rather than a sheet over something else. */
+.onboard {
+  position: fixed; inset: 0; z-index: 90;
+  background: var(--ground);
+  overflow-y: auto; overflow-x: hidden;
+  padding: calc(env(safe-area-inset-top) + var(--s3)) var(--gutter) calc(env(safe-area-inset-bottom) + var(--s4));
+}
+.onboard__frame { max-width: var(--measure); min-height: 100%; margin: 0 auto; display: flex; flex-direction: column; }
+.onboard__top { display: flex; align-items: center; justify-content: space-between; gap: var(--s3); min-height: 44px; }
+.onboard__top > .linkbtn:first-child:not([style*="none"]) { margin-right: auto; }
+.onboard__dots { display: flex; gap: 6px; margin: 0 auto; }
+.onboard__dot { width: 6px; height: 6px; border-radius: 50%; background: var(--rule-strong); transition: background 200ms ease, transform 200ms ease; }
+.onboard__dot.is-on { background: var(--brass); }
+.onboard__body { flex: 1; padding-top: var(--s6); }
+.onboard__q { display: grid; gap: var(--s4); animation: onboard-in 320ms var(--spring-soft, ease) both; }
+.onboard__input { font-size: var(--t-lead); min-height: 52px; }
+.onboard__opts { display: grid; gap: var(--s2); }
+.onboard__opts--grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.onboard__opt {
+  display: grid; gap: 2px; text-align: left;
+  min-height: 56px; padding: var(--s3) var(--s4);
+  border-radius: var(--r-control); border: 1px solid var(--rule-strong);
+  background: var(--sheet); color: var(--ink);
+  transition: border-color 160ms ease, background 160ms ease, transform 120ms ease;
+}
+.onboard__opt:active { transform: scale(0.985); }
+.onboard__opt[aria-pressed="true"] {
+  border-color: var(--brass);
+  background: color-mix(in srgb, var(--brass) 12%, var(--sheet));
+}
+.onboard__optt { font-size: var(--t-body); font-weight: 600; }
+.onboard__optd { font-size: var(--t-micro); line-height: var(--lh-micro); color: var(--ink-soft); }
+.onboard__foot { padding-top: var(--s5); }
+@keyframes onboard-in { from { opacity: 0; transform: translateY(10px); } }
+@media (prefers-reduced-motion: reduce) { .onboard__q { animation: none; } }
 
 /* The mark: an aperture, not a robot. Two rings around a lit core, with a
    single point travelling the outer ring — the visual idea is something
    LOOKING at your position, which is exactly what the feature does. */
-.aimark { flex: none; width: 56px; height: 56px; display: block; margin-top: -2px; }
+.aimark { flex: none; width: 46px; height: 46px; display: block; margin-top: -2px; }
 .aimark svg { width: 100%; height: 100%; overflow: visible; }
 .aimark__ring {
   fill: none; stroke: var(--ai-gold); stroke-width: 1.25; opacity: 0.55;
@@ -688,13 +1048,18 @@ button.row:active, label.row:active { background: var(--wash); transform: scale(
 
 .bsheet {
   width: 100%; max-width: 34rem;
-  max-height: 88vh; overflow-y: auto;
+  /* A sheet scrolls DOWN and never sideways. Without the second axis named,
+     `overflow-y: auto` alone makes the x axis compute to auto as well, so one
+     child too wide for the phone turns the whole panel into a pannable canvas
+     and its edges walk off the screen. */
+  max-height: 88vh; overflow-y: auto; overflow-x: hidden;
   background: var(--sheet);
   border-radius: var(--r-sheet) var(--r-sheet) 0 0;
   box-shadow: var(--lift-high);
   padding-bottom: calc(var(--s5) + env(safe-area-inset-bottom));
   animation: sheet-up 460ms var(--spring-soft);
 }
+
 .bsheet--top {
   border-radius: 0 0 var(--r-sheet) var(--r-sheet);
   margin-top: env(safe-area-inset-top);
@@ -714,7 +1079,47 @@ button.row:active, label.row:active { background: var(--wash); transform: scale(
 .bsheet .form { padding-inline: var(--s5); }
 .f { display: grid; gap: 6px; }
 .f__label { font-size: var(--t-micro); font-weight: 600; color: var(--ink-soft); }
+.f__label-row { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s2); }
+.type-picker__selected { font-size: var(--t-micro); font-weight: 600; color: var(--brass); }
 .f__row { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s3); }
+
+/* Custom Holding Type Chip Picker (replaces legacy native select) */
+.type-chips {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  padding: 2px 0 4px;
+}
+.type-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  /* 44px is the touch floor the polish audit enforces. The chip was 42px, which the
+     audit never saw because chips only ever appeared inside bottom sheets it does not
+     open — putting one on a scanned route is what surfaced it. Padding alone cannot
+     guarantee the height once the font scales, so the floor is stated directly. */
+  min-height: 44px;
+  padding: 8px 13px;
+  border-radius: var(--r-control);
+  font-size: var(--t-micro);
+  font-weight: 500;
+  color: var(--ink-soft);
+  background: var(--wash);
+  border: 1px solid var(--rule);
+  cursor: pointer;
+  transition: all var(--fast) var(--ease);
+  -webkit-tap-highlight-color: transparent;
+}
+.type-chip:active { transform: scale(0.97); }
+.type-chip--active {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--jade) 14%, var(--sheet));
+  border-color: var(--brass);
+  font-weight: 600;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.12);
+}
+.type-chip__mark {
+  font-size: 11px;
+  color: var(--brass);
+  font-weight: 700;
+  line-height: 1;
+}
 
 .typeahead { list-style: none; margin: 0; padding: 0; border: 1px solid var(--rule); border-radius: var(--r-control); overflow: hidden; background: var(--sheet-raised); }
 .typeahead__item { display: block; width: 100%; text-align: left; padding: var(--s3) var(--s4); font-size: var(--t-small); }
@@ -735,24 +1140,44 @@ button.row:active, label.row:active { background: var(--wash); transform: scale(
 
 /* Stands in for a logo. Generated from the symbol, so it is always present and
    always the same colour for the same holding — no broken image, ever. */
-.mark { flex: none; display: grid; place-items: center; width: 34px; height: 34px;
-        border-radius: 10px; font-size: var(--t-micro); font-weight: 600;
+.mark { flex: none; display: grid; place-items: center; width: 40px; height: 40px;
+        position: relative; overflow: hidden;
+        border-radius: 50%; font-size: var(--t-micro); font-weight: 600;
         letter-spacing: 0.02em; font-family: var(--ui);
         color: hsl(var(--mark-h) 42% 30%);
         background: hsl(var(--mark-h) 38% 88%);
-        box-shadow: inset 0 0 0 1px hsl(var(--mark-h) 30% 78%); }
+        box-shadow: inset 0 0 0 1px hsl(var(--mark-h) 30% 78%), var(--card-cast); }
+/* The detail screen's mark leads the page rather than a row, so it is sized to
+   the headline beside it. */
+.mark--lg { width: 64px; height: 64px; font-size: var(--t-lead); }
 :root[data-theme="dark"] .mark {
         color: hsl(var(--mark-h) 55% 78%);
         background: hsl(var(--mark-h) 30% 20%);
-        box-shadow: inset 0 0 0 1px hsl(var(--mark-h) 28% 30%); }
+        box-shadow: inset 0 0 0 1px hsl(var(--mark-h) 28% 30%), var(--card-cast); }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) .mark {
         color: hsl(var(--mark-h) 55% 78%);
         background: hsl(var(--mark-h) 30% 20%);
-        box-shadow: inset 0 0 0 1px hsl(var(--mark-h) 28% 30%); }
+        box-shadow: inset 0 0 0 1px hsl(var(--mark-h) 28% 30%), var(--card-cast); }
 }
 
-.bsheet__foot { display: flex; justify-content: flex-end; gap: var(--s3); padding-top: var(--s4); }
+/* The real logo, laid OVER the monogram rather than instead of it.
+
+   It is transparent until its own load event fires, so a symbol with no logo, a 404,
+   or no network at all simply leaves the monogram showing — there is no state in which
+   a broken image can appear. That was the stated reason this app had no logos at all;
+   layering answers it without giving up the mark. */
+.mark__img {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  object-fit: contain; padding: 4px;
+  background: var(--sheet-raised);
+  opacity: 0; transition: opacity 180ms var(--ease);
+}
+.mark__img[data-ok="1"] { opacity: 1; }
+@media (prefers-reduced-motion: reduce) { .mark__img { transition: none; } }
+
+
+.bsheet__foot { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--s3); padding-top: var(--s4); }
 .bsheet__foot--split { justify-content: space-between; align-items: center; }
 .bsheet__footactions { display: flex; gap: var(--s3); }
 
@@ -800,10 +1225,12 @@ button.row:active, label.row:active { background: var(--wash); transform: scale(
    The browser snapshots both states and cross-fades on the compositor. The
    corpus figure is the one element that exists across surfaces, so it gets a
    name and MORPHS between them rather than fading out and back in. */
-::view-transition-old(root),
-::view-transition-new(root) {
-  animation-duration: 240ms;
-  animation-timing-function: var(--ease);
+::view-transition-old(root) { animation: corpus-view-out 90ms ease both; }
+::view-transition-new(root) { animation: corpus-view-in 190ms var(--ease) both; }
+@keyframes corpus-view-out { to { opacity: 0; } }
+@keyframes corpus-view-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 .figure { view-transition-name: corpus-figure; }
 .wordmark { view-transition-name: corpus-mark; }
@@ -867,45 +1294,24 @@ button.row:active, label.row:active { background: var(--wash); transform: scale(
 }
 .btn:disabled:active { transform: none; }
 
-/* ═══ COLLAPSING TITLE ════════════════════════════════════════════════════
-   Two identities share one slot. At rest the bar shows the wordmark; once the
-   hero figure has scrolled away the figure takes its place, so the number the
-   app exists to show is never off screen. Both are stacked in a grid cell so
-   the swap costs no layout and cannot shift anything beside it. */
+/* ═══ APP BAR IDENTITY ═══════════════════════════════════════════════════ */
 .titleslot {
   display: grid;
-  grid-template-areas: 'slot';
   align-items: center;
   justify-items: start;
   min-height: 44px;
   text-align: left;
 }
 .titleslot > * {
-  grid-area: slot;
-  transition: opacity 260ms var(--ease), transform 340ms var(--spring);
+  transition: opacity 190ms var(--ease), transform 230ms var(--ease);
 }
 .titleslot__mark {
   font-family: var(--display);
-  font-size: 21px; font-weight: 600;
+  font-size: clamp(18px, 4.5vw, 21px); font-weight: 600;
   font-variation-settings: 'opsz' 30;
   letter-spacing: -0.015em;
-  color: var(--ink);
+  color: var(--skin);
 }
-.titleslot__figure {
-  font-family: var(--display);
-  font-size: 19px; font-weight: 600;
-  font-variation-settings: 'opsz' 30; font-variant-numeric: tabular-nums lining-nums;
-  letter-spacing: -0.02em;
-  color: var(--ink);
-  opacity: 0;
-  transform: translateY(8px);
-  pointer-events: none;
-}
-/* is-collapsed is set only when the hero figure itself has left the viewport,
-   not merely when the page has scrolled — so a short screen with no hero never
-   swaps to a figure that is still visible behind it. */
-.appbar.is-collapsed .titleslot__mark   { opacity: 0; transform: translateY(-8px); }
-.appbar.is-collapsed .titleslot__figure { opacity: 1; transform: translateY(0); }
 
 @media (prefers-reduced-motion: reduce) {
   .titleslot > * { transition: opacity 1ms; transform: none !important; }
@@ -942,6 +1348,15 @@ button.row:active, label.row:active { background: var(--wash); transform: scale(
 .syncbar--warn .icon { color: var(--brass); margin-top: 1px; }
 .syncbar__body { display: grid; gap: 2px; flex: 1; min-width: 0; }
 .syncbar__detail { font-size: var(--t-micro); font-weight: 500; color: var(--ink-faint); }
+/* The banner's headline is a disclosure control, so it has to look like text
+   and behave like a button: no chrome, full width, and the whole line tappable
+   rather than a chevron the thumb has to find. */
+.syncbar__toggle {
+  background: none; border: 0; padding: 0; margin: 0;
+  font: inherit; color: inherit; text-align: left; width: 100%;
+  min-height: 44px; display: grid; align-content: center; gap: 2px;
+}
+.syncbar__line { display: flex; align-items: center; justify-content: space-between; gap: var(--s2); }
 .syncbar .linkbtn { flex: none; align-self: flex-start; margin-top: -6px; }
 
 .syncbar__spinner {
@@ -951,7 +1366,223 @@ button.row:active, label.row:active { background: var(--wash); transform: scale(
   border-radius: 999px;
   animation: spin 800ms linear infinite;
 }
-@media (prefers-reduced-motion: reduce) { .syncbar__spinner { animation-duration: 3s; } }
+/* ═══ STATEMENT DIFF RESOLUTION ════════════════════════════════════════════
+   Smart portfolio diff presentation when importing broker statements (Groww,
+   CAMS, Zerodha, etc.). Displays an AI conversational assessment, side-by-side
+   holding deltas, and actionable resolution choices. */
+.diff-sheet {
+  border: 1px solid var(--brass-rule);
+  background: var(--sheet-raised);
+}
+.diff-badges {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s2);
+  margin-bottom: var(--s2);
+}
+.diff-badge {
+  font-size: var(--t-micro);
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--wash);
+  color: var(--brass);
+}
+.diff-badge--broker {
+  background: color-mix(in srgb, var(--brass) 18%, transparent);
+  color: var(--brass-bright);
+}
+.diff-badge--cat {
+  background: color-mix(in srgb, var(--jade) 14%, transparent);
+  color: var(--jade);
+}
+.diff-badge--date {
+  background: var(--ground-sunk);
+  color: var(--ink-faint);
+}
+
+.diff-callout {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s3);
+  padding: var(--s4);
+  background: color-mix(in srgb, var(--brass) 8%, var(--sheet));
+  border: 1px solid var(--brass-rule);
+  border-radius: var(--r-panel);
+  margin: var(--s4) 0;
+}
+.diff-callout__icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--brass) 16%, transparent);
+  color: var(--brass);
+  flex: none;
+}
+.diff-callout__icon .icon {
+  font-size: 20px;
+}
+.diff-callout__content {
+  flex: 1;
+  min-width: 0;
+}
+.diff-callout__title {
+  font-size: var(--t-small);
+  font-weight: 600;
+  color: var(--brass);
+  letter-spacing: 0.01em;
+}
+.diff-callout__text {
+  font-size: var(--t-body);
+  line-height: var(--lh-body);
+  color: var(--ink);
+  margin-top: var(--s1);
+}
+
+.diff-summary-bar {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: var(--s3);
+  padding: var(--s3) var(--s4);
+  background: var(--ground-sunk);
+  border-radius: var(--r-panel);
+  margin-bottom: var(--s4);
+}
+.diff-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.diff-metric__label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-faint);
+  font-weight: 600;
+}
+.diff-metric__val {
+  font-family: var(--display);
+  font-size: var(--t-lead);
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.diff-section {
+  margin-bottom: var(--s4);
+}
+.diff-section__title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: var(--t-small);
+  font-weight: 600;
+  color: var(--ink-soft);
+  padding: var(--s3) 0 var(--s2);
+  border-bottom: 1px solid var(--rule);
+}
+
+.diff-item {
+  padding: var(--s3) 0;
+  border-bottom: 1px solid var(--rule);
+}
+.diff-item:last-child {
+  border-bottom: none;
+}
+.diff-item--new {
+  background: color-mix(in srgb, var(--jade) 4%, transparent);
+  padding: var(--s3);
+  border-radius: var(--r-panel);
+  margin-top: var(--s2);
+}
+.diff-item__top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s3);
+}
+.diff-item__name {
+  font-size: var(--t-body);
+  font-weight: 600;
+  color: var(--ink);
+  flex: 1;
+}
+.diff-item__folio {
+  font-size: var(--t-micro);
+  color: var(--ink-faint);
+  flex: none;
+}
+.diff-item__grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--s4);
+  margin-top: var(--s2);
+}
+.diff-col {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.diff-col__label {
+  font-size: 11px;
+  color: var(--ink-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.diff-col__flow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.diff-val {
+  font-size: var(--t-small);
+  font-weight: 600;
+}
+.diff-val--old {
+  color: var(--ink-faint);
+  text-decoration: line-through;
+  opacity: 0.75;
+}
+.diff-val--new {
+  color: var(--ink);
+  font-weight: 700;
+}
+.diff-arrow {
+  font-size: 14px;
+  color: var(--brass);
+  flex: none;
+}
+.diff-delta {
+  font-size: var(--t-micro);
+  font-weight: 600;
+}
+
+.diff-note {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s2);
+  padding: var(--s3);
+  background: var(--wash);
+  border-radius: var(--r-control);
+  font-size: var(--t-small);
+  line-height: var(--lh-small);
+  margin: var(--s3) 0;
+}
+
+.diff-actions {
+  display: grid;
+  gap: var(--s3);
+  padding-top: var(--s3);
+}
+.diff-subactions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: var(--s2);
+}
 
 /* ═══ WIDER SCREENS ═══════════════════════════════════════════════════════
    A phone layout stretched across a tablet reads as unfinished rather than
@@ -959,20 +1590,34 @@ button.row:active, label.row:active { background: var(--wash); transform: scale(
    full-bleed elements — the dock and the chart — back into that column so the
    page reads as one object instead of a strip floating in a field. */
 @media (min-width: 600px) {
-  .dock {
-    /* Anchored to the content column, with a hairline on the sides so it reads
-       as a deliberate bar rather than a stretched phone control. */
-    left: 50%; transform: translateX(-50%);
-    width: min(100%, 44rem);
-    border-radius: var(--r-sheet) var(--r-sheet) 0 0;
-    box-shadow: inset 0 1px 0 var(--rule), 0 -8px 32px color-mix(in srgb, var(--ink) 6%, transparent);
+  :root {
+    --t-figure: clamp(36px, 8vw, 56px);
   }
-  .dock__item { padding: 12px 4px 14px; }
+  body {
+    padding-bottom: calc(100px + env(safe-area-inset-bottom));
+  }
+  .dock {
+    left: 50%; right: auto; transform: translateX(-50%);
+    width: min(calc(100% - 48px), 44rem);
+    min-height: 60px;
+    bottom: calc(20px + env(safe-area-inset-bottom));
+    border-radius: 9999px;
+    box-shadow: inset 0 1px 0 var(--rule), var(--card-cast);
+  }
+  .dock__item { min-height: 60px; padding: 10px 4px 12px; }
+  .dock__item .icon { font-size: 22px; }
 
   /* The chart bleeds to the screen edge on a phone because the screen IS the
      column. On a tablet it must bleed to the COLUMN edge instead. */
   .series { margin-inline: 0; border-radius: var(--r-panel); }
-  .series__canvas { height: 200px; }
+  .series__canvas { height: 180px; }
+  .series__empty { height: 180px; }
+  .series .seg { margin: var(--s3) var(--gutter) 0; }
+  /* The panel stops being full-bleed here, so its own left edge already IS the
+     page's. Keeping the gutter would push the caption 20px in from every other
+     line of text on the screen — which the alignment audit measures. */
+  .series__foot { margin: var(--s3) 0 0; }
+  .series__empty { margin-inline: 0; }
 
   .hero { padding-top: var(--s7); }
   .surface { padding-inline: var(--s5); }
@@ -983,5 +1628,5 @@ button.row:active, label.row:active { background: var(--wash); transform: scale(
    costs nothing and shortens the scroll. */
 @media (min-width: 900px) {
   main.surface { max-width: 56rem; }
-  .dock { width: min(100%, 56rem); }
+  .dock { width: min(calc(100% - 48px), 56rem); }
 }

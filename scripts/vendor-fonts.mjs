@@ -13,6 +13,7 @@
 import { writeFileSync, readFileSync, mkdirSync, existsSync, readdirSync, unlinkSync, copyFileSync } from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
+import os from 'node:os';
 
 const UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0 Safari/537.36';
 const ICONS = process.argv.includes('--icons');
@@ -83,8 +84,13 @@ if (ICONS) {
     for (const u of [...new Set([...text.matchAll(/url\((https:\/\/fonts\.gstatic\.com[^)]+)\)/g)].map(m => m[1]))]) {
       const bin = Buffer.from(await (await fetch(u, { headers: { 'User-Agent': UA } })).arrayBuffer());
       const name = 'icons.woff2';
-      writeFileSync(path.join('/tmp', name), bin);
-      staged.push([name, path.join('/tmp', name)]);
+      // os.tmpdir(), not '/tmp': this project is developed on Windows, where a bare
+      // '/tmp' is drive-relative. When it does not resolve, writeFileSync throws inside
+      // the try below and the failure is reported as "icon fetch failed" — which is the
+      // wrong diagnosis and sends you looking at the network.
+      const tmp = path.join(os.tmpdir(), name);
+      writeFileSync(tmp, bin);
+      staged.push([name, tmp]);
       text = text.split(u).join(`fonts/${name}`);
       console.log(`  ${name.padEnd(44)} ${(bin.length/1024).toFixed(0)} KB`);
     }

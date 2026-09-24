@@ -14,27 +14,29 @@ d.setAttribute("data-theme",(t==="light"||t==="dark")?t:"dark");})();/* Deep gre
 
 <body x-data="appData" x-cloak>
 
+<!-- Pull down anywhere to sync every price at once. Deliberately OUTSIDE the
+     Alpine-bound tree for its drag: the gesture moves this element with two
+     inline styles in a rAF, and never writes reactive state while the finger
+     is down. A previous version did, one write per pixel, and froze the phone.
+     Only the label and the spinner change once the sync commits. -->
+<div id="ptr" class="ptr" aria-hidden="true">
+  <span class="ptr__spin"></span>
+  <span class="ptr__label">Pull to sync</span>
+</div>
+
 <!-- ─────────────────────────────────────────────────────────────────────────
-     App bar. A wordmark and two affordances. No eyebrow, no breadcrumb, no
-     chrome that repeats what the screen already says.
+     App bar. The page label and avatar mirror the approved Corpus shell; the
+     avatar also keeps notifications one tap away.
      ───────────────────────────────────────────────────────────────────── -->
 <header class="appbar">
   <div class="appbar__inner surface">
-    <!-- The bar carries two identities in the same slot: the wordmark at rest,
-         and the corpus figure once you have scrolled past it. Scrolling never
-         costs you sight of the one number the app exists to show. -->
     <button class="titleslot" @click="activePage = 'home'" aria-label="Go to overview">
       <span class="titleslot__mark">Corpus</span>
-      <span class="titleslot__figure tnum" x-show="activePage === 'home' && hasAnyPortfolioData"
-            x-text="formatCurrency(netWorthTotal)" aria-hidden="true"></span>
     </button>
-    <div class="appbar__actions">
-      <button class="iconbtn" @click="fetchAllPrices()" :disabled="navFetchState === 'fetching'"
-              :aria-busy="navFetchState === 'fetching'" aria-label="Sync prices" id="syncButton">
-        <span class="icon" :class="navFetchState === 'fetching' ? 'is-spinning' : ''">sync</span>
-      </button>
-      <button class="iconbtn" @click="showNotifications = !showNotifications" aria-label="Notifications">
-        <span class="icon" x-text="notificationsList.length ? 'notifications_active' : 'notifications'"></span>
+    <div class="appbar__context">
+      <span class="appbar__label" x-text="pageLabel"></span>
+      <button class="avatarbtn" @click="showNotifications = !showNotifications" aria-label="Notifications">
+        <span class="avatarbtn__face" aria-hidden="true"><span class="avatarbtn__glyph"></span></span>
         <span class="iconbtn__dot" x-show="notificationsList.length" x-cloak></span>
       </button>
     </div>
@@ -56,24 +58,41 @@ d.setAttribute("data-theme",(t==="light"||t==="dark")?t:"dark");})();/* Deep gre
                      x-effect="$el.locales='en-IN';
                                $el.format={style:'currency',currency:'INR',maximumFractionDigits:0};
                                $el.update && $el.update(netWorthTotal)"></number-flow>
-        <!-- Two distinct states. With history there is a percentage and a
-             timeframe; without it there is no change to report, and appending a
-             timeframe to "Tracking" produced "Tracking past month". -->
-        <p class="hero__delta" :class="nwChartChangePct === null || nwChartChangePct >= 0 ? 'up' : 'down'">
-          <template x-if="nwChartChangePct !== null">
-            <span class="hero__delta-in">
-              <span class="icon icon--sm" x-text="nwChartChangePct >= 0 ? 'trending_up' : 'trending_down'"></span>
-              <span x-text="nwChartChangeLabel"></span>
-              <span class="muted" style="font-weight:500" x-text="rangeLabel"></span>
-            </span>
-          </template>
-          <template x-if="nwChartChangePct === null">
-            <span class="hero__delta-in muted">
-              <span class="icon icon--sm">show_chart</span>
-              <span>Tracking from today — a trend needs a few days of history</span>
-            </span>
-          </template>
-        </p>
+        <!-- CORPUS HISTORY. With two or more observations
+             there is a change to report; without them there is not, and
+             appending a timeframe to "Tracking" produced "Tracking past month".
+
+             The change is stated in RUPEES first. It is the difference between
+             two totals, and a total moves both because the market moved and
+             because money was paid in — nothing in this app records the second,
+             so this figure cannot be called a return. Leading with a percentage
+             is how the hero came to read "+98764.50% all time" about a portfolio
+             that had simply been funded. -->
+          <div>
+            <p class="hero__delta" :class="nwRangeChange === null || nwRangeChange.up ? 'up' : 'down'">
+              <template x-if="nwRangeChange !== null">
+                <span class="hero__delta-in">
+                  <span class="icon icon--sm" x-text="nwRangeChange.up ? 'trending_up' : 'trending_down'"></span>
+                  <span x-text="nwRangeChange.deltaLabel"></span>
+                  <!-- Suppressed on a zero or negative baseline, and on anything past
+                       1000% — at that magnitude it is contributions, not performance. -->
+                  <template x-if="nwRangeChange.pct !== null">
+                    <span x-text="'(' + nwRangeChange.pctLabel + ')'"></span>
+                  </template>
+                  <span class="muted" style="font-weight:500" x-text="'change in total corpus · ' + rangeLabel"></span>
+                </span>
+              </template>
+              <template x-if="nwRangeChange === null">
+                <span class="hero__delta-in muted">
+                  <span class="icon icon--sm">show_chart</span>
+                  <span>Tracking from today — a trend needs a few days of history</span>
+                </span>
+              </template>
+            </p>
+            <template x-if="nwRangeChange !== null">
+              <p class="hero__caveat">Includes money added or withdrawn, not investment return.</p>
+            </template>
+          </div>
         <!-- What changed while you were away. Shown only when there IS an
              answer — a permanent "Up ₹0 since a moment ago" would be noise. -->
         <template x-if="sinceLastLook">
@@ -95,31 +114,103 @@ d.setAttribute("data-theme",(t==="light"||t==="dark")?t:"dark");})();/* Deep gre
         <h1 class="headline">Start your corpus</h1>
         <p class="lead" style="margin-top:var(--s3)">Add a holding, or import a statement and let Corpus read it for you.</p>
         <div class="hero__cta">
-          <button class="btn btn--primary" @click="addingInv = true">Add a holding</button>
+          <button class="btn btn--primary" @click="openAddHolding('all')">Add a holding</button>
           <button class="btn btn--quiet" @click="activePage = 'import'">Import a statement</button>
         </div>
       </div>
     </template>
   </section>
 
-  <!-- The series. Full-bleed under the figure, no frame. -->
+  <!-- The series. Full-bleed under the figure, no frame.
+
+       Every point drawn here is a valuation the app COMPUTED while it was open,
+       stamped with the local day it computed it. There is no backfill: a day the
+       app never ran has no point, and the line joins across the gap rather than
+       inventing what the money was worth that day. -->
   <template x-if="hasAnyPortfolioData">
     <section class="series">
-      <div id="nwChart" class="series__canvas"></div>
-      <div class="seg" role="tablist" aria-label="Chart range">
-        <template x-for="r in ['1M','3M','6M','1Y','ALL']" :key="r">
+      <div id="nwChart" class="series__canvas" x-show="nwChartSeries.length"></div>
+
+      <!-- Two different silences, said differently. "Nothing has ever been
+           recorded" and "nothing was recorded in THESE dates" look identical on
+           an empty chart and mean completely different things — and the second
+           one used to be hidden entirely, because an empty window silently fell
+           back to drawing the whole history. -->
+      <template x-if="!nwHasObservations">
+        <p class="series__empty">No history yet — today's value becomes the first point.</p>
+      </template>
+      <template x-if="nwRangeEmpty">
+        <p class="series__empty">No observations in this period.</p>
+      </template>
+
+      <!-- With no time axis and no price scale, this line shows the real span
+           at rest and the exact dated observation on touch. -->
+      <div class="series__foot">
+        <p class="series__stamp" x-text="nwChartData.length ? (nwHoverLabel || nwRangeSpanLabel) : ''"></p>
+      </div>
+
+      <div class="seg seg--range" role="tablist" aria-label="Chart range">
+        <template x-for="r in ['1W','1M','3M','6M','1Y','ALL']" :key="r">
           <button class="seg__item" role="tab" :aria-selected="nwChartRange === r"
-                  @click="nwChartRange = r; renderNwChart()" x-text="r"></button>
+                  @click="nwChartRange = r; nwHoverLabel = ''; renderNwChart()" x-text="r"></button>
         </template>
       </div>
     </section>
   </template>
 
-  <!-- What needs you. Only rendered when something actually does — an empty
-       attention list is noise, so it disappears rather than saying "all clear". -->
-  <template x-if="attentionItems.length">
+  <!-- Allocation. Each real bucket gets its own card; empty buckets stay absent. -->
+  <template x-if="hasAnyPortfolioData">
+    <section class="allocation-section">
+      <h2 class="section-label">Allocation</h2>
+      <div class="card-list">
+        <template x-for="k in allocationRows" :key="k.key">
+          <button class="sheet row card-row alloc" @click="invFilter = k.filter || 'all'; activePage = k.page || 'investments'" data-holding-row>
+            <span class="row__label"><span class="row__name" x-text="k.label"></span></span>
+            <span class="row__figures">
+              <span class="row__value tnum" x-text="formatCurrency(k.value)"></span>
+              <template x-if="k.pnlPct !== null">
+                <span class="row__delta tnum" :class="k.pnlPct >= 0 ? 'up' : 'down'"
+                      x-text="(k.pnlPct >= 0 ? '+' : '') + k.pnlPct.toFixed(2) + '%'"></span>
+              </template>
+            </span>
+          </button>
+        </template>
+      </div>
+    </section>
+  </template>
+
+  <!-- Coming up. This card carries BOTH the dated movements and the things that
+       need a decision, because splitting them produced two lists that repeated
+       each other — a due SIP appeared in each. They are different in kind, not
+       in subject: `upcomingEvents` is money that moves on its own, and
+       `attentionItems` is money that will NOT move unless you act. The divider
+       between them is the whole distinction.
+
+       Deleting the second half would be the tempting simplification and would
+       be wrong: nothing in this app is ever bought automatically, so an
+       unconfirmed SIP silently does not happen, and this is the only place on
+       the dashboard that says so. -->
+  <template x-if="upcomingEvents.length || attentionItems.length">
     <section class="sheet">
-      <h2 class="sheet__head sheet__title">Needs you</h2>
+      <div class="sheet__head"><h2 class="sheet__title">Coming up</h2></div>
+
+      <template x-for="e in upcomingEvents" :key="e.id">
+        <div class="row">
+          <span class="row__label">
+            <span class="row__name" x-text="e.title"></span>
+            <span class="row__meta" x-text="e.when"></span>
+          </span>
+          <span class="row__figures">
+            <span class="row__value tnum" :class="e.direction === 'out' ? 'down' : ''"
+                  x-text="(e.direction === 'out' ? '−' : '+') + formatCurrency(e.amount)"></span>
+          </span>
+        </div>
+      </template>
+
+      <template x-if="upcomingEvents.length && attentionItems.length">
+        <div class="rule rule--brass"></div>
+      </template>
+
       <template x-for="a in attentionItems" :key="a.id">
         <button class="row attention" @click="activePage = a.page">
           <span class="row__label">
@@ -132,47 +223,11 @@ d.setAttribute("data-theme",(t==="light"||t==="dark")?t:"dark");})();/* Deep gre
     </section>
   </template>
 
-  <!-- Allocation. Rows on one sheet, separated by hairlines. The percentage is
-       a rule beneath the name rather than a bar chart — it reads at a glance
-       and costs no vertical space. -->
-  <template x-if="hasAnyPortfolioData">
-    <section class="sheet">
-      <h2 class="sheet__head sheet__title">Holdings</h2>
-      <template x-for="k in allocationRows" :key="k.key">
-        <button class="row alloc" @click="invFilter = k.filter || 'all'; activePage = 'investments'" data-holding-row>
-          <span class="row__label">
-            <span class="row__name" x-text="k.label"></span>
-            <span class="alloc__bar" :style="`--pct:${k.pct}%`"></span>
-          </span>
-          <span class="row__figures">
-            <span class="row__value tnum" x-text="formatCurrency(k.value)"></span>
-            <template x-if="k.pnlPct !== null">
-              <span class="row__delta tnum" :class="k.pnlPct >= 0 ? 'up' : 'down'"
-                    x-text="(k.pnlPct >= 0 ? '+' : '') + k.pnlPct.toFixed(2) + '%'"></span>
-            </template>
-          </span>
-        </button>
-      </template>
-      <div class="rule rule--brass"></div>
-      <div class="row row--total">
-        <span class="row__name">Total</span>
-        <span class="row__value tnum figure--total" x-text="formatCurrency(totalAssets)"></span>
-      </div>
-    </section>
-  </template>
-
 </main>
 
 <!-- ═══════════ PORTFOLIO / PLANNING / INSIGHTS — built next ═══════════ -->
 <!-- ═══════════ HOLDINGS ═══════════ -->
 <main x-show="activePage === 'investments'" x-cloak class="surface stack">
-
-  <section class="pagehead">
-    <h1 class="headline">Holdings</h1>
-    <p class="stamp" :class="portfolioFreshness.stale ? 'stamp--stale' : ''">
-      <span class="stamp__dot"></span><span x-text="portfolioFreshness.label"></span>
-    </p>
-  </section>
 
   <!-- The result of the last sync, stated plainly. A sync that updated 3 of 5
        holdings must LOOK like one; reporting "done" and moving on is the
@@ -186,14 +241,24 @@ d.setAttribute("data-theme",(t==="light"||t==="dark")?t:"dark");})();/* Deep gre
     </section>
   </template>
 
+  <!-- One line at rest. This used to stack a wrapping headline, a wrapping
+       fund name and a standing sentence of reassurance — about a third of the
+       screen, every time, to report one slow request. The detail is still
+       there, one tap away, because the name of the holding that failed is the
+       only part worth reading twice. -->
   <template x-if="navFetchState !== 'fetching' && navFetchProgress.failed > 0">
     <section class="syncbar syncbar--warn" aria-live="polite">
       <span class="icon icon--sm">warning</span>
-      <span class="syncbar__body">
-        <span x-text="`${navFetchProgress.updated} refreshed, ${navFetchProgress.failed} could not be reached`"></span>
-        <span class="syncbar__detail" x-text="navFetchError"></span>
-        <span class="syncbar__detail">The figures below keep their last verified value.</span>
-      </span>
+      <button class="syncbar__body syncbar__toggle" @click="syncDetailOpen = !syncDetailOpen"
+              :aria-expanded="syncDetailOpen ? 'true' : 'false'">
+        <span class="syncbar__line">
+          <span x-text="`${navFetchProgress.updated} updated · ${navFetchProgress.failed} need attention`"></span>
+          <span class="icon icon--sm muted" x-text="syncDetailOpen ? 'expand_less' : 'expand_more'"></span>
+        </span>
+        <template x-if="syncDetailOpen">
+          <span class="syncbar__detail" x-text="navFetchError + ' · the figures below keep their last verified value.'"></span>
+        </template>
+      </button>
       <button class="linkbtn" @click="fetchAllPrices()">Retry</button>
     </section>
   </template>
@@ -213,23 +278,35 @@ d.setAttribute("data-theme",(t==="light"||t==="dark")?t:"dark");})();/* Deep gre
       <h2 class="title" x-text="investments.length ? 'Nothing in this group' : 'No holdings yet'"></h2>
       <p class="lead" x-text="investments.length ? 'Try another filter, or add a holding to this group.' : 'Add your first holding, or import a statement and Corpus will read it.'"></p>
       <div class="hero__cta">
-        <button class="btn btn--primary" @click="addingInv = true">Add a holding</button>
+        <button class="btn btn--primary" @click="openAddHolding(invFilter)">Add a holding</button>
         <button class="btn btn--quiet" @click="activePage = 'import'">Import a statement</button>
       </div>
     </section>
   </template>
 
-  <!-- One sheet per asset class. Grouping by what a thing IS beats one long
-       undifferentiated list, and each group can carry its own subtotal. -->
-  <template x-for="g in groupedHoldings" :key="g.key">
-    <section class="sheet" data-animate-list x-show="g.items.length">
-      <div class="sheet__head sheet__head--split">
-        <h2 class="sheet__title" x-text="g.label"></h2>
-        <span class="tnum muted" x-text="formatCurrency(g.total)"></span>
-      </div>
-
+  <!-- Indian and US equities live in ONE list, banded by market rather than
+       split across two chips — the split meant "Stocks" showed half your
+       equities and the rest hid behind a chip off the edge of the scroller.
+       Deposits and funds have no market to name, so they sit in the first
+       group with no heading at all. -->
+  <template x-for="g in holdingGroups" :key="g.key">
+  <section class="card-list holdings-list">
+      <template x-if="g.heading">
+        <h2 class="market-label" x-text="g.heading"></h2>
+      </template>
       <template x-for="inv in g.items" :key="inv.id">
-        <button class="row holding" data-holding-row @click="openEditModal(inv)">
+        <button class="sheet row card-row holding holding-card row--marked" data-holding-row @click="openHolding(inv)">
+          <!-- Same mark as the search list: monogram underneath, real logo over it
+               once (and only once) it has loaded. Every holding gets one, including
+               deposits — a list where some rows are indented and some are not reads
+               worse than one with a consistent left edge. -->
+          <span class="mark" :style="`--mark-h:${symbolMark(inv.ticker || inv.name).hue}`">
+            <span x-text="symbolMark(inv.ticker || inv.name).text"></span>
+            <template x-if="logoUrl(inv)">
+              <img class="mark__img" :src="logoUrl(inv)" alt="" loading="lazy"
+                   @load="$el.dataset.ok = '1'">
+            </template>
+          </span>
           <span class="row__label">
             <span class="row__name" x-text="inv.name"></span>
             <span class="row__meta">
@@ -250,12 +327,12 @@ d.setAttribute("data-theme",(t==="light"||t==="dark")?t:"dark");})();/* Deep gre
           </span>
         </button>
       </template>
-    </section>
+  </section>
   </template>
 
   <template x-if="visibleHoldings.length">
     <div class="actions">
-      <button class="btn btn--primary btn--block" @click="addingInv = true">
+      <button class="btn btn--primary btn--block" @click="openAddHolding(invFilter)">
         <span class="icon icon--sm">add</span> Add a holding
       </button>
       <button class="btn btn--quiet btn--block" @click="activePage = 'import'">
@@ -264,116 +341,149 @@ d.setAttribute("data-theme",(t==="light"||t==="dark")?t:"dark");})();/* Deep gre
     </div>
   </template>
 </main>
-<!-- ═══════════ PLANNING ═══════════ -->
-<main x-show="activePage === 'cashflow'" x-cloak class="surface stack">
 
-  <section class="pagehead">
-    <h1 class="headline">Planning</h1>
-    <p class="lead" style="margin-top:var(--s2)" x-text="'What comes in, what goes out, and what it is for.'"></p>
-  </section>
+<!-- ═══════════ HOLDING DETAIL ═══════════
+     Tapping a holding used to open the edit sheet, which answered "change
+     this" when the question is almost always "what is this doing". Editing
+     now lives at the bottom of this screen, one step further from the thumb.
 
-  <!-- Monthly position. The single number here is surplus, because that is the
-       one a person can act on — income and outgoings are the workings. -->
-  <section class="sheet">
-    <div class="sheet__head"><h2 class="sheet__title">This month</h2></div>
-    <div class="figures">
-      <div class="figures__main">
-        <p class="label">Left over</p>
-        <p class="figure figure--sm tnum" :class="monthlySurplus >= 0 ? 'up' : 'down'"
-           x-text="formatCurrency(monthlySurplus)"></p>
-        <p class="row__meta" x-text="totalIncome > 0 ? savingsRate + '% of what you earn' : 'Add your income to see this'"></p>
-      </div>
-      <div class="figures__side">
-        <div><p class="label">In</p><p class="tnum figures__val" x-text="formatCurrency(totalIncome)"></p></div>
-        <div><p class="label">Out</p><p class="tnum figures__val" x-text="formatCurrency(totalExpense)"></p></div>
-        <div><p class="label">Invested</p><p class="tnum figures__val" x-text="formatCurrency(effectiveMonthlySipOutflow)"></p></div>
+     THERE IS NO PRICE CHART HERE, and its absence is deliberate. The app
+     stores one net-worth snapshot per day and no per-instrument series at
+     all, so a chart on this screen would have nothing to plot. Drawing one
+     from the single latest quote would be inventing history. When a series
+     is actually recorded, `chartRangesFor` already says which ranges each
+     instrument may honestly offer. -->
+<main x-show="activePage === 'holding'" x-cloak class="surface stack">
+  <template x-if="detailHolding">
+    <div class="stack">
+      <button class="backlink" @click="goBack()"><span class="icon icon--sm">arrow_back</span> Holdings</button>
+
+      <section class="pagehead">
+        <span class="mark mark--lg" :style="`--mark-h:${symbolMark(detailHolding.ticker || detailHolding.name).hue}`">
+          <span x-text="symbolMark(detailHolding.ticker || detailHolding.name).text"></span>
+          <template x-if="logoUrl(detailHolding)">
+            <img class="mark__img" :src="logoUrl(detailHolding)" alt="" loading="lazy" @load="$el.dataset.ok = '1'">
+          </template>
+        </span>
+        <h1 class="headline" x-text="detailHolding.name"></h1>
+        <p class="row__meta" x-text="detailHolding.type"></p>
+      </section>
+
+      <section class="hero">
+        <p class="label">Your position</p>
+        <p class="figure tnum" x-text="formatCurrency(getInvCurrentValue(detailHolding))"></p>
+        <template x-if="getInvInvestedCost(detailHolding) > 0">
+          <p class="hero__delta" :class="getInvPnL(detailHolding) >= 0 ? 'up' : 'down'">
+            <span class="hero__delta-in">
+              <span x-text="(getInvPnL(detailHolding) >= 0 ? '+' : '') + formatCurrency(getInvPnL(detailHolding))"></span>
+              <span x-text="'(' + (getInvPnLPct(detailHolding) >= 0 ? '+' : '') + Number(getInvPnLPct(detailHolding)).toFixed(2) + '%)'"></span>
+            </span>
+          </p>
+        </template>
+      </section>
+
+      <!-- A deposit accrues rather than moves, so its honest visual is progress
+           toward maturity. This needs no market data at all — only two dates. -->
+      <template x-if="depositProgress">
+        <section class="sheet">
+          <h2 class="sheet__head sheet__title">Tenure</h2>
+          <div class="row">
+            <span class="row__label">
+              <span class="row__name" x-text="depositProgress.days + ' day' + (depositProgress.days === 1 ? '' : 's') + ' to go'"></span>
+              <span class="row__meta">
+                <span x-show="depositProgress.opened" x-text="'Opened ' + depositProgress.opened"></span>
+                <span x-text="'Matures ' + depositProgress.matures"></span>
+              </span>
+            </span>
+          </div>
+          <template x-if="depositProgress.pct !== null">
+            <div class="meter"><div class="meter__fill" :style="`width:${depositProgress.pct}%`"></div></div>
+          </template>
+        </section>
+      </template>
+
+      <template x-if="!depositProgress && chartRangesFor(detailHolding)">
+        <p class="sheet__note">Only the latest quote is stored, so there is no price history to chart yet.</p>
+      </template>
+
+      <section class="sheet facts-list">
+        <h2 class="sheet__head sheet__title">The numbers</h2>
+        <template x-for="f in holdingFacts" :key="f.label">
+          <div class="row">
+            <span class="row__label"><span class="row__name" x-text="f.label"></span></span>
+            <span class="row__value tnum" :class="f.tone || ''" x-text="f.value"></span>
+          </div>
+        </template>
+      </section>
+
+      <!-- Bought off-hours and still waiting for a session to open. Stated
+           rather than hidden: until that open happens the app has no fill
+           price, and the position below deliberately does NOT include it. -->
+      <template x-if="(detailHolding.pendingLots || []).length">
+        <section class="sheet">
+          <h2 class="sheet__head sheet__title">Awaiting the open</h2>
+          <div class="row">
+            <span class="row__label">
+              <span class="row__name" x-text="pendingLotNote(detailHolding)"></span>
+              <span class="row__meta">Your units and average update by themselves once the market opens — you do not need the app running.</span>
+            </span>
+          </div>
+        </section>
+      </template>
+
+      <div class="actions">
+        <template x-if="isUnitPriced(detailHolding.type)">
+          <button class="btn btn--primary btn--block" @click="openAddLot(detailHolding)">
+            <span class="icon icon--sm">add</span> I bought more of this
+          </button>
+        </template>
+        <button class="btn btn--quiet btn--block" @click="openEditModal(detailHolding)">
+          <span class="icon icon--sm">edit</span> Edit
+        </button>
+        <button class="btn btn--ghost btn--block down" @click="deleteInvestment(detailHolding.id)">
+          <span class="icon icon--sm">delete</span> Delete
+        </button>
       </div>
     </div>
-    <div class="rule"></div>
-    <button class="row" @click="activePage = 'income'">
-      <span class="row__label"><span class="row__name">Income and spending</span></span>
-      <span class="icon icon--sm muted">chevron_right</span>
-    </button>
+  </template>
+
+  <!-- Reached with nothing selected: the open holding was deleted, or a restored
+       backup no longer contains the id. Rendering an empty page would strand the
+       user on a screen with no way out but the dock. -->
+  <template x-if="!detailHolding">
+    <div class="stack">
+      <button class="backlink" @click="activePage = 'investments'"><span class="icon icon--sm">arrow_back</span> Holdings</button>
+      <section class="pagehead">
+        <h1 class="headline">Nothing selected</h1>
+        <p class="lead" style="margin-top:var(--s3)">That holding is no longer here. Pick one from the list.</p>
+      </section>
+      <div class="actions">
+        <button class="btn btn--primary btn--block" @click="activePage = 'investments'">Back to holdings</button>
+      </div>
+    </div>
+  </template>
+</main>
+<!-- ═══════════ PLANNING ═══════════ -->
+<main x-show="activePage === 'cashflow'" x-cloak class="surface stack">
+  <section class="planning-summary">
+    <p class="label">Left over each month</p>
+    <p class="figure figure--sm tnum" :class="monthlySurplus >= 0 ? 'up' : 'down'"
+       x-text="formatCurrency(monthlySurplus)"></p>
   </section>
 
-  <!-- Emergency fund: a progress rule, not a donut. -->
-  <template x-if="Number(emergency.efMonthly) > 0">
-    <section class="sheet">
-      <div class="sheet__head sheet__head--split">
-        <h2 class="sheet__title">Emergency fund</h2>
-        <span class="tnum muted" x-text="Number(efProgress).toFixed(0) + '%'"></span>
-      </div>
-      <div class="meter">
-        <div class="meter__fill" :style="`--pct:${Math.min(100, Number(efProgress))}%`"></div>
-      </div>
-      <button class="row" @click="activePage = 'emergency'">
+  <section class="card-list planning-list">
+    <template x-for="a in planningAreas" :key="a.key">
+      <button class="sheet row card-row planning-card" @click="activePage = a.page">
         <span class="row__label">
-          <span class="row__name" x-text="formatCurrency(emergency.efCurrent) + ' of ' + formatCurrency(efRequired)"></span>
-          <span class="row__meta" x-text="efGap > 0 ? formatCurrency(efGap) + ' to go for a ' + emergency.efMonths + '-month buffer' : 'Fully funded'"></span>
+          <span class="row__name" x-text="a.label"></span>
+          <span class="row__value tnum planning-card__figure" x-text="a.figure"></span>
+          <span class="row__meta" x-text="a.detail"></span>
         </span>
         <span class="icon icon--sm muted">chevron_right</span>
       </button>
-    </section>
-  </template>
-
-
-
-<!-- Goals -->
-  <section class="sheet">
-    <div class="sheet__head sheet__head--split">
-      <h2 class="sheet__title">Goals</h2>
-      <button class="linkbtn" @click="activePage = 'goals'">Manage</button>
-    </div>
-    <template x-if="!goalsProgress.length">
-      <p class="sheet__note">Name something you are saving for and Corpus will track the gap.</p>
-    </template>
-    <template x-for="g in goalsProgress.slice(0,3)" :key="g.id">
-      <button class="row" @click="activePage = 'goals'">
-        <span class="row__label">
-          <span class="row__name" x-text="g.name"></span>
-          <span class="meter meter--inline"><span class="meter__fill" :style="`--pct:${Math.min(100, g.pct)}%`"></span></span>
-        </span>
-        <span class="row__figures">
-          <span class="row__value tnum" x-text="formatCurrency(g.current)"></span>
-          <span class="row__delta muted tnum" x-text="'of ' + formatCurrency(g.target)"></span>
-        </span>
-      </button>
     </template>
   </section>
 
-  <!-- Recurring contributions -->
-  <template x-if="activeSipCount">
-    <section class="sheet">
-      <div class="sheet__head sheet__head--split">
-        <h2 class="sheet__title">Recurring</h2>
-        <button class="linkbtn" @click="addingSip = true">Add</button>
-      </div>
-      <template x-for="sip in activeSips.slice(0,4)" :key="sip.id">
-        <button class="row" @click="openEditSipModal(sip)">
-          <span class="row__label">
-            <span class="row__name" x-text="sip.name"></span>
-            <span class="row__meta" x-text="'The ' + ordinal(sip.dayOfMonth) + ' of every month · ' + getSipDaysUntilDebit(sip)"></span>
-          </span>
-          <span class="row__value tnum" x-text="formatCurrency(sip.monthlyAmount)"></span>
-        </button>
-      </template>
-    </section>
-  </template>
-
-  <!-- Tax -->
-  <section class="sheet">
-    <div class="sheet__head"><h2 class="sheet__title">Tax</h2></div>
-    <button class="row" @click="activePage = 'tax'">
-      <span class="row__label">
-        <span class="row__name" x-text="'The ' + optimalRegime.toLowerCase() + ' regime suits you'"></span>
-        <span class="row__meta" x-text="taxSavingByOptimalRegime > 0 ? 'Saves ' + formatCurrency(taxSavingByOptimalRegime) + ' against the other one' : 'Both regimes cost you the same'"></span>
-      </span>
-      <span class="row__figures">
-        <span class="row__value tnum" x-text="formatCurrency(netTaxPayable)"></span>
-        <span class="row__delta muted">payable</span>
-      </span>
-    </button>
-  </section>
 </main>
 <!-- ═══════════ INSIGHTS ═══════════
      Observations about the user's OWN position — concentration, coverage,
@@ -386,73 +496,8 @@ d.setAttribute("data-theme",(t==="light"||t==="dark")?t:"dark");})();/* Deep gre
     <p class="lead" style="margin-top:var(--s2)">What your own numbers say, and what still needs a decision.</p>
   </section>
 
-  <!-- Health. A number needs a sentence, or it is just a score. -->
-  <template x-if="hasAnyPortfolioData">
-    <section class="sheet">
-      <div class="score">
-        <div>
-          <p class="label">Portfolio health</p>
-          <p class="figure figure--sm tnum" x-text="financialHealthScore"></p>
-          <p class="row__meta" x-text="healthLabel"></p>
-        </div>
-        <div class="score__ring" :style="`--pct:${financialHealthScore}`">
-          <span class="icon icon--fill score__glyph">shield_locked</span>
-        </div>
-      </div>
-
-      <template x-if="healthStrengths.length || healthImprovements.length">
-        <div>
-          <div class="rule"></div>
-          <template x-for="(h, i) in healthImprovements.slice(0,3)" :key="'i'+i">
-            <div class="row">
-              <span class="row__label">
-                <span class="row__name" x-text="typeof h === 'string' ? h : (h.title || h.label || '')"></span>
-                <template x-if="typeof h === 'object' && (h.detail || h.description)">
-                  <span class="row__meta" x-text="h.detail || h.description"></span>
-                </template>
-              </span>
-              <span class="icon icon--sm" style="color:var(--brass)">warning</span>
-            </div>
-          </template>
-          <template x-for="(h, i) in healthStrengths.slice(0,2)" :key="'s'+i">
-            <div class="row">
-              <span class="row__label">
-                <span class="row__name" x-text="typeof h === 'string' ? h : (h.title || h.label || '')"></span>
-              </span>
-              <span class="icon icon--sm up">check_circle</span>
-            </div>
-          </template>
-        </div>
-      </template>
-    </section>
-  </template>
-
-  <!-- What is coming. A calendar of money that moves on its own. -->
-  <template x-if="upcomingEvents.length">
-    <section class="sheet">
-      <div class="sheet__head"><h2 class="sheet__title">Coming up</h2></div>
-      <template x-for="e in upcomingEvents" :key="e.id">
-        <div class="row">
-          <span class="row__label">
-            <span class="row__name" x-text="e.title"></span>
-            <span class="row__meta" x-text="e.when"></span>
-          </span>
-          <span class="row__figures">
-            <span class="row__value tnum" :class="e.direction === 'out' ? 'down' : ''"
-                  x-text="(e.direction === 'out' ? '−' : '+') + formatCurrency(e.amount)"></span>
-          </span>
-        </div>
-      </template>
-    </section>
-  </template>
-
   <!-- AI reading. Gated behind the user's own key; framed as a reading of their
        position, never as a recommendation to buy or sell. -->
-  <!-- The ONE panel in a layout that otherwise has none. Everywhere else Corpus
-       is a flat statement; this section is raised, and set in navy and gold
-       rather than the app's green, because it is the only place where something
-       reads your position back to you. The contrast IS the invitation — it
-       looks like a thing to open because nothing else on the screen does. -->
   <section class="sheet sheet--ai">
     <div class="aipanel">
       <span class="aimark" aria-hidden="true">
@@ -472,23 +517,13 @@ d.setAttribute("data-theme",(t==="light"||t==="dark")?t:"dark");})();/* Deep gre
       </span>
       <div class="aipanel__body">
         <h2 class="aipanel__title">Ask an AI to read your position</h2>
-        <button class="linkbtn" x-show="regenWealth.apiKeySet" @click="activePage = 'regen'">Settings</button>
       </div>
     </div>
 
-    <template x-if="!regenWealth.apiKeySet">
-      <div class="aicard">
-        <p class="aipanel__note">Connect your own API key and Corpus will summarise what your holdings imply — concentration, coverage, upcoming maturities. It reads your data; it never recommends what to buy.</p>
-        <button class="btn btn--brass btn--block" @click="activePage = 'regen'">
-          <span class="icon icon--sm">key</span> Connect a key
-        </button>
-      </div>
-    </template>
-
-    <template x-if="regenWealth.apiKeySet && !regenWealth.analysis && !regenWealth.loading">
+    <template x-if="!regenWealth.analysis && !regenWealth.loading">
       <div class="aicard">
         <button class="btn btn--brass btn--block" @click="runRegenWealthAnalysis()">
-          <span class="icon icon--sm">auto_awesome</span> Read my position
+          <span class="icon icon--sm">auto_awesome</span> Analyze my portfolio
         </button>
       </div>
     </template>
@@ -496,6 +531,7 @@ d.setAttribute("data-theme",(t==="light"||t==="dark")?t:"dark");})();/* Deep gre
     <template x-if="regenWealth.loading">
       <div class="aicard">
         <p class="row__name" x-text="regenWealth.progressMsg || 'Reading…'"></p>
+        <p class="row__meta" x-show="typeof AppPlugins !== 'undefined' && AppPlugins.Capacitor?.isNativePlatform?.()">You can leave Corpus open in the background. Your brief will appear here when you return.</p>
         <div class="meter" style="margin:var(--s3) 0 0"><div class="meter__fill meter__fill--indeterminate"></div></div>
       </div>
     </template>
@@ -504,27 +540,190 @@ d.setAttribute("data-theme",(t==="light"||t==="dark")?t:"dark");})();/* Deep gre
       <p class="sheet__note down" x-text="regenWealth.error"></p>
     </template>
 
+    <!-- A short, evidence-based decision for each researched holding. -->
     <template x-if="regenWealth.analysis">
       <div>
         <div class="rule"></div>
-        <template x-for="(r, i) in (regenWealth.analysis.recommendations || []).slice(0,4)" :key="i">
-          <div class="row" data-insight-card>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:var(--s2) 0 var(--s1)">
+          <span class="label">AI Reading</span>
+          <!-- Re-run means re-run: it skips the cache and pays for a fresh
+               pass, which is the only reason to press it. -->
+          <button class="linkbtn" @click="runRegenWealthAnalysis(true)">
+            <span class="icon icon--sm">refresh</span> Re-run
+          </button>
+        </div>
+
+        <!-- How the book serves THIS person's goal, in one line. -->
+        <template x-if="regenWealth.analysis.fit">
+          <p class="ai__fit">
+            <template x-if="regenWealth.analysis.fit.status">
+              <span class="ai__verdict" :class="fitClass(regenWealth.analysis.fit.status)" x-text="fitLabel(regenWealth.analysis.fit.status)"></span>
+            </template>
+            <span x-text="regenWealth.analysis.fit.line"></span>
+          </p>
+        </template>
+
+        <template x-if="regenWealth.analysis.macroContext">
+          <p class="ai__macro" x-text="regenWealth.analysis.macroContext"></p>
+        </template>
+
+        <!-- The answer: what matters for this person, most important first.
+             No fixed count — the prompt sets an importance bar, and every
+             finding that clears it is shown. -->
+        <template x-for="(f, i) in (regenWealth.analysis.findings || [])" :key="'f' + i">
+          <div class="row ai__rec" data-insight-card>
             <span class="row__label">
-              <span class="row__name" x-text="r.title || r.action || r.asset"></span>
-              <span class="row__meta" x-text="r.rationale || r.reason || ''"></span>
+              <span class="ai__rechead">
+                <span class="ai__rank tnum" x-text="i + 1"></span>
+                <span class="row__name" x-text="f.title"></span>
+              </span>
+              <span class="row__meta" x-text="f.why"></span>
+              <template x-if="f.consider">
+                <span class="ai__consider"><strong>Consider</strong> <span x-text="f.consider"></span></span>
+              </template>
+              <template x-if="(f.evidence || []).length || (f.holdings || []).length">
+                <span class="ai__evidence">
+                  <template x-for="(e, j) in (f.evidence || [])" :key="'e' + j">
+                    <span class="ai__chip" x-text="e"></span>
+                  </template>
+                  <template x-for="(h, j) in (f.holdings || [])" :key="'n' + j">
+                    <span class="ai__chip ai__chip--name" x-text="h"></span>
+                  </template>
+                </span>
+              </template>
             </span>
           </div>
+        </template>
+
+        <!-- Per-holding calls, for whoever wants them — closed by default so
+             the findings stay the answer. -->
+        <template x-if="(regenWealth.analysis.holdings || []).length">
+          <details class="ai__more">
+            <summary>
+              <span>Holding by holding</span>
+              <span class="ai__count tnum" x-text="regenWealth.analysis.holdings.length"></span>
+              <span class="icon icon--sm">expand_more</span>
+            </summary>
+            <template x-for="(h, i) in regenWealth.analysis.holdings" :key="'h' + i">
+              <div class="row ai__line">
+                <span class="row__label">
+                  <span class="ai__rechead">
+                    <span class="row__name" x-text="h.name"></span>
+                    <span class="ai__verdict" :class="regenVerdictClass(h.verdict)" x-text="h.verdict"></span>
+                  </span>
+                  <span class="row__meta" x-text="h.summary"></span>
+                </span>
+              </div>
+            </template>
+          </details>
+        </template>
+
+        <!-- What the research actually managed to gather. "3 sources" is worth
+             nothing if two of them came back empty, so the counts are shown. -->
+        <template x-if="(regenWealth.analysis.newsSources || []).length">
+          <p class="ai__sources"
+             x-text="'Read: ' + regenWealth.analysis.newsSources.filter(s => s.count).map(s => s.source + ' (' + s.count + ')').join(' · ')"></p>
+        </template>
+        <template x-if="regenWealth.analysis.research">
+          <p class="ai__sources"
+             x-text="regenWealth.analysis.research.coverage.studied + ' of ' + regenWealth.analysis.research.coverage.requested
+                     + ' holdings researched · ' + (regenWealth.analysis.research.coverage.withAnalystView || 0) + ' with an analyst view · '
+                     + (regenWealth.analysis.research.coverage.schemesMatched ? regenWealth.analysis.research.coverage.schemesMatched + ' government scheme' + (regenWealth.analysis.research.coverage.schemesMatched === 1 ? '' : 's') + ' · ' : '')
+                     + regenWealth.analysis.research.tilt.indianPct + '% Indian'"></p>
         </template>
         <p class="disclaimer">Educational only. Not investment advice — anything acted on should go past a SEBI-registered adviser.</p>
       </div>
     </template>
   </section>
 
+  <!-- Offered, not forced: someone who skipped the questions still gets a
+       way back to them, without a banner in their face. -->
+  <template x-if="!profile.completedAt">
+    <button class="sheet row brief__ask" @click="openOnboarding()">
+      <span class="row__label">
+        <span class="row__name">Tell Corpus about you</span>
+        <span class="row__meta">Your goal and how you feel about risk, so the readings are written for you.</span>
+      </span>
+      <span class="icon icon--sm" style="color:var(--brass)">arrow_forward</span>
+    </button>
+  </template>
+
+  <!-- The daily brief. Prepared on the first open of the day, from the
+       person's goal, their book and the day's news, gold and scheme rates.
+       The on-device score sits at the foot: it needs no network, so it is
+       what the card shows when the brief cannot be prepared. -->
+  <template x-if="hasAnyPortfolioData || profile.completedAt">
+    <section class="sheet brief" data-insight-card>
+      <div class="sheet__head brief__head">
+        <h2 class="sheet__title" x-text="daily.brief?.greeting || (profileGreetingName ? 'Today, ' + profileGreetingName : 'Today')"></h2>
+        <template x-if="daily.brief">
+          <button class="linkbtn" @click="maybeRunDaily(true)" :disabled="daily.loading" aria-label="Prepare today's brief again">
+            <span class="icon icon--sm">refresh</span>
+          </button>
+        </template>
+      </div>
+
+      <template x-if="daily.loading && !daily.brief">
+        <div>
+          <p class="row__meta">Reading today's news, prices and rates for you…</p>
+          <div class="meter" style="margin:var(--s3) 0 0"><div class="meter__fill meter__fill--indeterminate"></div></div>
+        </div>
+      </template>
+
+      <template x-if="daily.brief">
+        <div>
+          <template x-for="(it, i) in daily.brief.items" :key="'d' + i">
+            <div class="row brief__item">
+              <span class="icon icon--sm brief__icon" x-text="dailyKindIcon(it.kind)"></span>
+              <span class="row__label">
+                <span class="row__name" x-text="it.title"></span>
+                <span class="row__meta" x-text="it.body"></span>
+              </span>
+            </div>
+          </template>
+          <p class="brief__stamp" x-text="dailyPreparedLabel"></p>
+        </div>
+      </template>
+
+      <template x-if="!daily.brief && !daily.loading && daily.error">
+        <p class="row__meta">Today's brief will be ready the next time Corpus can reach the internet. Your own numbers, below, are always current.</p>
+      </template>
+
+      <!-- Measured on the device, from the user's own numbers. -->
+      <template x-if="hasAnyPortfolioData">
+        <div class="brief__score">
+          <div class="rule"></div>
+          <div class="score">
+            <div>
+              <p class="label">Measured from your own numbers</p>
+              <p class="figure figure--sm tnum" x-text="financialHealthScore"></p>
+              <p class="row__meta" x-text="healthLabel"></p>
+            </div>
+            <div class="score__ring" :style="`--pct:${financialHealthScore}`">
+              <span class="icon icon--fill score__glyph">shield_locked</span>
+            </div>
+          </div>
+          <template x-for="(h, i) in healthImprovements.slice(0,2)" :key="'i'+i">
+            <div class="row">
+              <span class="row__label">
+                <span class="row__name" x-text="typeof h === 'string' ? h : (h.title || h.label || '')"></span>
+                <template x-if="typeof h === 'object' && (h.detail || h.description)">
+                  <span class="row__meta" x-text="h.detail || h.description"></span>
+                </template>
+              </span>
+              <span class="icon icon--sm" style="color:var(--brass)">warning</span>
+            </div>
+          </template>
+        </div>
+      </template>
+    </section>
+  </template>
+
   <section class="sheet">
     <div class="sheet__head"><h2 class="sheet__title">Your data</h2></div>
     <button class="row" @click="backupData()">
       <span class="row__label"><span class="row__name">Back up</span>
-        <span class="row__meta">Saves holdings, history and preferences to a file. API keys are left out on purpose.</span></span>
+        <span class="row__meta">Saves holdings, history and preferences to a file. Corpus never stores an AI key on this device.</span></span>
       <span class="icon icon--sm muted">download</span>
     </button>
     <button class="row" @click="$refs.restoreInput.click()">
@@ -533,6 +732,13 @@ d.setAttribute("data-theme",(t==="light"||t==="dark")?t:"dark");})();/* Deep gre
       <span class="icon icon--sm muted">upload</span>
     </button>
     <input type="file" accept="application/json" x-ref="restoreInput" @change="restoreData($event)" hidden>
+    <template x-if="profile.completedAt">
+      <button class="row" @click="openOnboarding(true)">
+        <span class="row__label"><span class="row__name">About you</span>
+          <span class="row__meta" x-text="[profile.name, profile.age ? profile.age + ' yrs' : '', (PROFILE_OPTIONS.goal.find(g => g.v === profile.goal) || {}).t].filter(Boolean).join(' · ')"></span></span>
+        <span class="icon icon--sm muted">edit</span>
+      </button>
+    </template>
     <button class="row" @click="toggleTheme()">
       <span class="row__label"><span class="row__name" x-text="theme === 'dark' ? 'Switch to light' : 'Switch to dark'"></span></span>
       <span class="icon icon--sm muted" x-text="theme === 'dark' ? 'light_mode' : 'dark_mode'"></span>
@@ -553,7 +759,7 @@ d.setAttribute("data-theme",(t==="light"||t==="dark")?t:"dark");})();/* Deep gre
      Dock. Four destinations, the whole app. The active one is marked by a
      brass rule above the label, not a filled pill.
      ───────────────────────────────────────────────────────────────────── -->
-<nav class="dock" aria-label="Main">
+<nav class="dock" aria-label="Main" x-show="!isDetailView" x-cloak>
   <template x-for="s in SURFACES" :key="s.id">
     <button class="dock__item" @click="activePage = s.root"
             :aria-current="surface === s.id ? 'page' : null"
@@ -581,20 +787,176 @@ d.setAttribute("data-theme",(t==="light"||t==="dark")?t:"dark");})();/* Deep gre
     <div class="dropzone" @click="$refs.pdf.click()" @dragover.prevent @drop.prevent="handleImportDrop($event)">
       <span class="icon dropzone__icon">document_scanner</span>
       <p class="row__name" x-text="importFile ? importFile.name : 'Choose a PDF'"></p>
-      <p class="row__meta">CAS, or a statement from ICICI, SBI or HDFC</p>
+      <p class="row__meta">CAS, Groww, Zerodha, or a bank statement</p>
       <input type="file" accept="application/pdf" x-ref="pdf" @change="handleImportFile($event)" hidden>
     </div>
     <div class="form" style="padding-bottom:var(--s5)">
       <label class="f"><span class="f__label">Password, if the PDF has one</span>
         <input class="field" type="password" x-model="importPassword" placeholder="Usually your PAN"></label>
-      <button class="btn btn--primary btn--block" @click="parseStatement()" :disabled="!importFile || importState === 'parsing'">
-        <span x-text="importState === 'parsing' ? 'Reading…' : 'Read this statement'"></span>
+      <button class="btn btn--primary btn--block" @click="parseStatement()" :disabled="!importFile || importState === 'loading' || importState === 'parsing'">
+        <span x-text="importState === 'loading' || importState === 'parsing' ? 'Reading…' : 'Read this statement'"></span>
       </button>
       <template x-if="importError"><p class="sheet__note down" style="padding:0" x-text="importError"></p></template>
     </div>
   </section>
 
-  <template x-if="importResults && importResults.investments && importResults.investments.length">
+  <!-- Smart Statement Diff Resolution Card -->
+  <template x-if="statementDiff && statementDiff.active">
+    <section class="sheet diff-sheet">
+      <div class="sheet__head sheet__head--split">
+        <div>
+          <div class="diff-badges">
+            <span class="diff-badge diff-badge--broker" x-text="statementDiff.broker || 'Statement'"></span>
+            <span class="diff-badge diff-badge--cat" x-text="statementDiff.category + ' Portfolio'"></span>
+            <template x-if="statementDiff.asOfDate">
+              <span class="diff-badge diff-badge--date" x-text="'As of ' + formatDate(statementDiff.asOfDate)"></span>
+            </template>
+          </div>
+          <h2 class="sheet__title" style="margin-top:var(--s1)">Smart Portfolio Analysis</h2>
+        </div>
+        <template x-if="statementDiff.investor && statementDiff.investor.pan">
+          <span class="stamp stamp--ok" x-text="'PAN: ' + statementDiff.investor.pan"></span>
+        </template>
+      </div>
+
+      <!-- AI Conversational Prompt Banner -->
+      <div class="diff-callout">
+        <div class="diff-callout__icon">
+          <span class="icon">auto_awesome</span>
+        </div>
+        <div class="diff-callout__content">
+          <div class="diff-callout__title">Portfolio Match Detected</div>
+          <p class="diff-callout__text" x-text="statementDiff.aiMessage"></p>
+        </div>
+      </div>
+
+      <!-- Summary metrics if present -->
+      <template x-if="statementDiff.summary && (statementDiff.summary.currentValue || statementDiff.summary.totalInvested)">
+        <div class="diff-summary-bar">
+          <div class="diff-metric">
+            <span class="diff-metric__label">Statement Invested</span>
+            <span class="diff-metric__val tnum" x-text="formatCurrency(statementDiff.summary.totalInvested || 0)"></span>
+          </div>
+          <div class="diff-metric">
+            <span class="diff-metric__label">Current Valuation</span>
+            <span class="diff-metric__val tnum" x-text="formatCurrency(statementDiff.summary.currentValue || 0)"></span>
+          </div>
+          <template x-if="statementDiff.summary.profitLoss !== undefined">
+            <div class="diff-metric">
+              <span class="diff-metric__label">Returns (P&L)</span>
+              <span class="diff-metric__val tnum" :class="(statementDiff.summary.profitLoss >= 0) ? 'up' : 'down'"
+                    x-text="(statementDiff.summary.profitLoss >= 0 ? '+' : '') + formatCurrency(statementDiff.summary.profitLoss)"></span>
+            </div>
+          </template>
+          <template x-if="statementDiff.summary.xirr">
+            <div class="diff-metric">
+              <span class="diff-metric__label">XIRR</span>
+              <span class="diff-metric__val tnum" :class="(statementDiff.summary.xirr >= 0) ? 'up' : 'down'"
+                    x-text="(statementDiff.summary.xirr > 0 ? '+' : '') + Number(statementDiff.summary.xirr).toFixed(2) + '%'"></span>
+            </div>
+          </template>
+        </div>
+      </template>
+
+      <!-- Matched Holdings Diff List -->
+      <template x-if="statementDiff.matched && statementDiff.matched.length">
+        <div class="diff-section">
+          <div class="diff-section__title">
+            <span>Matched Existing Holdings</span>
+            <span class="muted tnum" x-text="statementDiff.matched.length + ' found'"></span>
+          </div>
+          <template x-for="(m, idx) in statementDiff.matched" :key="idx">
+            <div class="diff-item">
+              <div class="diff-item__top">
+                <span class="diff-item__name" x-text="m.existingName"></span>
+                <span class="diff-item__folio muted tnum" x-text="m.folioNumber ? ('Folio: ' + m.folioNumber) : ''"></span>
+              </div>
+              <div class="diff-item__grid">
+                <div class="diff-col">
+                  <span class="diff-col__label">Units</span>
+                  <div class="diff-col__flow">
+                    <span class="diff-val diff-val--old tnum" x-text="Number(m.oldUnits || 0).toFixed(3)"></span>
+                    <span class="icon diff-arrow">arrow_forward</span>
+                    <span class="diff-val diff-val--new tnum" x-text="Number(m.newUnits || 0).toFixed(3)"></span>
+                  </div>
+                  <template x-if="Math.abs(m.unitsDelta) > 0.001">
+                    <span class="diff-delta tnum" :class="m.unitsDelta > 0 ? 'up' : 'down'"
+                          x-text="(m.unitsDelta > 0 ? '+' : '') + m.unitsDelta.toFixed(3) + ' units'"></span>
+                  </template>
+                </div>
+                <div class="diff-col">
+                  <span class="diff-col__label">Valuation</span>
+                  <div class="diff-col__flow">
+                    <span class="diff-val diff-val--old tnum" x-text="formatCurrency(m.oldValue || m.oldInvested || 0)"></span>
+                    <span class="icon diff-arrow">arrow_forward</span>
+                    <span class="diff-val diff-val--new tnum" x-text="formatCurrency(m.newValue || m.newInvested || 0)"></span>
+                  </div>
+                  <template x-if="Math.abs(m.valueDelta) > 1">
+                    <span class="diff-delta tnum" :class="m.valueDelta >= 0 ? 'up' : 'down'"
+                          x-text="(m.valueDelta >= 0 ? '+' : '') + formatCurrency(m.valueDelta)"></span>
+                  </template>
+                </div>
+              </div>
+            </div>
+          </template>
+        </div>
+      </template>
+
+      <!-- New Holdings in Statement -->
+      <template x-if="statementDiff.newItems && statementDiff.newItems.length">
+        <div class="diff-section">
+          <div class="diff-section__title">
+            <span>New Holdings to Add</span>
+            <span class="muted tnum" x-text="statementDiff.newItems.length + ' new'"></span>
+          </div>
+          <template x-for="(n, idx) in statementDiff.newItems" :key="idx">
+            <div class="diff-item diff-item--new">
+              <div class="diff-item__top">
+                <span class="diff-item__name" x-text="n.name"></span>
+                <span class="stamp stamp--ok">New</span>
+              </div>
+              <div class="diff-item__grid">
+                <div class="diff-col">
+                  <span class="diff-col__label">Units</span>
+                  <span class="diff-val tnum" x-text="Number(n.units || 0).toFixed(3)"></span>
+                </div>
+                <div class="diff-col">
+                  <span class="diff-col__label">Valuation</span>
+                  <span class="diff-val tnum" x-text="formatCurrency(n.currentValue || (n.units * (n.nav || n.currentPrice || 0)))"></span>
+                </div>
+              </div>
+            </div>
+          </template>
+        </div>
+      </template>
+
+      <!-- Omitted existing holdings note if replacing -->
+      <template x-if="statementDiff.omitted && statementDiff.omitted.length">
+        <div class="diff-note">
+          <span class="icon icon--sm muted">info</span>
+          <span class="muted" x-text="'Note: ' + statementDiff.omitted.length + ' existing ' + statementDiff.category.toLowerCase() + ' holding(s) in Corpus are not in this statement.'"></span>
+        </div>
+      </template>
+
+      <!-- Actions -->
+      <div class="diff-actions">
+        <button class="btn btn--primary btn--block" @click="applyPortfolioUpdate()">
+          <span class="icon">sync</span>
+          <span x-text="'Update ' + statementDiff.matched.length + ' matched ' + (statementDiff.category === 'Stock' ? 'stocks' : 'funds') + (statementDiff.newItems.length ? (' & add ' + statementDiff.newItems.length + ' new') : '')"></span>
+        </button>
+        <button class="btn btn--quiet btn--block" @click="applyCategoryReplace()">
+          <span class="icon">swap_horiz</span>
+          <span x-text="'Replace entire ' + statementDiff.category.toLowerCase() + ' portfolio with PDF'"></span>
+        </button>
+        <div class="diff-subactions">
+          <button class="linkbtn" @click="applyAddNew()">Add all as separate holdings</button>
+          <button class="linkbtn muted" @click="cancelDiff()">Cancel</button>
+        </div>
+      </div>
+    </section>
+  </template>
+
+  <template x-if="(!statementDiff || !statementDiff.active) && importResults && importResults.investments && importResults.investments.length">
     <section class="sheet">
       <div class="sheet__head sheet__head--split">
         <h2 class="sheet__title" x-text="importResults.investments.length + ' holdings found'"></h2>
@@ -629,10 +991,14 @@ d.setAttribute("data-theme",(t==="light"||t==="dark")?t:"dark");})();/* Deep gre
   <button class="backlink" @click="goBack()"><span class="icon icon--sm">arrow_back</span> Planning</button>
   <section class="pagehead"><h1 class="headline">Income and spending</h1></section>
 
-  <section class="sheet" data-animate-list>
+  <section class="sheet">
     <div class="sheet__head sheet__head--split">
       <h2 class="sheet__title">Coming in</h2>
-      <span class="tnum muted" x-text="formatCurrency(totalIncome)"></span>
+      <!-- Fixed, not sign-driven. Income is inflow and spending is outflow
+           whatever the arithmetic says, so the colour states the DIRECTION and
+           is readable before the digits are. The "Left over" row below still
+           colours by sign — there, the sign is the news. -->
+      <span class="tnum up" x-text="formatCurrency(totalIncome)"></span>
     </div>
     <template x-for="i in cashflow.incomes" :key="i.id">
       <div class="row editrow">
@@ -646,10 +1012,10 @@ d.setAttribute("data-theme",(t==="light"||t==="dark")?t:"dark");})();/* Deep gre
     </button>
   </section>
 
-  <section class="sheet" data-animate-list>
+  <section class="sheet">
     <div class="sheet__head sheet__head--split">
       <h2 class="sheet__title">Going out</h2>
-      <span class="tnum muted" x-text="formatCurrency(totalExpense)"></span>
+      <span class="tnum down" x-text="formatCurrency(totalExpense)"></span>
     </div>
     <template x-for="e in cashflow.expenses" :key="e.id">
       <div class="row editrow">
@@ -667,6 +1033,44 @@ d.setAttribute("data-theme",(t==="light"||t==="dark")?t:"dark");})();/* Deep gre
       <span class="row__value tnum" :class="monthlySurplus >= 0 ? 'up' : 'down'" x-text="formatCurrency(monthlySurplus)"></span>
     </div>
   </section>
+
+      <section class="sheet">
+        <div class="sheet__head sheet__head--split">
+          <h2 class="sheet__title">Recurring Contributions</h2>
+          <button class="linkbtn" @click="addingSip = true">Add SIP</button>
+        </div>
+        <template x-if="!activeSips.length">
+          <p class="sheet__note">Add recurring mutual fund, PPF, or RD investments.</p>
+        </template>
+
+        <!-- A due instalment is a question, not a fact. The app cannot see your bank, so
+             it asks instead of writing units it has no evidence for. -->
+        <template x-for="sip in dueSipDebits" :key="'due' + sip.id">
+          <div class="row">
+            <span class="row__label">
+              <span class="row__name" x-text="sip.name + ' was due on the ' + ordinal(sip.dayOfMonth)"></span>
+              <span class="row__meta" x-text="'Did ' + formatCurrency(sip.monthlyAmount) + ' leave your account?'"></span>
+            </span>
+            <span class="row__figures" style="flex-direction:row;gap:var(--s2);align-items:center">
+              <button class="btn btn--quiet" @click="skipSipDebit(sip)">No</button>
+              <button class="btn btn--primary" @click="confirmSipDebit(sip)">Yes, record it</button>
+            </span>
+          </div>
+        </template>
+        <template x-if="sipDebitError">
+          <p class="sheet__note down" x-text="sipDebitError"></p>
+        </template>
+
+        <template x-for="sip in activeSips" :key="sip.id">
+          <button class="row" @click="openEditSipModal(sip)">
+            <span class="row__label">
+              <span class="row__name" x-text="sip.name"></span>
+              <span class="row__meta" x-text="'The ' + ordinal(sip.dayOfMonth) + ' of every month · ' + getSipDaysUntilDebit(sip)"></span>
+            </span>
+            <span class="row__value tnum" x-text="formatCurrency(sip.monthlyAmount)"></span>
+          </button>
+        </template>
+      </section>
 </main>
 
 <!-- Goals -->
@@ -743,12 +1147,12 @@ d.setAttribute("data-theme",(t==="light"||t==="dark")?t:"dark");})();/* Deep gre
     <div class="form" style="padding-bottom:var(--s5)">
       <div class="f__row">
         <label class="f"><span class="f__label">Bank balance</span>
-          <input class="field tnum" x-money="networth.bankBalance" @change="saveData()"></label>
+          <input class="field tnum" x-money="networth.bank" @change="saveData()"></label>
         <label class="f"><span class="f__label">Cash</span>
-          <input class="field tnum" x-money="networth.cashOnHand" @change="saveData()"></label>
+          <input class="field tnum" x-money="networth.cash" @change="saveData()"></label>
       </div>
       <label class="f"><span class="f__label">Property</span>
-        <input class="field tnum" x-money="networth.propertyValue" @change="saveData()"></label>
+        <input class="field tnum" x-money="networth.property" @change="saveData()"></label>
     </div>
   </section>
   <section class="sheet">
@@ -785,7 +1189,7 @@ d.setAttribute("data-theme",(t==="light"||t==="dark")?t:"dark");})();/* Deep gre
       <div class="row">
         <span class="row__label">
           <span class="row__name" x-text="inv.name"></span>
-          <span class="row__meta" x-text="formatDate(inv.maturityDate) + (inv.interestRate ? ' · ' + inv.interestRate + '%' : '')"></span>
+          <span class="row__meta" x-text="formatDate(inv.maturityDate) + (inv.rate ? ' · ' + inv.rate + '%' : '')"></span>
         </span>
         <span class="row__value tnum" x-text="formatCurrency(getInvCurrentValue(inv))"></span>
       </div>
@@ -802,9 +1206,28 @@ d.setAttribute("data-theme",(t==="light"||t==="dark")?t:"dark");})();/* Deep gre
   </section>
   <section class="sheet">
     <div class="sheet__head"><h2 class="sheet__title">Which regime</h2></div>
-    <div class="row"><span class="row__label"><span class="row__name">Old regime</span></span>
+    <!-- tax.regime was persisted and read by nothing, so an election the user had made
+         could not change a single figure. The row the election lands on is marked. -->
+    <div class="f" style="padding:var(--s3) var(--s5) 0">
+      <div class="type-chips" role="radiogroup" aria-label="Tax regime">
+        <template x-for="r in [{k:'compare',l:'Whichever is cheaper'},{k:'old',l:'Old regime'},{k:'new',l:'New regime'}]" :key="r.k">
+          <button type="button" class="type-chip" role="radio"
+                  :class="tax.regime === r.k ? 'type-chip--active' : ''"
+                  :aria-checked="tax.regime === r.k"
+                  @click="tax.regime = r.k; saveData()">
+            <span class="type-chip__mark" x-show="tax.regime === r.k">✓</span>
+            <span x-text="r.l"></span>
+          </button>
+        </template>
+      </div>
+    </div>
+    <div class="row" :class="effectiveRegime === 'old' ? 'row--total' : ''">
+      <span class="row__label"><span class="row__name">Old regime</span>
+        <span class="row__meta" x-show="effectiveRegime === 'old'">What you will be charged</span></span>
       <span class="row__value tnum" x-text="formatCurrency(oldRegimeTax.tax)"></span></div>
-    <div class="row"><span class="row__label"><span class="row__name">New regime</span></span>
+    <div class="row" :class="effectiveRegime === 'new' ? 'row--total' : ''">
+      <span class="row__label"><span class="row__name">New regime</span>
+        <span class="row__meta" x-show="effectiveRegime === 'new'">What you will be charged</span></span>
       <span class="row__value tnum" x-text="formatCurrency(newRegimeTax.tax)"></span></div>
     <div class="rule rule--brass"></div>
     <!-- Both regimes can land on zero, in which case "cheaper by ₹0" is a
@@ -838,17 +1261,64 @@ d.setAttribute("data-theme",(t==="light"||t==="dark")?t:"dark");})();/* Deep gre
         <span class="row__meta">From your deposits and bonds</span></span>
       <span class="row__value tnum" x-text="formatCurrency(annualInterestIncome)"></span>
     </div>
+    <!-- One field used to collect "Salary, rent, consulting". The standard deduction is
+         allowed against salary and pension only, so mixing them made it uncomputable. -->
+    <div class="row editrow">
+      <span class="row__label"><span class="row__name">Salary</span>
+        <span class="row__meta">Gets the standard deduction</span></span>
+      <input class="field field--bare field--num tnum"
+             x-money="tax.salaryIncome" @change="saveData()" aria-label="Salary income">
+    </div>
     <div class="row editrow">
       <span class="row__label"><span class="row__name">Anything else</span>
-        <span class="row__meta">Salary, rent, consulting</span></span>
+        <span class="row__meta">Rent, consulting — no standard deduction</span></span>
       <input class="field field--bare field--num tnum"
              x-money="tax.otherIncome" @change="saveData()" aria-label="Other income">
     </div>
+    <!-- Never change someone's tax quietly. If they have a figure from before the split,
+         say so rather than re-filing it for them: only they know what it was. -->
+    <template x-if="Number(tax.otherIncome) > 0 && Number(tax.salaryIncome) === 0">
+      <p class="sheet__note">Was any of that <span x-text="formatCurrency(tax.otherIncome)"></span> salary? Move it up — salary earns the standard deduction and rent and consulting do not.</p>
+    </template>
     <div class="rule rule--brass"></div>
     <div class="row row--total">
       <span class="row__name">Gross for the year</span>
       <span class="row__value tnum" x-text="formatCurrency(grossAnnualIncome)"></span>
     </div>
+  </section>
+
+  <!-- Capital gains used to be computed from unrealized movement on holdings and folded
+       silently into the payable figure — a bill for money nobody had made. Only a sale
+       creates the liability, and nothing in this app records a sale, so it is asked for. -->
+  <section class="sheet">
+    <div class="sheet__head"><h2 class="sheet__title">Anything you sold</h2></div>
+    <p class="sheet__note">Gains you actually booked this financial year. Holdings you still own are not taxed, however far they have moved.</p>
+    <div class="form" style="padding-bottom:var(--s5)">
+      <div class="f__row">
+        <label class="f"><span class="f__label">Long-term gains (held over a year)</span>
+          <input class="field tnum" x-money="tax.realizedEquityLTCG" @change="saveData()" placeholder="₹0"></label>
+        <label class="f"><span class="f__label">Short-term gains (held under a year)</span>
+          <input class="field tnum" x-money="tax.realizedEquitySTCG" @change="saveData()" placeholder="₹0"></label>
+      </div>
+    </div>
+    <template x-if="equityLTCG.totalGains > 0 || equitySTCG.totalGains > 0">
+      <div>
+        <div class="row">
+          <span class="row__label"><span class="row__name">Long-term at 12.5%</span>
+            <span class="row__meta" x-text="equityLTCG.exemptionUsed > 0 ? formatCurrency(equityLTCG.exemptionUsed) + ' of the ₹1,25,000 exemption used' : ''"></span></span>
+          <span class="row__value tnum" x-text="formatCurrency(equityLTCG.tax)"></span>
+        </div>
+        <div class="row">
+          <span class="row__label"><span class="row__name">Short-term at 20%</span></span>
+          <span class="row__value tnum" x-text="formatCurrency(equitySTCG.tax)"></span>
+        </div>
+        <div class="rule rule--brass"></div>
+        <div class="row row--total">
+          <span class="row__name">Capital gains tax</span>
+          <span class="row__value tnum" x-text="formatCurrency(totalCapitalGainsTax)"></span>
+        </div>
+      </div>
+    </template>
   </section>
 
   <section class="sheet">
@@ -866,11 +1336,21 @@ d.setAttribute("data-theme",(t==="light"||t==="dark")?t:"dark");})();/* Deep gre
         <label class="f"><span class="f__label">HRA</span>
           <input class="field tnum" x-money="tax.hra" @change="saveData()" placeholder="₹0"></label>
       </div>
+      <!-- 80TTB and 80TTA are the same deduction at two ages, so they share a slot. Both
+           existed in the tax store with no input anywhere, which made 80TTB unclaimable. -->
+      <template x-if="tax.seniorCitizen">
+        <label class="f"><span class="f__label">Deposit interest (80TTB, up to ₹50,000)</span>
+          <input class="field tnum" x-money="tax.deduction80TTB" @change="saveData()" placeholder="₹0"></label>
+      </template>
+      <template x-if="!tax.seniorCitizen">
+        <label class="f"><span class="f__label">Savings interest (80TTA, up to ₹10,000)</span>
+          <input class="field tnum" x-money="tax.deduction80TTA" @change="saveData()" placeholder="₹0"></label>
+      </template>
       <label class="f check__row">
         <input type="checkbox" class="check" x-model="tax.seniorCitizen" @change="saveData()">
         <span class="f__label" style="margin:0">I am 60 or older</span>
       </label>
-      <p class="row__meta" x-show="tax.seniorCitizen">Unlocks 80TTB on deposit interest and a higher exemption slab.</p>
+      <p class="row__meta" x-show="tax.seniorCitizen">Raises the exemption slab to ₹3,00,000 and swaps 80TTA for the larger 80TTB.</p>
     </div>
   </section>
 </main>
@@ -891,42 +1371,122 @@ d.setAttribute("data-theme",(t==="light"||t==="dark")?t:"dark");})();/* Deep gre
   </section>
 </main>
 
-<!-- AI settings -->
-<main x-show="activePage === 'more'" x-cloak class="surface stack">
-  <button class="backlink" @click="goBack()"><span class="icon icon--sm">arrow_back</span> Insights</button>
-  <section class="pagehead"><h1 class="headline">AI settings</h1></section>
-  <section class="sheet">
-    <div class="form" style="padding-top:var(--s5);padding-bottom:var(--s5)">
-      <label class="f"><span class="f__label">Your API key</span>
-        <input class="field" type="password" x-model="regenWealth.apiKeyInput" placeholder="sk-… or AIza…"></label>
-      <p class="row__meta">Stored on this device only. It is left out of backups on purpose.</p>
-      <button class="btn btn--primary btn--block" @click="saveRegenApiKey()">Save key</button>
-      <button class="btn btn--ghost btn--block" x-show="regenWealth.apiKeySet" @click="clearRegenApiKey()">Remove key</button>
-    </div>
-  </section>
-</main>
-
 <!-- ═══════════ SHEETS ═══════════
      Bottom sheets rather than centre modals: on a phone the thumb is at the
      bottom, and a sheet that rises from the edge it will be dismissed toward
      reads as part of the same gesture. -->
 
 <!-- Add a holding -->
-<div class="scrim" x-show="addingInv" x-cloak @click.self="addingInv = false" @keydown.escape.window="addingInv = false">
+<!-- First run: seven short questions, one at a time. Everything the AI says
+     is judged against these answers. -->
+<section class="onboard" x-show="onboarding.open" x-cloak role="dialog" aria-modal="true" aria-label="About you"
+         @keydown.escape.window="onboarding.open && skipOnboarding()">
+  <template x-if="onboarding.open && onboarding.draft">
+    <div class="onboard__frame">
+      <header class="onboard__top">
+        <button class="linkbtn" x-show="onboarding.step > 0" @click="onboardingBack()">
+          <span class="icon icon--sm">arrow_back</span> Back
+        </button>
+        <span class="onboard__dots" aria-hidden="true">
+          <template x-for="(k, i) in onboardingSteps" :key="k">
+            <span class="onboard__dot" :class="i <= onboarding.step ? 'is-on' : ''"></span>
+          </template>
+        </span>
+        <button class="linkbtn" @click="skipOnboarding()" x-text="onboarding.editing ? 'Cancel' : 'Skip for now'"></button>
+      </header>
+
+      <div class="onboard__body" :key="onboardingStep">
+        <template x-if="onboardingStep === 'name'">
+          <div class="onboard__q">
+            <p class="label">Welcome to Corpus</p>
+            <h1 class="headline">What should we call you?</h1>
+            <input class="field onboard__input" type="text" x-model="onboarding.draft.name" placeholder="Your name"
+                   autocomplete="given-name" @keydown.enter="onboardingNext()">
+            <p class="row__meta">A few quick questions, so everything Corpus tells you is written for your goals — not for a stranger's.</p>
+          </div>
+        </template>
+
+        <template x-if="onboardingStep === 'age'">
+          <div class="onboard__q">
+            <h1 class="headline" x-text="'How old are you' + (onboarding.draft.name ? ', ' + onboarding.draft.name.trim().split(/\s+/)[0] : '') + '?'"></h1>
+            <input class="field onboard__input tnum" type="number" inputmode="numeric" min="12" max="110"
+                   x-model="onboarding.draft.age" placeholder="Age" @keydown.enter="onboardingNext()">
+            <p class="row__meta">It decides which government schemes you qualify for, and your tax slabs.</p>
+          </div>
+        </template>
+
+        <template x-for="key in ['goal', 'risk', 'payout', 'horizon']" :key="key">
+          <template x-if="onboardingStep === key">
+            <div class="onboard__q">
+              <h1 class="headline" x-text="({ goal: 'What do you want your money to do?',
+                                               risk: 'If your investments fell 20% in a month, you would…',
+                                               payout: 'Do you need regular payouts?',
+                                               horizon: 'When will you need most of this money?' })[key]"></h1>
+              <div class="onboard__opts">
+                <template x-for="o in PROFILE_OPTIONS[key]" :key="o.v">
+                  <button type="button" class="onboard__opt" :aria-pressed="onboarding.draft[key] === o.v ? 'true' : 'false'"
+                          @click="onboardingPick(key, o.v)">
+                    <span class="onboard__optt" x-text="o.t"></span>
+                    <template x-if="o.d"><span class="onboard__optd" x-text="o.d"></span></template>
+                  </button>
+                </template>
+              </div>
+            </div>
+          </template>
+        </template>
+
+        <template x-if="onboardingStep === 'interests'">
+          <div class="onboard__q">
+            <h1 class="headline">What should Corpus watch for you?</h1>
+            <p class="row__meta">Pick any. Your daily brief follows these.</p>
+            <div class="onboard__opts onboard__opts--grid">
+              <template x-for="o in PROFILE_OPTIONS.interests" :key="o.v">
+                <button type="button" class="onboard__opt" :aria-pressed="onboarding.draft.interests.includes(o.v) ? 'true' : 'false'"
+                        @click="onboardingToggleInterest(o.v)">
+                  <span class="onboard__optt" x-text="o.t"></span>
+                  <template x-if="o.d"><span class="onboard__optd" x-text="o.d"></span></template>
+                </button>
+              </template>
+            </div>
+          </div>
+        </template>
+      </div>
+
+      <footer class="onboard__foot" x-show="['name', 'age', 'interests'].includes(onboardingStep)">
+        <button class="btn btn--primary btn--block" :disabled="!onboardingCanNext" @click="onboardingNext()"
+                x-text="onboardingStep === 'interests' ? (onboarding.editing ? 'Save' : 'Start') : 'Next'"></button>
+      </footer>
+    </div>
+  </template>
+</section>
+
+<div class="scrim" x-show="addingInv" x-cloak @click.self="closeAddHolding()" @keydown.escape.window="closeAddHolding()">
   <section class="bsheet" role="dialog" aria-modal="true" aria-label="Add a holding">
     <div class="bsheet__grip"></div>
     <header class="bsheet__head">
       <h2 class="title">Add a holding</h2>
-      <button class="iconbtn" @click="addingInv = false" aria-label="Close"><span class="icon">close</span></button>
+      <button class="iconbtn" @click="closeAddHolding()" aria-label="Close"><span class="icon">close</span></button>
     </header>
 
     <form class="form" @submit.prevent="addInvestment()">
-      <label class="f">
-        <span class="f__label">What is it?</span>
-        <select class="field" x-model="newInv.type">
-          <template x-for="t in investmentTypes" :key="t"><option :value="t" x-text="t"></option></template>
-        </select>
-      </label>
+      <div class="f">
+        <div class="f__label-row">
+          <span class="f__label">What is it?</span>
+          <span class="type-picker__selected" x-text="newInv.type"></span>
+        </div>
+        <div class="type-chips" role="radiogroup" aria-label="Holding type">
+          <template x-for="t in availableInvestmentTypes" :key="t">
+            <button type="button" class="type-chip"
+                    :class="newInv.type === t ? 'type-chip--active' : ''"
+                    :aria-checked="newInv.type === t"
+                    role="radio"
+                    @click="setHoldingType(t)">
+              <span class="type-chip__mark" x-show="newInv.type === t">✓</span>
+              <span x-text="t"></span>
+            </button>
+          </template>
+        </div>
+      </div>
 
       <label class="f">
         <span class="f__label" x-text="needsTicker(newInv.type) ? 'Search the market' : 'Name'"></span>
@@ -946,7 +1506,21 @@ d.setAttribute("data-theme",(t==="light"||t==="dark")?t:"dark");})();/* Deep gre
       <template x-if="newInv.type === 'Mutual Fund' && mfSearchResults.length">
         <ul class="typeahead">
           <template x-for="r in mfSearchResults.slice(0,6)" :key="r.schemeCode">
-            <li><button type="button" class="typeahead__item" @click="selectMfScheme(newInv, r)" x-text="r.schemeName"></button></li>
+            <li>
+              <button type="button" class="typeahead__item typeahead__item--mark" @click="selectMfScheme(newInv, r)">
+                <span class="mark" :style="`--mark-h:${symbolMark(r.schemeName).hue}`">
+                  <span x-text="symbolMark(r.schemeName).text"></span>
+                  <!-- A fund has no logo of its own, so it borrows its AMC's. -->
+                  <template x-if="logoUrl(r)">
+                    <img class="mark__img" :src="logoUrl(r)" alt="" loading="lazy"
+                         @load="$el.dataset.ok = '1'">
+                  </template>
+                </span>
+                <span class="typeahead__body">
+                  <span class="typeahead__ttl" x-text="r.schemeName"></span>
+                </span>
+              </button>
+            </li>
           </template>
         </ul>
       </template>
@@ -959,7 +1533,14 @@ d.setAttribute("data-theme",(t==="light"||t==="dark")?t:"dark");})();/* Deep gre
           <template x-for="r in symbolSearch.results" :key="r.symbol">
             <li>
               <button type="button" class="typeahead__item typeahead__item--mark" @click="selectSymbol(newInv, r)">
-                <span class="mark" :style="`--mark-h:${symbolMark(r.ticker).hue}`" x-text="symbolMark(r.ticker).text"></span>
+                <span class="mark" :style="`--mark-h:${symbolMark(r.ticker).hue}`">
+                  <span x-text="symbolMark(r.ticker).text"></span>
+                  <!-- Fades in only once it has actually loaded; a miss leaves the monogram. -->
+                  <template x-if="logoUrl(r)">
+                    <img class="mark__img" :src="logoUrl(r)" alt="" loading="lazy"
+                         @load="$el.dataset.ok = '1'">
+                  </template>
+                </span>
                 <span class="typeahead__body">
                   <span class="typeahead__ttl" x-text="r.name"></span>
                   <span class="typeahead__sub"><b x-text="r.ticker"></b><span x-text="r.exchange"></span></span>
@@ -1005,7 +1586,7 @@ d.setAttribute("data-theme",(t==="light"||t==="dark")?t:"dark");})();/* Deep gre
       </template>
 
       <div class="bsheet__foot">
-        <button type="button" class="btn btn--ghost" @click="addingInv = false">Cancel</button>
+        <button type="button" class="btn btn--ghost" @click="closeAddHolding()">Cancel</button>
         <button type="submit" class="btn btn--primary">Add holding</button>
       </div>
     </form>
@@ -1033,7 +1614,7 @@ d.setAttribute("data-theme",(t==="light"||t==="dark")?t:"dark");})();/* Deep gre
         <label class="f"><span class="f__label">Amount</span>
           <input class="field tnum" x-money="editForm.amount"></label>
         <label class="f"><span class="f__label">Rate %</span>
-          <input class="field tnum" type="number" step="any" x-model.number="editForm.interestRate"></label>
+          <input class="field tnum" type="number" step="any" x-model.number="editForm.rate"></label>
       </div>
       <label class="f"><span class="f__label">Matures on</span>
         <input class="field" type="date" x-model="editForm.maturityDate"></label>
@@ -1046,6 +1627,81 @@ d.setAttribute("data-theme",(t==="light"||t==="dark")?t:"dark");})();/* Deep gre
         </div>
       </div>
     </form>
+  </section>
+</div>
+
+<!-- Top up a holding you already own.
+
+     You enter what you SPENT, in the currency the holding is quoted in, and
+     the app does the rest. Asking for units instead would mean doing the
+     division yourself, which is the part worth automating: a $500 fill at
+     $312.40 is 1.6006 units, and nobody types that from memory. -->
+<div class="scrim" x-show="addingLot" x-cloak @click.self="cancelAddLot()" @keydown.escape.window="cancelAddLot()">
+  <section class="bsheet" role="dialog" aria-modal="true" aria-label="Add to position">
+    <div class="bsheet__grip"></div>
+    <template x-if="addingLot">
+      <div>
+        <header class="bsheet__head">
+          <h2 class="title" x-text="'Bought more of ' + addingLot.name"></h2>
+          <button class="iconbtn" @click="cancelAddLot()" aria-label="Close"><span class="icon">close</span></button>
+        </header>
+        <form class="form" @submit.prevent="commitAddLot()">
+          <label class="f">
+            <span class="f__label" x-text="lotCurrency(addingLot) === 'USD' ? 'How much you spent (USD)' : 'How much you spent'"></span>
+            <input class="field tnum" type="number" step="any" min="0" x-model.number="lotForm.amount"
+                   :placeholder="lotCurrency(addingLot) === 'USD' ? '$0.00' : '₹0'" required>
+          </label>
+
+          <!-- A market order placed while the exchange is shut does not fill
+               at the price on screen; it fills at the next open. The app
+               cannot tell which happened, so it asks. -->
+          <label class="f"><span class="f__label">When did you buy?</span>
+            <select class="field" x-model="lotForm.timing">
+              <option value="market">During market hours</option>
+              <option value="offhours">Off hours — fills at the next open</option>
+            </select>
+          </label>
+
+          <template x-if="lotPreview && !lotPreview.pending">
+            <div class="sheet">
+              <div class="row">
+                <span class="row__label"><span class="row__name">At</span></span>
+                <span class="row__value tnum" x-text="formatNative(addingLot, lotPreview.price)"></span>
+              </div>
+              <div class="row">
+                <span class="row__label"><span class="row__name">Units bought</span></span>
+                <span class="row__value tnum" x-text="lotPreview.units.toFixed(4)"></span>
+              </div>
+              <div class="rule rule--brass"></div>
+              <div class="row">
+                <span class="row__label"><span class="row__name">Quantity</span></span>
+                <span class="row__value tnum" x-text="lotPreview.qty.toFixed(4) + ' → ' + lotPreview.newQty.toFixed(4)"></span>
+              </div>
+              <div class="row">
+                <span class="row__label"><span class="row__name">Average cost</span></span>
+                <span class="row__value tnum" x-text="formatNative(addingLot, lotPreview.avg) + ' → ' + formatNative(addingLot, lotPreview.newAvg)"></span>
+              </div>
+            </div>
+          </template>
+
+          <!-- No price is shown for an off-hours buy because there is not one
+               yet. Showing the current quote here would be stating a fill
+               price the trade will not get. -->
+          <template x-if="lotPreview && lotPreview.pending">
+            <p class="sheet__note">Recorded now, priced at the next market open. Your units and average update by themselves — the app does not need to be running when the bell goes.</p>
+          </template>
+
+          <template x-if="lotError">
+            <p class="sheet__note down" x-text="lotError"></p>
+          </template>
+
+          <div class="bsheet__foot">
+            <button type="button" class="btn btn--ghost" @click="cancelAddLot()">Cancel</button>
+            <button type="submit" class="btn btn--primary" :disabled="!lotPreview">Add</button>
+          </div>
+        </form>
+      </div>
+    </template>
   </section>
 </div>
 
@@ -1127,7 +1783,20 @@ d.setAttribute("data-theme",(t==="light"||t==="dark")?t:"dark");})();/* Deep gre
       <template x-if="sipMfSearch.show && sipMfSearch.results.length">
         <ul class="typeahead">
           <template x-for="r in sipMfSearch.results.slice(0,6)" :key="r.schemeCode">
-            <li><button type="button" class="typeahead__item" @click="selectSipMf(r)" x-text="r.schemeName"></button></li>
+            <li>
+              <button type="button" class="typeahead__item typeahead__item--mark" @click="selectSipMf(r)">
+                <span class="mark" :style="`--mark-h:${symbolMark(r.schemeName).hue}`">
+                  <span x-text="symbolMark(r.schemeName).text"></span>
+                  <template x-if="logoUrl(r)">
+                    <img class="mark__img" :src="logoUrl(r)" alt="" loading="lazy"
+                         @load="$el.dataset.ok = '1'">
+                  </template>
+                </span>
+                <span class="typeahead__body">
+                  <span class="typeahead__ttl" x-text="r.schemeName"></span>
+                </span>
+              </button>
+            </li>
           </template>
         </ul>
       </template>
@@ -1204,9 +1873,12 @@ d.setAttribute("data-theme",(t==="light"||t==="dark")?t:"dark");})();/* Deep gre
   </section>
 </div>
 
+<script defer src="ai-service-config.js"></script>
 <script defer src="vendor.js"></script>
 <script defer src="plugins.js"></script>
 <script defer src="parser.js"></script>
+<script defer src="schemes.js"></script>
+<script defer src="research.js"></script>
 <script defer src="regenWealth.js"></script>
 <script defer src="motion.js"></script>
 <script defer src="app.js"></script>

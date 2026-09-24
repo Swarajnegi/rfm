@@ -8,8 +8,12 @@ import path from 'node:path';
 const FILE = process.env.PAGE_FILE || 'web/corpus.html';
 const themes = (process.env.THEMES || 'light,dark').split(',');
 const seedBlob = readFileSync('scripts/seed.json', 'utf8');
+// Local calendar keys, matching what the app writes. toISOString() is UTC and
+// dated every fixture a day early east of Greenwich.
+const key = i => { const d = new Date(); d.setDate(d.getDate() - i);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 const hist = JSON.stringify(Array.from({ length: 40 }, (_, i) => ({
-  date: new Date(Date.now() - (39 - i) * 864e5).toISOString().slice(0, 10),
+  date: key(39 - i),
   value: Math.round(1180000 + i * 3100 + Math.sin(i / 4) * 38000), source: 'seed',
 })));
 
@@ -24,7 +28,7 @@ for (const theme of themes) {
       localStorage.setItem('rfm_nw_history', h);
       localStorage.setItem('rfm_usd_inr_rate', '88.41');
       localStorage.setItem('rfm_tour_v1', 'seen');
-      localStorage.setItem('corpus_tour_v1', 'seen');
+      localStorage.setItem('corpus_tour_v1', 'seen'); localStorage.setItem('rfm_v1', JSON.stringify((v => ({ ...v, profile: v.profile || { completedAt: '2026-09-01T00:00:00.000Z', name: 'Test', age: 40, goal: 'balanced', risk: 'medium', horizon: '7to15', interests: ['stocks'] } }))(JSON.parse(localStorage.getItem('rfm_v1') || '{}'))));
       localStorage.setItem('corpus_theme', t);
     }, [seedBlob, hist, theme]);
     await p.route('**/*', r => r.request().url().startsWith('file://') ? r.continue() : r.abort());

@@ -1,0 +1,16 @@
+name = "corpus-ai-gateway"
+main = "src/index.js"
+compatibility_date = "2026-09-22"
+# Per-version preview URLs would be further open doors to the same key.
+preview_urls = false
+
+[secrets]
+required = ["OPENROUTER_API_KEY"]
+
+# Per-caller burst limit (Workers Rate Limiting). Four analyses a minute per IP
+# is more than a person needs and far less than a script would take. The
+# shared OpenRouter allowance is 20 a minute across every install.
+[[ratelimits]]
+name = "PER_CLIENT"
+namespace_id = "7301"
+simple = { limit = 4, period = 60 }

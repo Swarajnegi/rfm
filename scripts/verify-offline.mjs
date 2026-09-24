@@ -38,15 +38,21 @@ page.on('pageerror', e => consoleErrors.push('pageerror: ' + e.message));
 if (SEED) {
     const { readFileSync } = await import('node:fs');
     const seed = readFileSync('scripts/seed.json', 'utf8');
+    // Local calendar keys, matching what the app writes. toISOString() is UTC and
+    // dated every fixture a day early east of Greenwich.
+    const key = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
     const hist = JSON.stringify(Array.from({ length: 30 }, (_, i) => {
-        const d = new Date(Date.now() - (29 - i) * 864e5).toISOString().slice(0, 10);
-        return { date: d, value: Math.round(1520000 + i * 9400 + Math.sin(i / 3) * 42000), source: 'seed' };
+        const d = new Date();
+        d.setDate(d.getDate() - (29 - i));
+        return { date: key(d), value: Math.round(1520000 + i * 9400 + Math.sin(i / 3) * 42000), source: 'seed' };
     }));
     await page.addInitScript(([blob, h]) => {
         localStorage.setItem('rfm_v1', blob);
         localStorage.setItem('rfm_nw_history', h);
         localStorage.setItem('rfm_usd_inr_rate', '88.41');
         localStorage.setItem('rfm_tour_v1', 'done');   // tour already seen
+        // The first-run questions are tested in verify-profile; here they are answered.
+        localStorage.setItem('rfm_v1', JSON.stringify((v => ({ ...v, profile: v.profile || { completedAt: '2026-09-01T00:00:00.000Z', name: 'Test', age: 40, goal: 'balanced', risk: 'medium', horizon: '7to15', interests: ['stocks'] } }))(JSON.parse(localStorage.getItem('rfm_v1') || '{}'))));
     }, [seed, hist]);
 }
 
@@ -67,18 +73,32 @@ await page.waitForTimeout(2500); // Alpine init + deferred scripts
 
 console.log('\nOFFLINE BOOT\n');
 
-// Distinguish the two kinds of remote request. ASSETS (scripts, CSS, fonts)
-// must be zero — those are what made the app unrenderable offline. LIVE DATA
-// (FX rate, quotes) is the app doing its job; it is expected to be attempted
-// and to fail gracefully when there is no network.
-const isAsset = u => /\.(js|mjs|css|woff2?|ttf|png|jpe?g|svg|ico)(\?|$)/i.test(u)
-                  || /fonts\.googleapis|fonts\.gstatic|cdn\.|unpkg|jsdelivr/i.test(u);
-const assetReqs = blocked.filter(isAsset);
-const dataReqs  = blocked.filter(u => !isAsset(u));
+// THREE kinds of remote request, not two.
+//
+//   ASSETS   — scripts, CSS, fonts. Must be ZERO. These are what made the app
+//              unrenderable offline: no Alpine means x-cloak is never stripped and
+//              the screen stays blank.
+//   LIVE DATA— FX rate, quotes. The app doing its job; expected to be attempted and
+//              to fail gracefully.
+//   OPTIONAL — company and AMC logos in the search lists. Remote by nature, and
+//              permitted, but ONLY because each is layered over a monogram that is
+//              already painted: nothing about rendering depends on one arriving. The
+//              hosts are named EXPLICITLY rather than matched by pattern, so a new
+//              remote image host still trips the asset check instead of quietly
+//              joining this list.
+const OPTIONAL_HOSTS = /dharunashokkumar\.github\.io|images\.financialmodelingprep\.com/i;
+const isOptional = u => OPTIONAL_HOSTS.test(u);
+const isAsset = u => !isOptional(u)
+                  && (/\.(js|mjs|css|woff2?|ttf|png|jpe?g|svg|ico)(\?|$)/i.test(u)
+                   || /fonts\.googleapis|fonts\.gstatic|cdn\.|unpkg|jsdelivr/i.test(u));
+const assetReqs    = blocked.filter(isAsset);
+const optionalReqs = blocked.filter(isOptional);
+const dataReqs     = blocked.filter(u => !isAsset(u) && !isOptional(u));
 ok('zero remote ASSET requests', assetReqs.length === 0,
    assetReqs.length ? assetReqs[0].slice(0, 70) : 'all assets served from disk');
 console.log(`  note  ${dataReqs.length} live-data request(s) attempted and blocked (expected): ` +
             (dataReqs[0] ? new URL(dataReqs[0]).host : '-'));
+console.log(`  note  ${optionalReqs.length} optional logo request(s) blocked — the monogram beneath is what renders`);
 
 const bodyVisible = await page.evaluate(() => {
     const b = document.body;

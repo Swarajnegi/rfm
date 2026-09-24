@@ -57,6 +57,22 @@ function detectStatementType(text) {
         return 'BANK_STATEMENT';
     }
 
+    // Groww Mutual Fund Portfolio
+    if ((t.includes('GROWW') || t.includes('NEXTBILLION')) &&
+        (t.includes('HOLDINGS AS ON') || t.includes('HOLDING SUMMARY') || t.includes('SCHEME NAME') || t.includes('MUTUAL FUND'))) {
+        return 'GROWW_MF';
+    }
+    // Broker Mutual Fund statement with "HOLDINGS AS ON" + "SCHEME NAME"
+    if (t.includes('HOLDINGS AS ON') && t.includes('SCHEME NAME') && (t.includes('AMC') || t.includes('FOLIO'))) {
+        return 'GROWW_MF';
+    }
+
+    // Groww Stock / Demat Statement
+    if ((t.includes('GROWW') || t.includes('NEXTBILLION')) &&
+        (t.includes('DEMAT') || t.includes('EQUITY HOLDING') || t.includes('STOCK HOLDING') || t.includes('STOCKS') || t.includes('SHARES'))) {
+        return 'GROWW_STOCKS';
+    }
+
     // Generic fallback for any financial document with balances or holdings
     if (t.includes('BALANCE') || t.includes('VALUATION') || t.includes('AMOUNT') || t.includes('STATEMENT')) {
         return 'GENERIC_STATEMENT';
@@ -73,6 +89,7 @@ function detectStatementType(text) {
 const ISIN_REGEX = /\b(IN[A-Z0-9]{10})\b/g;
 const PAN_REGEX  = /PAN\s*[:\-]?\s*([A-Z]{5}\d{4}[A-Z])/i;
 const NAME_REGEX = /(?:Name|Holder)\s*[:\-]?\s*(.+)/i;
+const ORG_WORDS  = /PRIVATE|LIMITED|\bLTD\b|\bPVT\b|BANK|SERVICES?|TECHNOLOG|SOLUTIONS?|BRANCH|STATEMENT/i;
 
 // Parse Indian number format: "1,23,456.78" → 123456.78
 function parseIndianNumber(str) {
@@ -369,16 +386,262 @@ function parseKFintech(text) {
 
 
 // ════════════════════════════════════════════════════════════════
+//  GROWW MUTUAL FUND PARSER
+// ════════════════════════════════════════════════════════════════
+
+function parseGrowwMF(text) {
+    const investor = extractInvestorInfo(text);
+
+    let asOfDate = '';
+    const dateMatch = text.match(/HOLDINGS AS ON\s+([\d\-\/]+)/i);
+    if (dateMatch) asOfDate = dateMatch[1];
+
+    const summary = { totalInvested: 0, currentValue: 0, profitLoss: 0, xirr: 0 };
+    const sumMatch = text.match(/Total Investments\s+Current Portfolio Value\s+Profit\/Loss\s*([\d,]+\.?\d*)\s+([\d,]+\.?\d*)\s+([\d,]+\.?\d*)/i);
+    if (sumMatch) {
+        summary.totalInvested = parseIndianNumber(sumMatch[1]);
+        summary.currentValue = parseIndianNumber(sumMatch[2]);
+        summary.profitLoss = parseIndianNumber(sumMatch[3]);
+    }
+    const xirrMatch = text.match(/Profit\/Loss\s*%\s+XIRR\s+([\d,]+\.?\d*)%\s+([\d,]+\.?\d*)%/i) || text.match(/XIRR\s*([\d,]+\.?\d*)%/i);
+    if (xirrMatch) {
+        summary.xirr = parseIndianNumber(xirrMatch[2] || xirrMatch[1]);
+    }
+
+    const schemes = [];
+    const values = [];
+    const returns = [];
+
+    // --- STRATEGY 1: Block Regex Extraction (handles pdf.js space-joined page text) ---
+    if (/Scheme Name\s+AMC\s+Category/i.test(text)) {
+        const afterHeader = text.split(/Scheme Name\s+AMC\s+Category/i)[1] || '';
+        const schemesBlock = afterHeader.split(/--- PAGE|Sub-category|Profit\/Loss/i)[0] || afterHeader;
+        const schemeRegex = /([A-Z][a-zA-Z0-9\s\-\.\(\)]+?\s+(?:Direct|Regular)\s+(?:Plan\s+)?(?:Growth|IDCW|Dividend|Option)(?:\s+Plan)?)\s+([A-Za-z0-9\s\.\-&]+?\s+(?:Mutual Fund|AMC))\s+(Equity|Debt|Hybrid|Solution Oriented|Other)/gi;
+        let sm;
+        while ((sm = schemeRegex.exec(schemesBlock)) !== null) {
+            schemes.push({
+                name: sm[1].trim(),
+                amc: sm[2].trim(),
+                category: sm[3].trim()
+            });
+        }
+    }
+
+    if (/Sub-category\s+Folio No/i.test(text)) {
+        const afterHeader = text.split(/Sub-category\s+Folio No/i)[1] || '';
+        const valuesSection = afterHeader.split(/Current Value/i)[1] || afterHeader;
+        const valuesBlock = valuesSection.split(/--- PAGE|Returns|XIRR/i)[0] || valuesSection;
+        const valRegex = /([A-Za-z\s\-]+?)\s+(\d{6,}[\d\/]*)\s+(?:Groww|External|[A-Za-z]+)\s+([\d,]+\.?\d*)\s+([\d,]+\.?\d*)\s+([\d,]+\.?\d*)/gi;
+        let vm;
+        while ((vm = valRegex.exec(valuesBlock)) !== null) {
+            values.push({
+                subCategory: vm[1].trim(),
+                folioNumber: vm[2].trim(),
+                units: parseIndianNumber(vm[3]),
+                investedValue: parseIndianNumber(vm[4]),
+                currentValue: parseIndianNumber(vm[5])
+            });
+        }
+    }
+
+    if (/Returns\s+XIRR/i.test(text)) {
+        const afterHeader = text.split(/Returns\s+XIRR/i)[1] || '';
+        const retBlock = afterHeader.split(/--- PAGE/i)[0] || afterHeader;
+        const retRegex = /([\d,]+\.?\d*)\s+([\d,]+\.?\d*)%/gi;
+        let rm;
+        while ((rm = retRegex.exec(retBlock)) !== null) {
+            returns.push({
+                returns: parseIndianNumber(rm[1]),
+                xirr: parseIndianNumber(rm[2])
+            });
+        }
+    }
+
+    // --- STRATEGY 2: Line-by-line fallback if Strategy 1 found nothing ---
+    if (schemes.length === 0 || values.length === 0) {
+        const lines = text.split('\n').map(cleanLine).filter(l => l.length > 0);
+        let currentSection = '';
+
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+
+            if (/Scheme Name\s+AMC\s+Category/i.test(line)) {
+                currentSection = 'SCHEMES';
+                continue;
+            } else if (/Sub-category\s+Folio No/i.test(line)) {
+                currentSection = 'VALUES';
+                continue;
+            } else if (/Returns\s+XIRR/i.test(line)) {
+                currentSection = 'RETURNS';
+                continue;
+            } else if (/HOLDING SUMMARY|Personal Details|Profit\/Loss\s+%|--- PAGE/i.test(line)) {
+                if (currentSection === 'SCHEMES' && /Profit\/Loss/i.test(line)) {
+                    currentSection = '';
+                }
+                continue;
+            }
+
+            if (currentSection === 'SCHEMES') {
+                const catMatch = line.match(/\s+(Equity|Debt|Hybrid|Solution Oriented|Other)$/i);
+                const category = catMatch ? catMatch[1].trim() : 'Equity';
+                const beforeCat = catMatch ? line.slice(0, catMatch.index).trim() : line.trim();
+
+                const amcMatch = beforeCat.match(/\b(?!(?:Direct|Regular|Plan|Growth|IDCW|Dividend|Option|Index|Cap|Fund)\b)([A-Z][a-zA-Z0-9&.\-']*(?:\s+[A-Z][a-zA-Z0-9&.\-']*){0,2}\s+(?:Mutual Fund|AMC))\b$/i);
+                let schemeName = beforeCat;
+                let amc = '';
+                if (amcMatch) {
+                    amc = amcMatch[1].trim();
+                    schemeName = beforeCat.slice(0, amcMatch.index).trim();
+                }
+
+                if (schemeName.length > 3) {
+                    schemes.push({
+                        name: schemeName,
+                        amc: amc,
+                        category: category
+                    });
+                }
+            } else if (currentSection === 'VALUES') {
+                const m = line.match(/^(.*?)\s+(\d+[\d\/]*)\s+(?:Groww|External|\S+)\s+([\d,]+\.?\d*)\s+([\d,]+\.?\d*)\s+([\d,]+\.?\d*)$/i);
+                if (m) {
+                    values.push({
+                        subCategory: m[1].trim(),
+                        folioNumber: m[2].trim(),
+                        units: parseIndianNumber(m[3]),
+                        investedValue: parseIndianNumber(m[4]),
+                        currentValue: parseIndianNumber(m[5])
+                    });
+                }
+            } else if (currentSection === 'RETURNS') {
+                const m = line.match(/^([\d,]+\.?\d*)\s+([\d,]+\.?\d*)%?$/);
+                if (m) {
+                    returns.push({
+                        returns: parseIndianNumber(m[1]),
+                        xirr: parseIndianNumber(m[2])
+                    });
+                }
+            }
+        }
+    }
+
+    const holdings = [];
+    const count = Math.max(schemes.length, values.length);
+    for (let i = 0; i < count; i++) {
+        const s = schemes[i] || { name: 'Unknown Scheme', amc: '', category: 'Equity' };
+        const v = values[i] || { subCategory: '', folioNumber: '', units: 0, investedValue: 0, currentValue: 0 };
+        const r = returns[i] || { returns: 0, xirr: 0 };
+
+        const units = v.units;
+        const curVal = v.currentValue;
+        const nav = units > 0 && curVal > 0 ? Math.round((curVal / units) * 10000) / 10000 : 0;
+
+        holdings.push({
+            name: s.name,
+            type: 'Mutual Fund',
+            issuer: s.amc || 'Groww Mutual Fund',
+            category: s.category,
+            subCategory: v.subCategory,
+            folioNumber: v.folioNumber,
+            units: units,
+            value: curVal,
+            currentValue: curVal,
+            amount: v.investedValue || curVal,
+            nav: nav,
+            returns: r.returns,
+            xirr: r.xirr,
+            isin: '',
+            dpId: ''
+        });
+    }
+
+    return {
+        type: 'GROWW_MF',
+        broker: 'Groww',
+        documentCategory: 'Mutual Fund',
+        asOfDate: asOfDate,
+        investor: investor,
+        summary: summary,
+        holdings: holdings
+    };
+}
+
+// ════════════════════════════════════════════════════════════════
+//  GROWW STOCK / DEMAT PARSER
+// ════════════════════════════════════════════════════════════════
+
+function parseGrowwStocks(text) {
+    const lines = text.split('\n').map(cleanLine).filter(l => l.length > 0);
+    const investor = extractInvestorInfo(text);
+    const holdings = [];
+
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const isinMatch = line.match(/\b(INE[A-Z0-9]{9}\d)\b/);
+        if (isinMatch) {
+            const isin = isinMatch[1];
+            let name = line.replace(isin, '').replace(/\b(?:EQ|BE|SM)\b/g, '').trim();
+            let units = 0;
+            let val = 0;
+            let avgPrice = 0;
+
+            const nums = [...line.matchAll(/([\d,]+\.?\d*)/g)].map(m => parseIndianNumber(m[1])).filter(n => n > 0);
+            if (nums.length >= 2) {
+                units = nums[0];
+                val = nums[nums.length - 1];
+                if (nums.length >= 3) avgPrice = nums[1];
+            }
+
+            holdings.push({
+                name: name || isin,
+                type: 'Stock (IND)',
+                issuer: name || 'Indian Equity',
+                isin: isin,
+                units: units,
+                amount: avgPrice > 0 && units > 0 ? units * avgPrice : val,
+                value: val,
+                currentValue: val,
+                nav: units > 0 && val > 0 ? val / units : avgPrice,
+                folioNumber: '',
+                dpId: ''
+            });
+        }
+    }
+
+    if (holdings.length === 0) {
+        const generic = parseCDSL(text);
+        if (generic.holdings.length > 0) {
+            generic.type = 'GROWW_STOCKS';
+            generic.broker = 'Groww';
+            generic.documentCategory = 'Stock';
+            return generic;
+        }
+    }
+
+    return {
+        type: 'GROWW_STOCKS',
+        broker: 'Groww',
+        documentCategory: 'Stock',
+        investor: investor,
+        holdings: holdings
+    };
+}
+
+
+// ════════════════════════════════════════════════════════════════
 //  HELPER FUNCTIONS
 // ════════════════════════════════════════════════════════════════
 
 function extractInvestorInfo(text) {
-    const investor = { name: '', pan: '' };
+    const investor = { name: '', pan: '', mobile: '' };
 
-    const panMatch = text.match(PAN_REGEX);
+    const panMatch = text.match(PAN_REGEX) || text.match(/\b([A-Z]{5}\d{4}[A-Z])\b/);
     if (panMatch) investor.pan = panMatch[1];
 
-    const nameMatch = text.match(NAME_REGEX);
+    const mobMatch = text.match(/(?:Mobile\s*(?:Number)?|Phone)\s*[:\-]?\s*(\d{10})/i);
+    if (mobMatch) investor.mobile = mobMatch[1];
+
+    const nameMatch = text.match(/Name\s*[:\-]?\s*([A-Za-z\s]+?)(?=\s+(?:Mobile|PAN|Email|Phone|Folio|Account|HOLDING|\n|$))/i) ||
+                      text.match(NAME_REGEX);
     if (nameMatch) investor.name = nameMatch[1].trim();
 
     return investor;
@@ -487,21 +750,15 @@ function parseBankStatement(text) {
     const accMatch = fullText.match(/(?:Saving|Savings|Account)\s*(?:no\.?|number)?\s*[:\-]?\s*(\d{8,18})/i);
     if (accMatch) accountNo = accMatch[1];
 
-    // Investor Name extraction (prioritize Address Block name before Account No)
+    // Investor name. This used to hunt for ONE SPECIFIC PERSON — a hardcoded first name
+    // and a list of nine surnames — and then fall back to that person's full name when
+    // nothing matched, so every other user's statement was attributed to a stranger. The
+    // label the bank itself prints is the only sound evidence here, so it is all this
+    // reads, and an absent name now stays absent rather than being filled in with a guess.
     let investorName = '';
-    const addrNameMatch = fullText.match(/(?:JAIPUR|DELHI|MUMBAI|BANGALORE|VIZAG|CHENNAI|KOLKATA|IN,\s*\d{6})\s+([A-Z\s]{3,30})\s+(?:\d|FLAT|BLOCK|Statement|Saving)/i);
-    if (addrNameMatch && !/PRIVATE|LIMITED|BANK|SERVICE|TECHNOLOGY|TECHNOLOGIES/i.test(addrNameMatch[1])) {
-        investorName = addrNameMatch[1].trim();
-    } else {
-        const nameMatch = fullText.match(/\b(SWARAJ\s+[A-Z\s]{2,20}|[A-Z]{3,}\s+(?:SINGH|KUMAR|NEGI|SHARMA|VERMA|GUPTA|JAIN|AGARWAL|MEHTA)\s+[A-Z]{3,})\b/i);
-        if (nameMatch) {
-            investorName = nameMatch[1].trim();
-        } else {
-            const genName = fullText.match(/(?:Account\s*Holder|Holder|Name|Customer)\s*[:\-]?\s*([A-Za-z\s]{3,30})/i);
-            if (genName && !/PRIVATE|LIMITED|BANK|SERVICE|TECHNOLOGY/i.test(genName[1])) {
-                investorName = genName[1].trim();
-            }
-        }
+    const labelled = fullText.match(/(?:Account\s*Holder|Customer\s*Name|Holder|Name)\s*[:\-]\s*([A-Za-z][A-Za-z\s.]{2,40}?)(?=\s{2,}|\s+(?:Address|Mobile|PAN|Email|Phone|Account|Branch|IFSC|Statement)\b|$)/i);
+    if (labelled && !ORG_WORDS.test(labelled[1])) {
+        investorName = labelled[1].trim();
     }
 
     // Closing balance
@@ -516,23 +773,23 @@ function parseBankStatement(text) {
         }
     }
 
-    // Cashflow & Salary Intelligence
+    // Salary detection. The narration keywords below are generic banking terms; the
+    // employer's name is read OUT of the statement rather than matched against one
+    // specific company that used to be written into this file. `NEFT` is deliberately no
+    // longer a salary marker: it is the transport for most inbound transfers, so it
+    // matched rent, refunds and family money and reported all of it as salary.
     let salaryIncome = 0;
     let salaryEmployer = '';
-    let sliceRepayments = 0;
 
     const txnChunks = fullText.split(/\b\d{1,2}\s+\d{2}\.\d{2}\.\d{4}\b/);
     txnChunks.forEach(chunk => {
         const nums = [...chunk.matchAll(/([\d,]+\.\d{2})/g)].map(m => parseIndianNumber(m[1]));
-        if (/CELEBAL|SALARY|PAYROLL|NEFT/i.test(chunk) && nums.length >= 1) {
-            const empMatch = chunk.match(/([A-Z\s]{4,40}\s+(?:PRIVATE|LIMITED|PVT|LTD|CORP|INC))/i);
-            if (empMatch && nums[0] > 1000 && !salaryEmployer) {
-                salaryEmployer = empMatch[1].trim();
+        if (/\b(?:SALARY|PAYROLL|WAGES|REMUNERATION)\b/i.test(chunk) && nums.length >= 1) {
+            const empMatch = chunk.match(/([A-Z][A-Za-z\s&.]{3,40}\s+(?:PRIVATE|LIMITED|PVT|LTD|CORP|INC|LLP))/i);
+            if (nums[0] > 1000 && !salaryEmployer) {
+                salaryEmployer = empMatch ? empMatch[1].trim() : '';
                 salaryIncome = nums[0];
             }
-        }
-        if (/slice/i.test(chunk) && nums.length >= 1) {
-            sliceRepayments += nums[0];
         }
     });
 
@@ -550,13 +807,12 @@ function parseBankStatement(text) {
         dpId: '',
         isin: '',
         detectedSalary: salaryIncome,
-        detectedEmployer: salaryEmployer,
-        detectedLoans: sliceRepayments
+        detectedEmployer: salaryEmployer
     };
 
     return {
         type: 'BANK_STATEMENT',
-        investor: { name: investorName || 'SWARAJ SINGH NEGI', pan: '' },
+        investor: { name: investorName, pan: '' },
         holdings: [holding]
     };
 }
@@ -621,8 +877,8 @@ function normalizeToInvestments(parsed) {
             id: Date.now() + idx,
             name:           h.name || h.isin || 'Unknown',
             type:           refinedType,
-            issuer:         extractIssuerFromName(h.name),
-            amount:         h.value || 0,        // Backward compat: amount = market value
+            issuer:         h.issuer || extractIssuerFromName(h.name),
+            amount:         (h.amount !== undefined && h.amount > 0) ? h.amount : (h.value || 0),        // Invested cost
             rate:           0,                    // Unknown from CAS — user can edit later
             payout:         refinedType === 'Mutual Fund' ? 'Cumulative' : 'Annual',
             rating:         '',                   // Not in CAS
@@ -632,7 +888,8 @@ function normalizeToInvestments(parsed) {
             isin:           h.isin || '',
             units:          h.units || 0,
             nav:            h.nav || 0,
-            currentValue:   h.value || 0,
+            currentPrice:   h.nav || 0,
+            currentValue:   h.value || (h.units && h.nav ? h.units * h.nav : (h.amount || 0)),
             folioNumber:    h.folioNumber || '',
             dpId:           h.dpId || '',
             importSource:   parsed.type,
@@ -675,7 +932,7 @@ function parseStatement(text) {
     if (type === 'UNKNOWN') {
         return {
             type: 'UNKNOWN',
-            error: 'Could not identify this PDF. Supported formats: CDSL CAS, NSDL CAS, CAMS MF Statement, KFintech MF Statement.',
+            error: 'Could not identify this PDF. Supported formats: Groww Statements, CDSL CAS, NSDL CAS, CAMS MF, KFintech MF, Bank Statements.',
             investor: {},
             holdings: [],
             investments: []
@@ -684,12 +941,14 @@ function parseStatement(text) {
 
     let parsed;
     switch (type) {
-        case 'CDSL_CAS':          parsed = parseCDSL(text);          break;
-        case 'NSDL_CAS':          parsed = parseNSDL(text);          break;
-        case 'CAMS_MF':           parsed = parseCAMS(text);          break;
-        case 'KFINTECH_MF':       parsed = parseKFintech(text);      break;
-        case 'BANK_STATEMENT':    parsed = parseBankStatement(text); break;
-        case 'GENERIC_STATEMENT': parsed = parseGenericPdf(text);     break;
+        case 'GROWW_MF':          parsed = parseGrowwMF(text);          break;
+        case 'GROWW_STOCKS':      parsed = parseGrowwStocks(text);      break;
+        case 'CDSL_CAS':          parsed = parseCDSL(text);             break;
+        case 'NSDL_CAS':          parsed = parseNSDL(text);             break;
+        case 'CAMS_MF':           parsed = parseCAMS(text);             break;
+        case 'KFINTECH_MF':       parsed = parseKFintech(text);         break;
+        case 'BANK_STATEMENT':    parsed = parseBankStatement(text);    break;
+        case 'GENERIC_STATEMENT': parsed = parseGenericPdf(text);        break;
         default:                  parsed = { type, investor: {}, holdings: [] };
     }
 
@@ -697,6 +956,10 @@ function parseStatement(text) {
 
     return {
         type: parsed.type,
+        broker: parsed.broker || (type.startsWith('GROWW') ? 'Groww' : ''),
+        documentCategory: parsed.documentCategory || (type.includes('MF') ? 'Mutual Fund' : (type.includes('STOCKS') || type.includes('CAS') ? 'Stock' : 'Investment')),
+        asOfDate: parsed.asOfDate || '',
+        summary: parsed.summary || {},
         investor: parsed.investor,
         holdings: parsed.holdings,
         investments: investments

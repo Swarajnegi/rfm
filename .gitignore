@@ -5,3 +5,11 @@ android/jdk17.zip
 android/jdk21.zip
 android/jdk21/
 rfm-app-debug.apk
+worker/.dev.vars
+worker/.env
+
+# Build artefacts. Two 9MB APKs were tracked here.
+*.apk
+
+# Codex scratch attachments
+.codex-remote-attachments/

@@ -18,14 +18,22 @@ document.addEventListener('alpine:init', () => {
                 // Lets the interaction layer re-bind observers that are scoped to
                 // a single surface, without app.js knowing what those are.
                 document.dispatchEvent(new CustomEvent('corpus:navigated', { detail: next }));
-                if (next === 'home') this.$nextTick(() => this.renderNwChart());
                 try { window.scrollTo({ top: 0, behavior: 'instant' }); } catch (e) { window.scrollTo(0, 0); }
+            };
+            // Chart creation runs AFTER the transition has settled, never inside it.
+            // Lightweight Charts builds a canvas and measures its container; doing that
+            // during a View Transition's capture deadlocked the renderer — the page kept
+            // painting but stopped running script, so leaving Home and returning could
+            // freeze the app. It reproduced 4 times out of 4, and disabling EITHER the
+            // transition or the chart cleared it, which is what identified the pair.
+            const afterward = () => {
+                if (next === 'home') this.$nextTick(() => this.renderNwChart());
             };
             // No haptic here on purpose. Feedback belongs on COMMITTED actions —
             // saving, syncing, confirming — not on moving between pages, which a
             // person does dozens of times a minute.
-            if (window.RFMMotion) window.RFMMotion.transition(apply);
-            else apply();
+            if (window.RFMMotion) window.RFMMotion.transition(apply, afterward);
+            else { apply(); afterward(); }
         },
 
         showNotifications: false,
@@ -82,7 +90,12 @@ document.addEventListener('alpine:init', () => {
         // ── Tax Data Store (Phase 3) ─────────────────────────────
         tax: {
             // Inputs
-            otherIncome:      0,    // Interest, rent, consulting, etc.
+            // Salary is SEPARATE from other income because the standard deduction under
+            // Sec 16(ia) is allowed against salary and pension only — not against rent,
+            // interest or consulting. One combined field made that impossible to compute,
+            // and the app was granting the deduction against every rupee of gross.
+            salaryIncome:     0,    // Annual salary — qualifies for the standard deduction
+            otherIncome:      0,    // Rent, consulting, anything that does NOT qualify
             deduction80C:     0,    // LIC, PPF, ELSS, NSC, home loan principal (max ₹1.5L)
             deduction80D:     0,    // Medical insurance premium (max ₹50K senior)
             deduction80TTA:   0,    // Savings account interest (max ₹10K, not for seniors)
@@ -90,6 +103,10 @@ document.addEventListener('alpine:init', () => {
             hra:              0,    // House Rent Allowance exemption
             homeLoanInterest: 0,    // Section 24 interest deduction (max ₹2L)
             otherDeductions:  0,    // Any other eligible deductions
+            // Gains BOOKED this financial year, i.e. actually sold. Not derivable from a
+            // holdings list — see the capital gains engine below.
+            realizedEquityLTCG: 0,  // Equity/equity-MF units held > 12 months, then sold
+            realizedEquitySTCG: 0,  // Equity/equity-MF units held ≤ 12 months, then sold
             regime:          'compare', // 'old' | 'new' | 'compare'
             // Defaults to false. The app was built for a 60+ user, so this was seeded true;
             // for a general release most users are not, and a wrong value silently changes
@@ -99,6 +116,19 @@ document.addEventListener('alpine:init', () => {
         },
 
         goals: [],
+
+        // ── The person (asked once, on first open) ──────────────────
+        /* Everything the AI says is judged against this. Without it every
+           reading was written for one imagined reader, a young equity investor.
+           Persisted inside rfm_v1, so backup and restore carry it. */
+        profile: {
+            name: '', age: null, goal: null, risk: null, payout: null, horizon: null,
+            interests: [], completedAt: null, skippedAt: null,
+        },
+        onboarding: { open: false, step: 0, draft: null, editing: false },
+
+        // ── The daily brief (the card under the AI card) ─────────────
+        daily: { brief: null, loading: false, error: '' },
 
         // ── SIP & Recurring Investments (Phase 9) ───────────────────
         sips: [],
@@ -111,6 +141,13 @@ document.addEventListener('alpine:init', () => {
         editForm: {},
         addingInv: false,
         addingGoal: false,
+
+        // ── Topping up a holding you already own ────────────────────
+        // You say what you SPENT; the app works out the units and the new
+        // average, because that is arithmetic it already has the price for.
+        addingLot: null,                              // the holding being topped up
+        lotForm: { amount: '', timing: 'market' },    // 'market' | 'offhours'
+        lotError: '',
 
         // Haptics are a preference, not a fact about the device. Persisted
         // separately from the portfolio blob so a restore cannot clobber it.
@@ -151,12 +188,19 @@ document.addEventListener('alpine:init', () => {
         },
 
         // ── Internal chart instances (not reactive state) ────────────
+        // They live on window._rfmNw, not on `this`. Alpine wraps anything
+        // assigned to the component in a reactive Proxy, and a Lightweight
+        // Charts object read back through that Proxy fails its own internal
+        // identity checks — it throws "Value is null" out of the renderer, twice
+        // per paint, with a stack entirely inside the minified bundle and no
+        // mention of this file. Keep chart handles off the component.
 
         // ── Phase 11: Live NAV & Stock Price Ingestion ──────────────
         navFetchState: 'idle', // 'idle' | 'fetching' | 'done' | 'error'
         navFetchError: '',
         lastNavFetchTime: null,
         navFetchProgress: { completed: 0, total: 0, updated: 0, failed: 0 },
+        syncDetailOpen: false,   // the partial-failure banner starts collapsed
         mfSearchResults: [],
         isSearchingMf: false,
         mfSearchQuery: '',
@@ -178,28 +222,22 @@ document.addEventListener('alpine:init', () => {
         importDuplicateMode: 'skip',
         importStats: null,
 
-        // ── Phase 13: Universal AI Statement Classifier ──────────────
-        aiClassifier: {
-            enabled:    false,    // becomes true once apiKey is verified
-            status:     'idle',   // 'idle' | 'classifying' | 'done' | 'error'
-            error:      '',
-            usedAI:     false,    // marks if last import result came from AI
-            docType:    '',       // AI-detected document type
-            confidence: '',       // AI-stated confidence
+        // ── Smart Portfolio Diff State (Groww & AI Portfolio Ingestion) ─
+        statementDiff: {
+            active: false,
+            category: 'Mutual Fund',
+            broker: 'Groww',
+            asOfDate: '',
+            investor: { name: '', pan: '', mobile: '' },
+            summary: { totalInvested: 0, currentValue: 0, profitLoss: 0, xirr: 0 },
+            aiMessage: '',
+            matched: [],
+            newItems: [],
+            omitted: []
         },
 
         // ── Regenerative Wealth State ────────────────────────────────
         regenWealth: {
-            apiKey:       '',
-            provider:     'auto', // 'auto' | 'gemini' | 'openrouter' | 'openai'
-            model:        'openai/gpt-4o-mini',
-            customModel:  '',
-            modelCatalog: [],
-            modelCatalogState: 'idle', // 'idle' | 'loading' | 'ready' | 'error'
-            modelCatalogError: '',
-            activeTab:    null,   // 'key' | 'settings' | null
-            apiKeySet:    false,
-            showKeyInput: false,
             loading:      false,
             progressMsg:  '',
             error:        '',
@@ -222,8 +260,12 @@ document.addEventListener('alpine:init', () => {
         usdInrAsOf: null,
         // Last-resort placeholder, used only when no provider and no cache can supply a
         // rate. Surfaced as "estimated" wherever it is used — never presented as real.
-        // Worth confirming against the live rate when you next look at this.
-        FX_FALLBACK_USD_INR: 88.0,
+        // Checked 2026-09-18 against open.er-api.com and exchangerate-api: the live rate
+        // was 95.96 while this constant still said 88.0, so a total provider outage was
+        // understating the entire US book by ~9%. It will drift again — that is the nature
+        // of a hardcoded rate — which is why fxIsEstimated exists and why every figure
+        // derived from it is labelled rather than shown as fact.
+        FX_FALLBACK_USD_INR: 95.96,
         FX_MAX_AGE_MS: 12 * 60 * 60 * 1000,
         // ── HTTP ────────────────────────────────────────────────────
         // One GET path for every price/FX provider. On Android CapacitorHttp runs the
@@ -260,13 +302,91 @@ document.addEventListener('alpine:init', () => {
         async httpGetJson(url, timeoutMs = 3000) {
             if (this.canUseNativeHttp) {
                 const res = await Promise.race([
-                    window.AppPlugins.CapacitorHttp.get({ url, readTimeout: timeoutMs, connectTimeout: timeoutMs }),
+                    window.AppPlugins.CapacitorHttp.get({
+                        url,
+                        headers: {
+                            'User-Agent': 'Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36',
+                            'Accept': 'application/json, text/plain, */*'
+                        },
+                        readTimeout: timeoutMs,
+                        connectTimeout: timeoutMs
+                    }),
                     new Promise((_, reject) => setTimeout(() => reject(new Error('Timed out')), timeoutMs + 500))
                 ]);
                 if (res.status < 200 || res.status >= 300) throw new Error(`HTTP ${res.status}`);
                 return typeof res.data === 'string' ? JSON.parse(res.data) : res.data;
             }
             return this.fetchJsonWithTimeout(url, timeoutMs);
+        },
+
+        /* ── Relays ─────────────────────────────────────────────────────────
+           Yahoo sends no CORS header, so a browser cannot call it directly. It also
+           now answers 429 "Too Many Requests" to any client that does not send a
+           browser User-Agent — which is why the NATIVE path works (CapacitorHttp sets
+           one from native code) and the browser path cannot.
+
+           The two public relays this used to race are both gone as of 2026-09-18:
+           corsproxy.io answers 401 `keyless_legacy_url` ("anonymous legacy proxy URLs
+           are no longer supported") and allorigins returns 5xx. That is why stock
+           prices stopped syncing in the browser entirely — Indian as well as US, though
+           US is where it shows first because those are the holdings people watch.
+
+           r.jina.ai still works keyless and sends CORS, but it returns the document as
+           TEXT with a "Title: / URL Source: / Markdown Content:" preamble, so the JSON
+           has to be recovered from the body rather than parsed straight off. */
+        PRICE_RELAYS: [
+            { url: t => `https://r.jina.ai/${t}`,                                       loose: true  },
+            { url: t => `https://api.allorigins.win/raw?url=${encodeURIComponent(t)}`,  loose: false },
+        ],
+
+        /* Pulls the JSON object out of a text response. A relay that wraps the payload
+           in prose would otherwise fail JSON.parse on the first character. */
+        _looseJson(text) {
+            if (text && typeof text === 'object') return text;
+            const t = String(text || '');
+            const i = t.indexOf('{'), j = t.lastIndexOf('}');
+            if (i < 0 || j <= i) throw new Error('Relay returned no JSON.');
+            return JSON.parse(t.slice(i, j + 1));
+        },
+
+        async httpGetText(url, timeoutMs = 8000) {
+            if (this.canUseNativeHttp) {
+                const res = await window.AppPlugins.CapacitorHttp.get({
+                    url, headers: { 'Accept': 'text/plain, application/json, */*' },
+                    readTimeout: timeoutMs, connectTimeout: timeoutMs
+                });
+                if (res.status < 200 || res.status >= 300) throw new Error(`HTTP ${res.status}`);
+                return res.data;
+            }
+            const controller = typeof AbortController === 'function' ? new AbortController() : null;
+            const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
+            try {
+                const r = await fetch(url, controller ? { signal: controller.signal } : undefined);
+                if (!r.ok) throw new Error(`HTTP ${r.status}`);
+                return await r.text();
+            } finally { if (timer) clearTimeout(timer); }
+        },
+
+        /* Native goes straight to the source with a real User-Agent — one request, no
+           relay. The browser has no such option, so it races what is left. */
+        async fetchMarketJson(targetUrl, timeoutMs = 8000) {
+            if (this.canUseNativeHttp) return this.httpGetJson(targetUrl, timeoutMs);
+            return this.firstSuccessful(this.PRICE_RELAYS.map(relay => async () => {
+                const body = await this.httpGetText(relay.url(targetUrl), timeoutMs + 1000);
+                return relay.loose ? this._looseJson(body)
+                                   : (typeof body === 'string' ? JSON.parse(body) : body);
+            }));
+        },
+
+        // AMFI's official complete NAV report is a text file, not JSON. Keep this
+        // transport beside fetchMarketJson so Android uses CapacitorHttp (and the
+        // web build uses the same CORS relays) rather than silently falling back to
+        // a WebView fetch that cannot reach the source.
+        async fetchMarketText(targetUrl, timeoutMs = 8000) {
+            if (this.canUseNativeHttp) return this.httpGetText(targetUrl, timeoutMs);
+            return this.firstSuccessful(this.PRICE_RELAYS.map(relay =>
+                () => this.httpGetText(relay.url(targetUrl), timeoutMs + 1000)
+            ));
         },
 
         // ── USD/INR ─────────────────────────────────────────────────
@@ -351,17 +471,21 @@ document.addEventListener('alpine:init', () => {
             // app is backgrounded, where 'beforeunload' does not.
             document.addEventListener('visibilitychange', () => {
                 if (document.visibilityState === 'hidden') this.recordVisit();
+                // An app left open overnight is still owed today's brief.
+                else this.maybeRunDaily();
             });
             window.addEventListener('pagehide', () => this.recordVisit());
             if (!this._visit.at) setTimeout(() => this.recordVisit(), 4000);
 
-            // First-run tutorial. Deferred past the first paint so it anchors to
-            // laid-out elements rather than a half-built DOM.
-            setTimeout(() => { try { window.RFMMotion && window.RFMMotion.startTour(false); } catch (e) {} }, 1200);
-            // Phase 12: Schedule native alerts after data loads (fire-and-forget, non-blocking)
-            this.scheduleMaturityAlerts();
+            // Tutorial is available on demand from Insights/Settings.
+            // Schedule alerts only if explicitly opted in
+            if (localStorage.getItem('corpus_alerts_enabled') === 'true') {
+                setTimeout(() => {
+                    this.scheduleMaturityAlerts().catch(e => console.warn('[Phase 12] Initial alerts schedule failed:', e));
+                }, 4000);
+            }
             this.$watch('investments',  () => {
-                this.saveData({ rescheduleAlerts: true });
+                this.saveData();
                 this.queueNwSnapshot('portfolio-change');
             }, { deep: true });
             this.$watch('cashflow',     () => this.saveData(), { deep: true });
@@ -373,61 +497,126 @@ document.addEventListener('alpine:init', () => {
             this.$watch('tax',          () => this.saveData(), { deep: true });
             this.$watch('goals',        () => this.saveData(), { deep: true });
             this.$watch('pension',      () => this.saveData(), { deep: true });
-            this.$watch('sips',         () => this.saveData({ rescheduleAlerts: true }), { deep: true });
+            this.$watch('sips',         () => this.saveData(), { deep: true });
+            this.$watch('profile',      () => this.saveData(), { deep: true });
+            if (this.shouldAskProfile) this.openOnboarding();
             // ITR checklist state (UI-only, not persisted)
             this.itrCheckState = {};
 
-            // ── Regenerative Wealth: restore API key, provider & model settings ──
-            const savedKey = localStorage.getItem('rfm_api_key') || localStorage.getItem('rfm_gemini_key');
-            if (savedKey) {
-                this.regenWealth.apiKey       = savedKey;
-                this.regenWealth.apiKeySet    = true;
-                this.regenWealth.provider     = localStorage.getItem('rfm_api_provider') || 'auto';
-                this.regenWealth.model        = localStorage.getItem('rfm_api_model') || 'openai/gpt-4o-mini';
-                this.regenWealth.customModel = localStorage.getItem('rfm_api_custom_model') || '';
-            }
+            // Corpus now uses the managed AI service. Remove legacy user-supplied
+            // credentials rather than silently retaining an old key on device.
+            ['rfm_api_key', 'rfm_gemini_key', 'rfm_api_provider', 'rfm_api_model', 'rfm_api_custom_model']
+                .forEach(key => localStorage.removeItem(key));
             const cached = window.RegenWealth?.loadCached(this.$data);
             if (cached) this.regenWealth.analysis = cached;
+            if (window.RegenWealth?.hasPending?.()) {
+                this.regenWealth.loading = true;
+                window.RegenWealth.recoverPending(msg => { this.regenWealth.progressMsg = msg; })
+                    .then(result => { if (result) this.regenWealth.analysis = result; })
+                    .catch(error => { this.regenWealth.error = error.message || 'Analysis was interrupted.'; })
+                    .finally(() => { this.regenWealth.loading = false; this.regenWealth.progressMsg = ''; });
+            }
 
-            // Mobile Pull-to-Refresh touch gesture listener initialization
-            this.initPullToRefresh();
+            // Bound on the next tick: initPullToRefresh reaches for #ptr, which
+            // does not exist until Alpine has rendered the shell.
+            this.$nextTick(() => this.initPullToRefresh());
+
+            // Read history BEFORE the opening snapshot. hasAnyPortfolioData counts
+            // nwHistory, #nwChart lives behind it, and loadNwHistory used to be
+            // called only from inside renderNwChart — a circle that left a saved
+            // history invisible on any boot where net worth happened to be zero.
+            this.loadNwHistory();
 
             // Record the opening valuation. Subsequent edits and quote syncs update it.
             setTimeout(() => {
                 this.saveNwSnapshot({ source: 'app-open' });
                 this.renderNwChart();
             }, 1500);
+
+            // After FX and the opening snapshot, so the brief reads real values.
+            setTimeout(() => this.maybeRunDaily(), 3200);
+
+            // Settle off-hours purchases on the way in, not only on a sync.
+            // The whole point is that you do not have to be holding the phone
+            // at the opening bell: the open of a session that has already
+            // happened is in the daily candles and can be read back at any
+            // time. Opening the app mid-afternoon resolves it silently.
+            setTimeout(() => {
+                this.settleAllPendingLots().then(n => {
+                    if (n) { this.saveNwSnapshot({ source: 'lot-settled' }); this.renderNwChart(); }
+                }).catch(() => {});
+            }, 2600);
         },
 
         // ════════════════════════════════════════════════════════════
         //  NET WORTH HISTORY — Daily valuation snapshot engine
         // ════════════════════════════════════════════════════════════
+        //
+        // Every point in here is a value this app COMPUTED while it was open, on
+        // the day it computed it. Nothing is interpolated, back-filled or carried
+        // forward. A day the app never ran has no point and never gets one.
+
+        /* The local calendar day. toISOString() is UTC, and at +05:30 local time
+           runs AHEAD of it, so any observation taken between midnight and 05:29
+           was filed under YESTERDAY — a 1 a.m. edit created a point dated the
+           day before the day it happened, and the following evening's edit then
+           overwrote a record that belonged to a different date. Keys are
+           compared as strings everywhere below, so one calendar is in play
+           rather than UTC-parsed keys measured against local-midnight Dates. */
+        localDateKey(d = new Date()) {
+            const t = d instanceof Date ? d : new Date(d);
+            if (Number.isNaN(t.getTime())) return '';
+            return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
+        },
+
+        /* One final value per day, ascending, two years deep. Duplicates collapse
+           to the LATEST capture rather than the first, because the reason to save
+           again is that the newer number supersedes the older one. Legacy records
+           carry no capturedAt; for those, later in the array wins. */
+        _normalizeHistory(list) {
+            const byDate = new Map();
+            for (const p of Array.isArray(list) ? list : []) {
+                if (!p) continue;
+                const date = String(p.date || '').slice(0, 10);
+                if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+                const value = Number(p.value);
+                if (!Number.isFinite(value)) continue;
+                const next = { ...p, date, value };
+                const prev = byDate.get(date);
+                if (prev && prev.capturedAt && next.capturedAt && prev.capturedAt > next.capturedAt) continue;
+                byDate.set(date, next);
+            }
+            return [...byDate.values()].sort((a, b) => a.date < b.date ? -1 : 1).slice(-730);
+        },
 
         /** Store the latest truthful value for today; never invent historical points. */
         saveNwSnapshot({ source = 'valuation' } = {}) {
             try {
-                const today = new Date().toISOString().slice(0, 10);
                 const nw = this.netWorthTotal;
-                if (!nw || nw <= 0) return;
+                if (!Number.isFinite(nw)) return;
+                // The guard is "is there anything to value", not "is the value
+                // positive". A brand-new user must not get a ₹0 point; but a
+                // portfolio that has been emptied, or one whose debts exceed its
+                // assets, is a real observation and belongs in the series. The old
+                // `nw <= 0` test silently refused to record either of those.
+                if (!this.hasAnyPortfolioData) return;
 
-                const raw = localStorage.getItem('rfm_nw_history');
-                let history = raw ? JSON.parse(raw) : [];
+                const today = this.localDateKey();
+                if (!today) return;
+
+                let history = [];
+                try { history = JSON.parse(localStorage.getItem('rfm_nw_history')) || []; } catch (e) { history = []; }
                 if (!Array.isArray(history)) history = [];
 
-                // Legacy weekly records remain valid observations. New records are daily.
-                history = history.filter(point => point && point.date && Number.isFinite(Number(point.value)));
-                const idx = history.findIndex(point => point.date === today);
                 const point = {
                     date: today,
                     capturedAt: new Date().toISOString(),
                     value: Math.round(nw),
                     source
                 };
-                if (idx >= 0) history[idx] = point;
-                else history.push(point);
+                history.push(point);
 
-                // Retain two years of daily values. All points are values the app observed.
-                history = history.sort((a, b) => a.date.localeCompare(b.date)).slice(-730);
+                history = this._normalizeHistory(history);
                 localStorage.setItem('rfm_nw_history', JSON.stringify(history));
                 this.nwHistory = history;
             } catch (e) {
@@ -439,7 +628,7 @@ document.addEventListener('alpine:init', () => {
         loadNwHistory() {
             try {
                 const raw = localStorage.getItem('rfm_nw_history');
-                this.nwHistory = raw ? JSON.parse(raw) : [];
+                this.nwHistory = this._normalizeHistory(raw ? JSON.parse(raw) : []);
             } catch (e) {
                 this.nwHistory = [];
             }
@@ -453,34 +642,137 @@ document.addEventListener('alpine:init', () => {
             }, 300);
         },
 
-        /** Active chart time range: '1M' | '3M' | '6M' | '1Y' | 'ALL' */
+        /** Active chart time range: '1W' | '1M' | '3M' | '6M' | '1Y' | 'ALL' */
         nwChartRange: '1M',
 
-        /** Get filtered history based on selected range */
+        /** The hovered observation, as a caption. Empty means "not hovering". */
+        nwHoverLabel: '',
+
+        /* The first date INSIDE the selected window, as a key. Built from local
+           date parts so it lands on the same calendar the observations carry.
+           ALL has no floor and returns ''. */
+        get nwRangeStartKey() {
+            const now = new Date();
+            const at = (y, m, d) => this.localDateKey(new Date(y, m, d));
+            return ({
+                // Snapshots are daily, so a week is a real window rather than
+                // one or two points. It is the shortest range the data supports:
+                // there is no intraday series, so nothing below 1W would differ.
+                '1W':  at(now.getFullYear(),     now.getMonth(),     now.getDate() - 7),
+                '1M':  at(now.getFullYear(),     now.getMonth() - 1, now.getDate()),
+                '3M':  at(now.getFullYear(),     now.getMonth() - 3, now.getDate()),
+                '6M':  at(now.getFullYear(),     now.getMonth() - 6, now.getDate()),
+                '1Y':  at(now.getFullYear() - 1, now.getMonth(),     now.getDate()),
+            })[this.nwChartRange] || '';
+        },
+
+        /* The observations that actually fall inside the window. When there are
+           none this is EMPTY. It does NOT fall back to the full history, which is
+           what the old code did — an empty "1W" quietly drew two years of data
+           under a pill that said one week, and there was no way to tell. */
         get nwChartData() {
             const all = this.nwHistory || [];
             if (!all.length) return [];
-            const now = new Date();
-            const cutoff = {
-                '1M':  new Date(now.getFullYear(), now.getMonth() - 1,  now.getDate()),
-                '3M':  new Date(now.getFullYear(), now.getMonth() - 3,  now.getDate()),
-                '6M':  new Date(now.getFullYear(), now.getMonth() - 6,  now.getDate()),
-                '1Y':  new Date(now.getFullYear() - 1, now.getMonth(), now.getDate()),
-                'ALL': new Date(0),
-            }[this.nwChartRange] || new Date(0);
-            return all.filter(p => new Date(p.date) >= cutoff);
+            const from = this.nwRangeStartKey;
+            return from ? all.filter(p => p.date >= from) : [...all];
         },
 
-        get nwChartChangePct() {
-            const points = this.nwChartData;
-            if (points.length < 2 || !points[0].value) return null;
-            return ((points[points.length - 1].value - points[0].value) / points[0].value) * 100;
+        /* A year of daily points is 365 vertices across 350px — legible as a
+           shape, illegible as a series. A crowded window is therefore thinned to
+           ONE POINT PER BUCKET, and that point is the last observation the app
+           actually made inside the bucket, carrying its real date. Nothing is
+           averaged and no month-end is synthesised: a month whose last
+           observation was the 12th is plotted on the 12th.
+
+           The bucket is chosen by how many points COME OUT, not by the range
+           name. Keying off the range needs a raw-count threshold, and any
+           threshold is wrong for a sparse history: two years of every-third-day
+           observations is only 245 raw points, which passed a "dense enough for
+           months" test and then drew 106 weekly vertices about 3px apart. */
+        NW_MAX_DRAWN: 60,
+
+        _groupByLast(pts, keyOf) {
+            // Points are ascending, so the last write per bucket IS that bucket's
+            // final observation, and Map keeps first-seen key order — ascending.
+            const last = new Map();
+            for (const p of pts) last.set(keyOf(p.date), p);
+            return [...last.values()];
         },
 
-        get nwChartChangeLabel() {
-            const change = this.nwChartChangePct;
-            if (change === null || !Number.isFinite(change)) return 'Tracking';
-            return `${change >= 0 ? '+' : ''}${change.toFixed(2)}%`;
+        get nwChartSeries() {
+            const pts = this.nwChartData;
+            if (pts.length <= this.NW_MAX_DRAWN) return pts;
+
+            const monday = d => {
+                const t = new Date(`${d}T00:00:00`);
+                t.setDate(t.getDate() - ((t.getDay() + 6) % 7));
+                return this.localDateKey(t);
+            };
+            const weekly = this._groupByLast(pts, monday);
+            if (weekly.length <= this.NW_MAX_DRAWN) return weekly;
+
+            return this._groupByLast(pts, d => d.slice(0, 7));
+        },
+
+        get nwHasObservations() { return this.nwHistory.length > 0; },
+
+        /* Distinguishes "nothing has ever been recorded" from "nothing was
+           recorded in THESE dates". They look identical on an empty chart and
+           mean completely different things. */
+        get nwRangeEmpty() { return this.nwHasObservations && this.nwChartData.length === 0; },
+
+        /* Day and month; the year only on windows that can span one. */
+        formatObsDate(key) {
+            const d = new Date(`${String(key || '').slice(0, 10)}T00:00:00`);
+            if (Number.isNaN(d.getTime())) return '';
+            const long = this.nwChartRange === '1Y' || this.nwChartRange === 'ALL';
+            return d.toLocaleDateString('en-IN',
+                long ? { day: 'numeric', month: 'short', year: '2-digit' }
+                     : { day: 'numeric', month: 'short' });
+        },
+
+        /* The caption under the chart. The pill says what was asked for; this
+           says what was found — the real span of the drawn data and how many
+           observations stand behind it. */
+        get nwRangeSpanLabel() {
+            const pts = this.nwChartData;
+            if (!pts.length) return '';
+            const n = pts.length;
+            const count = `${n} observation${n === 1 ? '' : 's'}`;
+            const last = this.formatObsDate(pts[n - 1].date);
+            return n === 1 ? `${last} · ${count}`
+                           : `${this.formatObsDate(pts[0].date)} — ${last} · ${count}`;
+        },
+
+        /* The honest reading of two snapshots.
+
+           This is the difference between two TOTALS, and a total moves for two
+           unrelated reasons: the market moved, and money was paid in or taken
+           out. Nothing in this app records the second, so nothing here can
+           separate them — which is why the figure is a rupee amount labelled
+           "change in total corpus" and never a return. A first ₹20,000 deposit
+           is not a +100% gain, and treating it as one is how the hero came to
+           read "+98764.50% all time". */
+        get nwRangeChange() {
+            const pts = this.nwChartData;
+            if (pts.length < 2) return null;
+            const from = Number(pts[0].value);
+            const to   = Number(pts[pts.length - 1].value);
+            if (!Number.isFinite(from) || !Number.isFinite(to)) return null;
+            const delta = to - from;
+            // A percentage needs a baseline that means something. A zero or
+            // negative baseline yields Infinity or sign-flipped nonsense, and a
+            // four-figure percentage is contributions rather than performance
+            // every single time — arithmetic, not information.
+            const raw = from > 0 ? ((to - from) / from) * 100 : null;
+            const pct = raw !== null && Number.isFinite(raw) && Math.abs(raw) < 1000 ? raw : null;
+            return {
+                delta,
+                up: delta >= 0,
+                pct,
+                deltaLabel: `${delta >= 0 ? '+' : '\u2212'}${this.formatCurrency(Math.abs(delta))}`,
+                pctLabel: pct === null ? '' : `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%`,
+            };
         },
 
         /** Net-worth series (TradingView Lightweight Charts) */
@@ -495,58 +787,107 @@ document.addEventListener('alpine:init', () => {
         },
 
         renderNwChart() {
+            // Net worth chart canvas only lives and renders on the 'home' overview page
+            if (this.activePage !== 'home') return;
+
+            // NEVER build the chart while a View Transition is capturing the page.
+            // Lightweight Charts creates a canvas and measures its container, and doing
+            // that mid-capture deadlocks Chromium's renderer: the page keeps painting and
+            // stops running script. The guard lives HERE rather than at the call sites
+            // because the dangerous caller is not navigation — it is queueNwSnapshot's
+            // 300ms debounce, which fires on any portfolio write and can land inside a
+            // transition nobody associated with the chart.
+            if (window.RFMMotion?.isTransitioning?.()) {
+                clearTimeout(this._nwChartDefer);
+                this._nwChartDefer = setTimeout(() => this.renderNwChart(), 120);
+                return;
+            }
+
             const el = document.getElementById('nwChart');
             if (!el || !window.LW) return;
+
+            this.loadNwHistory();
+
+            // Nothing observed inside this window. Tear the chart down and let the
+            // template's honest placeholder stand in its place. The old code did
+            // two dishonest things here instead: it fell back to the ENTIRE
+            // history when a window came back empty, and when there was no
+            // history at all it invented a point at today's value — which for a
+            // brand-new user plotted a ₹0 observation that never happened.
+            //
+            // This has to come BEFORE the width check below: an empty window
+            // hides the canvas, a hidden canvas measures 0 wide, and the width
+            // check would then defer forever waiting for a box that is never
+            // coming.
+            const points = this.nwChartSeries
+                .map(p => ({ time: p.date, value: Number(p.value) }))
+                .filter(p => Number.isFinite(p.value));
+            if (!points.length) { this._nwChartRetries = 0; this._destroyNwChart(); return; }
 
             // Lightweight Charts measures its container. Inside an x-show'd page
             // that is display:none the measurement is 0x0 and the chart renders
             // blank with no error, so defer until the element actually has a box.
+            // BOUNDED, because this used to set a flag the callback cleared on
+            // its way back in — "retry once" that was really "retry forever",
+            // and a page that never gets a box is then a page that never runs
+            // anything else again.
             if (!el.clientWidth) {
-                if (!this._nwChartRetry) {
-                    this._nwChartRetry = true;
-                    this.$nextTick(() => { this._nwChartRetry = false; this.renderNwChart(); });
+                if ((this._nwChartRetries || 0) < 10) {
+                    this._nwChartRetries = (this._nwChartRetries || 0) + 1;
+                    this.$nextTick(() => {
+                        if (this.activePage === 'home') this.renderNwChart();
+                    });
                 }
                 return;
             }
+            this._nwChartRetries = 0;
 
-            this.loadNwHistory();
-
-            let data = [...(this.nwChartData.length ? this.nwChartData : this.nwHistory)];
-            if (data.length === 0) {
-                data = [{ date: new Date().toISOString().slice(0, 10), value: Math.round(this.netWorthTotal) }];
-            }
-
-            // The series must be ascending and unique on time, or the library throws.
-            const byDate = new Map();
-            for (const p of data) {
-                const t = String(p.date).slice(0, 10);
-                if (t) byDate.set(t, Number(p.value) || 0);
-            }
-            const points = [...byDate.entries()].sort((a, b) => a[0] < b[0] ? -1 : 1)
-                                                .map(([time, value]) => ({ time, value }));
-
-            const rising = points.length < 2 || points[points.length - 1].value >= points[0].value;
-            const stroke = rising ? this._token('--jade', '#1F6B52') : this._token('--carnelian', '#A33B2A');
-            const ink    = this._token('--ink-faint', '#74857D');
-
-            // Lightweight Charts parses colour strings itself and understands
-            // neither color-mix() nor a bare hex with alpha. The area fill was
-            // declared as color-mix(...) and therefore silently never drew — the
-            // line floated over nothing, which is why the chart read as a
-            // squiggle rather than as the shape of the money.
-            const alpha = (hex, a) => {
-                const m = /^#?([0-9a-f]{6})$/i.exec(String(hex).trim());
-                if (!m) return `rgba(63,164,122,${a})`;
-                const n = parseInt(m[1], 16);
-                return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},${a})`;
+            const c = this._nwChartColors();
+            const single = points.length === 1;
+            const seriesOpts = {
+                lineColor: single ? 'rgba(0,0,0,0)' : c.stroke,
+                lineWidth: single ? 0 : 2,
+                topColor: single ? 'rgba(0,0,0,0)' : c.fill,
+                bottomColor: c.clear,
+                priceLineVisible: false,
+                lastValueVisible: false,
+                crosshairMarkerRadius: 4,
+                crosshairMarkerBorderColor: c.stroke,
+                crosshairMarkerBackgroundColor: c.stroke,
             };
 
-            if (window._rfmNwChart) { window._rfmNwChart.remove(); window._rfmNwChart = null; }
+            // Reuse beats rebuild. A range tap, a quote refresh and a theme
+            // switch all change only DATA or COLOUR, and remove()/createChart()
+            // on each of those threw away a canvas and its listeners to redraw
+            // the same shape — the very teardown the View Transition guard above
+            // exists to keep away from a capturing renderer.
+            const held = window._rfmNw;
+            if (window._rfmNwChart && held && held.el === el && held.series) {
+                try {
+                    held.series.applyOptions(seriesOpts);
+                    held.series.setData(points);
+                    window._rfmNwChart.applyOptions({
+                        width: el.clientWidth,
+                        layout: { textColor: c.ink },
+                        crosshair: { vertLine: { color: c.stroke } },
+                        localization: { priceFormatter: (v) => this.formatIndianShort(v) },
+                    });
+                    this._markSingleObservation(points, c.stroke, single);
+                    window._rfmNwChart.timeScale().fitContent();
+                    return;
+                } catch (e) {
+                    // A library that refuses an update still has to draw, so fall
+                    // through to a rebuild rather than leave a stale series up.
+                    this._destroyNwChart();
+                }
+            }
+
+            this._destroyNwChart();
 
             const chart = window.LW.createChart(el, {
                 width: el.clientWidth,
                 height: el.clientHeight || 140,
-                layout: { background: { color: 'transparent' }, textColor: ink, attributionLogo: false },
+                layout: { background: { color: 'transparent' }, textColor: c.ink, attributionLogo: false },
                 grid: { vertLines: { visible: false }, horzLines: { visible: false } },
                 rightPriceScale: { visible: false },
                 leftPriceScale: { visible: false },
@@ -554,35 +895,30 @@ document.addEventListener('alpine:init', () => {
                 handleScroll: false,
                 handleScale: false,
                 crosshair: {
-                    vertLine: { color: stroke, width: 1, style: 3, labelVisible: false },
+                    vertLine: { color: c.stroke, width: 1, style: 3, labelVisible: false },
                     horzLine: { visible: false, labelVisible: false },
                 },
                 localization: { priceFormatter: (v) => this.formatIndianShort(v) },
             });
 
-            const single = points.length === 1;
-            const series = chart.addSeries(window.LW.AreaSeries, {
-                lineColor: single ? 'rgba(0,0,0,0)' : stroke,
-                lineWidth: single ? 0 : 2,
-                topColor: single ? 'rgba(0,0,0,0)' : alpha(stroke, 0.28),
-                bottomColor: alpha(stroke, 0),
-                priceLineVisible: false,
-                lastValueVisible: false,
-                crosshairMarkerRadius: 4,
-                crosshairMarkerBorderColor: stroke,
-                crosshairMarkerBackgroundColor: stroke,
-            });
+            const series = chart.addSeries(window.LW.AreaSeries, seriesOpts);
             series.setData(points);
             chart.timeScale().fitContent();
 
-            // A single observation is a point, not a fabricated flat line.
-            if (single) {
-                window.LW.createSeriesMarkers(series, [
-                    { time: points[0].time, position: 'inBar', color: stroke, shape: 'circle' }
-                ]);
-            }
-
             window._rfmNwChart = chart;
+            window._rfmNw = { series, markers: null, el };
+            this._markSingleObservation(points, c.stroke, single);
+
+            // The readout. There is no time axis and no price scale — that is the
+            // approved design — so this subscription is the ONLY place an exact
+            // date or an exact value can be read, and it reports the observation's
+            // real date rather than a position interpolated along the line.
+            chart.subscribeCrosshairMove(param => {
+                const bar = param && param.seriesData && param.seriesData.get(series);
+                const value = bar && typeof bar === 'object' ? bar.value : bar;
+                if (!param || !param.time || value == null) { this.nwHoverLabel = ''; return; }
+                this.nwHoverLabel = `${this.formatObsDate(this._timeToKey(param.time))} · ${this.formatIndianShort(value)}`;
+            });
 
             if (this._nwResizeBound) window.removeEventListener('resize', this._nwResizeBound);
             this._nwResizeBound = () => {
@@ -591,6 +927,67 @@ document.addEventListener('alpine:init', () => {
                 }
             };
             window.addEventListener('resize', this._nwResizeBound);
+        },
+
+        /* Read once, in one place, so the reuse path and the rebuild path cannot
+           drift apart on colour. Lightweight Charts parses colour strings itself
+           and understands neither color-mix() nor a bare hex with alpha — the
+           area fill was once declared as color-mix() and therefore silently never
+           drew, which is why the chart read as a squiggle rather than as the
+           shape of the money. --brass is #BFA05C on dark and #7E6524 on light, so
+           this is also what makes a theme switch correct rather than stale. */
+        _nwChartColors() {
+            const stroke = this._token('--brass', '#BFA05C');
+            const alpha = (hex, a) => {
+                const m = /^#?([0-9a-f]{6})$/i.exec(String(hex).trim());
+                if (!m) return `rgba(191,160,92,${a})`;
+                const n = parseInt(m[1], 16);
+                return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},${a})`;
+            };
+            return {
+                stroke,
+                ink: this._token('--ink-faint', '#74857D'),
+                fill: alpha(stroke, 0.28),
+                clear: alpha(stroke, 0),
+            };
+        },
+
+        /* A single observation is a point, not a fabricated flat line. The plugin
+           is kept and re-set rather than re-created, or a series that goes from
+           one point to many keeps a marker that no longer means anything. */
+        _markSingleObservation(points, stroke, single) {
+            const held = window._rfmNw;
+            if (!held || !held.series) return;
+            // size is not decoration. Lightweight Charts scales a marker to the
+            // bar spacing, and with ONE observation the bar spacing is the whole
+            // chart — the dot rendered as a 40px blob floating in the middle of
+            // an empty panel.
+            const marks = single
+                ? [{ time: points[0].time, position: 'inBar', color: stroke, shape: 'circle', size: 0.4 }]
+                : [];
+            if (held.markers) { held.markers.setMarkers(marks); return; }
+            if (marks.length) held.markers = window.LW.createSeriesMarkers(held.series, marks);
+        },
+
+        /* Lightweight Charts hands back whatever shape it decided to store the
+           time as — the original string, or a {year,month,day} — so the readout
+           normalises rather than assuming one of them. */
+        _timeToKey(t) {
+            if (typeof t === 'string') return t.slice(0, 10);
+            if (t && typeof t === 'object' && t.year) {
+                return `${t.year}-${String(t.month).padStart(2, '0')}-${String(t.day).padStart(2, '0')}`;
+            }
+            if (typeof t === 'number') return this.localDateKey(new Date(t * 1000));
+            return '';
+        },
+
+        _destroyNwChart() {
+            if (window._rfmNwChart) {
+                try { window._rfmNwChart.remove(); } catch (e) {}
+            }
+            window._rfmNwChart = null;
+            window._rfmNw = null;
+            this.nwHoverLabel = '';
         },
 
         async initCapacitor() {
@@ -633,61 +1030,63 @@ document.addEventListener('alpine:init', () => {
                 }
             } catch (e) { console.warn('[Phase 12] Channel creation failed:', e); }
 
+            // Biometrics: Strictly OPT-IN. Never prompt unless user explicitly enabled it in settings.
+            const isBiometricEnabled = () => {
+                try {
+                    return localStorage.getItem('corpus_biometric_enabled') === 'true';
+                } catch (e) {
+                    return false;
+                }
+            };
+
             let isPrompting = false;
-            let isAuthenticated = false;
-            // A failed or cancelled prompt used to re-fire every 500ms forever, with no exit
-            // but force-closing the app. Attempts are capped and backed off; after the cap
-            // the loop stops and biometricBlocked lets the UI offer a deliberate retry.
-            let attempts = 0;
-            const MAX_ATTEMPTS = 5;
+            let isAuthenticated = !isBiometricEnabled();
 
             const enforceBiometric = async () => {
+                if (!isBiometricEnabled()) {
+                    isAuthenticated = true;
+                    return;
+                }
                 if (isPrompting || isAuthenticated) return;
                 isPrompting = true;
 
                 try {
+                    if (!NativeBiometric) return;
                     const result = await NativeBiometric.isAvailable();
-                    if (result.isAvailable) {
+                    if (result && result.isAvailable) {
                         await NativeBiometric.verifyIdentity({
-                            reason: "Authenticate to access RFM",
-                            title: "RFM Secure Login",
+                            reason: "Authenticate to access Corpus",
+                            title: "Corpus Security",
                             subtitle: "Confirm your fingerprint or face ID",
                             description: "Touch the sensor to continue",
                             negativeButtonText: "Cancel"
                         });
                         isAuthenticated = true;
-                        attempts = 0;
                         this.biometricBlocked = false;
+                    } else {
+                        isAuthenticated = true;
                     }
                 } catch (e) {
-                    console.error("Biometric authentication error:", e);
-                    isPrompting = false;
+                    console.warn("Biometric authentication cancelled or not completed:", e);
                     isAuthenticated = false;
-                    attempts += 1;
-
-                    if (attempts >= MAX_ATTEMPTS) {
-                        this.biometricBlocked = true;
-                        return;
-                    }
-
-                    // Back off so a repeatedly-failing sensor cannot spin the UI.
-                    setTimeout(() => { enforceBiometric(); }, 500 * Math.pow(2, attempts - 1));
-                    return;
+                    // Never schedule an autonomous recursive loop — let the user retry manually
+                } finally {
+                    isPrompting = false;
                 }
-                isPrompting = false;
             };
 
-            // Retry deliberately, from a button, after the cap is hit.
+            // Retry deliberately from UI if opted in
             this.retryBiometric = () => {
-                attempts = 0;
-                this.biometricBlocked = false;
+                isAuthenticated = false;
                 enforceBiometric();
             };
 
-            // Lock on cold start
-            await enforceBiometric();
+            // Prompt on cold start ONLY if explicitly opted in
+            if (isBiometricEnabled()) {
+                await enforceBiometric();
+            }
 
-            // Lock on resume when returning from background
+            // Lock on resume ONLY if explicitly opted in
             App.addListener('appStateChange', ({ isActive }) => {
                 if (this.isSelectingFile) {
                     if (isActive) {
@@ -695,13 +1094,10 @@ document.addEventListener('alpine:init', () => {
                     }
                     return;
                 }
+                if (!isBiometricEnabled()) return;
                 if (!isActive) {
                     isAuthenticated = false;
                 } else if (isActive && !isAuthenticated && !isPrompting) {
-                    // Returning to the app is an intentional act, so it earns a fresh
-                    // set of attempts even if a previous run hit the cap.
-                    attempts = 0;
-                    this.biometricBlocked = false;
                     enforceBiometric();
                 }
             });
@@ -710,88 +1106,133 @@ document.addEventListener('alpine:init', () => {
         // ════════════════════════════════════════════════════════════
         //  PULL-TO-REFRESH MOBILE SWIPE GESTURE ENGINE
         // ════════════════════════════════════════════════════════════
+        /* Pull down to sync everything.
+
+           This existed once and was torn out, for a real reason recorded at the
+           time: it wrote Alpine state on every touchmove, and a reactive write
+           per pixel of finger travel re-evaluated every binding on the page
+           sixty times a second. It thrashed layout and froze the phone.
+
+           The fix is not to avoid the gesture, it is to keep the GESTURE off
+           the reactive graph entirely. While the finger is down this touches
+           nothing but two inline styles on one element, batched into a single
+           rAF. Alpine hears about it exactly twice: once when the sync starts
+           and once when it ends. */
+        PTR_TRIGGER: 72,          // resisted travel that commits to a sync
+        PTR_MAX: 108,             // cap the indicator's travel
+
         initPullToRefresh() {
-            let startY = 0;
-            let isTracking = false;
+            const bar = document.getElementById('ptr');
+            if (!bar || this._ptrBound) return;
+            this._ptrBound = true;
 
-            window.addEventListener('touchstart', (e) => {
-                if (window.scrollY <= 0 && e.touches.length === 1) {
-                    startY = e.touches[0].clientY;
-                    isTracking = true;
-                }
-            }, { passive: true });
+            const label = bar.querySelector('.ptr__label');
+            let startX = 0, startY = 0, pulled = 0, tracking = false, axis = '', frame = 0;
+            const spin = bar.querySelector('.ptr__spin');
 
-            window.addEventListener('touchmove', (e) => {
-                if (!isTracking || this.pullToRefresh.isRefreshing) return;
-
-                const currentY = e.touches[0].clientY;
-                const diffY = currentY - startY;
-
-                if (diffY > 0 && window.scrollY <= 0) {
-                    // Damped physical resistance calculation
-                    const damped = Math.min(Math.pow(diffY, 0.82) * 2.2, 110);
-                    this.pullToRefresh.distance = damped;
-
-                    // Haptic tactile feedback threshold at 70px pull
-                    if (damped >= 70 && !this.pullToRefresh.thresholdReached) {
-                        this.pullToRefresh.thresholdReached = true;
-                        if (navigator.vibrate) {
-                            try { navigator.vibrate(30); } catch (err) {}
-                        }
-                    } else if (damped < 70) {
-                        this.pullToRefresh.thresholdReached = false;
-                    }
-                } else {
-                    this.pullToRefresh.distance = 0;
-                }
-            }, { passive: true });
-
-            const handleTouchEnd = async () => {
-                if (!isTracking) return;
-                isTracking = false;
-
-                if (this.pullToRefresh.distance >= 70 && !this.pullToRefresh.isRefreshing) {
-                    await this.triggerPullRefresh();
-                } else {
-                    this.pullToRefresh.distance = 0;
-                    this.pullToRefresh.thresholdReached = false;
-                }
+            const paint = () => {
+                frame = 0;
+                const t = Math.min(pulled, this.PTR_MAX);
+                bar.style.transform = `translateY(${t}px)`;
+                bar.style.opacity = String(Math.min(1, t / 40));
+                bar.dataset.armed = pulled >= this.PTR_TRIGGER ? '1' : '0';
+                if (spin) spin.style.transform = `rotate(${Math.min(300, t / this.PTR_TRIGGER * 250)}deg) scale(${pulled >= this.PTR_TRIGGER ? 1.12 : 1})`;
+                if (label) label.textContent = pulled >= this.PTR_TRIGGER ? 'Release to sync' : 'Pull to sync';
+            };
+            const schedule = () => { if (!frame) frame = requestAnimationFrame(paint); };
+            const reset = () => {
+                pulled = 0; tracking = false;
+                if (frame) { cancelAnimationFrame(frame); frame = 0; }
+                bar.style.transition = 'transform .34s var(--ease), opacity .22s linear';
+                bar.style.transform = 'translateY(0)';
+                bar.style.opacity = '0';
+                bar.dataset.armed = '0';
+                if (spin) spin.style.transform = '';
+                if (label) label.textContent = 'Pull to sync';
+                setTimeout(() => { bar.style.transition = ''; }, 360);
             };
 
-            window.addEventListener('touchend', handleTouchEnd, { passive: true });
-            window.addEventListener('touchcancel', handleTouchEnd, { passive: true });
+            document.addEventListener('touchstart', (e) => {
+                if (this.pullToRefresh.isRefreshing) return;
+                // Only from a genuine top-of-page rest position, or the gesture
+                // fights the scroller for every upward flick.
+                if (window.scrollY > 0 || e.touches.length !== 1) return;
+                startX = e.touches[0].clientX;
+                startY = e.touches[0].clientY;
+                tracking = true;
+                axis = '';
+                pulled = 0;
+            }, { passive: true });
+
+            document.addEventListener('touchmove', (e) => {
+                if (!tracking || this.pullToRefresh.isRefreshing) return;
+                const dx = e.touches[0].clientX - startX;
+                const dy = e.touches[0].clientY - startY;
+                if (!axis) {
+                    if (Math.max(Math.abs(dx), Math.abs(dy)) < 8) return;
+                    axis = dy > 0 && Math.abs(dy) > Math.abs(dx) ? 'vertical' : 'other';
+                    if (axis === 'other') { tracking = false; return; }
+                }
+                if (dy <= 0) { if (pulled) { pulled = 0; schedule(); } return; }
+                // A light, predictable resistance keeps the indicator under the
+                // thumb. The old power curve needed about 180px of finger travel
+                // to reach a 72px threshold, which made refresh feel stuck.
+                const thresholdTravel = this.PTR_TRIGGER / 0.72;
+                pulled = Math.min(this.PTR_MAX, dy <= thresholdTravel
+                    ? dy * 0.72
+                    : this.PTR_TRIGGER + (dy - thresholdTravel) * 0.22);
+                if (e.cancelable) e.preventDefault();
+                schedule();
+            }, { passive: false });
+
+            const release = () => {
+                if (!tracking) return;
+                const commit = pulled >= this.PTR_TRIGGER;
+                tracking = false;
+                if (!commit) { reset(); return; }
+                bar.style.transition = 'transform .22s var(--ease)';
+                bar.style.transform = `translateY(${this.PTR_TRIGGER}px)`;
+                bar.style.opacity = '1';
+                if (spin) spin.style.transform = '';
+                if (label) label.textContent = 'Syncing prices\u2026';
+                this.triggerPullRefresh().then(message => {
+                    if (label) label.textContent = message;
+                    setTimeout(reset, 1100);
+                });
+            };
+            document.addEventListener('touchend', release, { passive: true });
+            document.addEventListener('touchcancel', () => { if (tracking) reset(); }, { passive: true });
         },
 
+        /* One sync for everything, whatever page you pulled on. The old
+           per-list "Refresh prices" button synced the same global set while
+           looking like it only touched the group above it. */
         async triggerPullRefresh() {
+            if (this.pullToRefresh.isRefreshing) return 'Sync already running';
             this.pullToRefresh.isRefreshing = true;
-            this.pullToRefresh.distance = 56;
-
+            document.body.classList.add('is-syncing');
+            if (this.haptics && window.RFMMotion) window.RFMMotion.Haptics.tap();
+            let result = 'Sync finished';
             try {
-                // 1. Refresh live Mutual Fund & Stock prices
-                if (typeof this.fetchLivePrices === 'function') {
-                    await this.fetchLivePrices();
-                }
-
-                // 2. Refresh native notifications schedule
+                await this.fetchAllPrices();
+                const { updated = 0, failed = 0, total = 0 } = this.navFetchProgress || {};
+                if (this.navFetchState === 'error') result = 'Sync failed · check connection';
+                else if (failed > 0) result = `${updated} updated · ${failed} need attention`;
+                else if (updated > 0) result = `${updated} prices updated`;
+                else if (!total) result = 'Add a holding to sync';
+                else result = 'No prices changed';
                 if (typeof this.scheduleMaturityAlerts === 'function') {
-                    await this.scheduleMaturityAlerts();
+                    await this.scheduleMaturityAlerts().catch(() => {});
                 }
-
-                // 3. Persist state
                 this.saveData();
-
-                // 4. Brief success state display
-                this.pullToRefresh.completed = true;
-                await new Promise(r => setTimeout(r, 600));
-
             } catch (err) {
                 console.warn('Pull-to-refresh execution error:', err);
+                result = 'Sync failed · try again';
             } finally {
-                this.pullToRefresh.distance = 0;
+                document.body.classList.remove('is-syncing');
                 this.pullToRefresh.isRefreshing = false;
-                this.pullToRefresh.completed = false;
-                this.pullToRefresh.thresholdReached = false;
             }
+            return result;
         },
 
         // ════════════════════════════════════════════════════════════
@@ -803,9 +1244,10 @@ document.addEventListener('alpine:init', () => {
             if (saved) {
                 try {
                     const p = JSON.parse(saved);
-                    this.investments = p.investments || [];
+                    this.investments = (p.investments || []).map(inv => this.migrateHolding(inv));
                     this.goals       = p.goals       || [];
                     this.sips        = p.sips        || [];
+                    if (p.profile) this.profile = { ...this.profile, ...p.profile };
                     this.lastNavFetchTime = p.lastNavFetchTime || null;
 
                     if (p.pension) {
@@ -821,7 +1263,7 @@ document.addEventListener('alpine:init', () => {
                         this.cashflow = { ...this.cashflow, ...rest };
                     }
 
-                    this.networth  = { ...this.networth,  ...(p.networth  || {}) };
+                    this.networth  = this.migrateNetworth({ ...this.networth, ...(p.networth || {}) });
                     this.emergency = { ...this.emergency, ...(p.emergency || {}) };
 
                     if (p.tax) {
@@ -838,12 +1280,53 @@ document.addEventListener('alpine:init', () => {
                 }
 
                 // Saved financial records belong to the user. Never rewrite holdings at startup.
-                this.checkSipDebits();
+                // This line used to be followed by checkSipDebits(), which did exactly that.
                 return;
             }
 
             // A new user starts with an empty, explicit portfolio rather than another user's demo data.
             this.saveData();
+        },
+
+        // The Assets-and-debts form wrote bankBalance / cashOnHand / propertyValue while
+        // totalAssets read bank / cash / property, so those three fields were WRITE-ONLY:
+        // typing a bank balance changed nothing about net worth, the chart, the health
+        // score or what was sent to the AI. Renaming the bindings alone would have thrown
+        // away whatever people had already entered, so the orphaned keys are folded into
+        // the canonical ones here and then removed. The canonical value wins if both hold
+        // a figure — it is the one every reader has been using.
+        NETWORTH_ALIASES: {
+            bank:      'bankBalance',
+            cash:      'cashOnHand',
+            property:  'propertyValue',
+            credit:    'creditCard',
+            otherDebt: 'otherLiability',
+        },
+
+        // The Edit-holding sheet bound `interestRate` while every reader used `rate`, and
+        // saveEdit spreads the whole form onto the record — so a rate typed into that field
+        // was persisted under a key nothing consulted, and the holding's real `rate` was
+        // simultaneously reset. Anyone who ever edited a deposit has a rate stranded there.
+        migrateHolding(inv) {
+            const out = { ...inv };
+            const stranded = Number(out.interestRate);
+            if (!Number(out.rate) && Number.isFinite(stranded) && stranded !== 0) {
+                out.rate = stranded;
+            }
+            delete out.interestRate;
+            return out;
+        },
+
+        migrateNetworth(nw) {
+            const out = { ...nw };
+            for (const [canonical, alias] of Object.entries(this.NETWORTH_ALIASES)) {
+                const orphan = Number(out[alias]);
+                if (!Number(out[canonical]) && Number.isFinite(orphan) && orphan !== 0) {
+                    out[canonical] = orphan;
+                }
+                delete out[alias];
+            }
+            return out;
         },
 
         saveData({ rescheduleAlerts = false } = {}) {
@@ -857,12 +1340,15 @@ document.addEventListener('alpine:init', () => {
                 tax:         this.tax,
                 goals:       this.goals,
                 sips:        this.sips,
+                profile:     this.profile,
                 lastNavFetchTime: this.lastNavFetchTime
             }));
-            // Notification work is native and expensive. Only holdings/SIP changes need it.
-            if (rescheduleAlerts) {
+            // Notification work is native and expensive. Only reschedule if user explicitly opted in
+            if (rescheduleAlerts && localStorage.getItem('corpus_alerts_enabled') === 'true') {
                 clearTimeout(this._alertDebounce);
-                this._alertDebounce = setTimeout(() => this.scheduleMaturityAlerts(), 2000);
+                this._alertDebounce = setTimeout(() => {
+                    this.scheduleMaturityAlerts().catch(e => console.warn('[Phase 12] Reschedule alerts failed:', e));
+                }, 4000);
             }
         },
 
@@ -935,7 +1421,7 @@ document.addEventListener('alpine:init', () => {
         addIncomeStream(name = 'New Income Source', amount = 0, category = 'Salary', creditDay = 1) {
             if (!this.cashflow.incomes) this.cashflow.incomes = [];
             this.cashflow.incomes.push({
-                id: 'inc_' + Date.now(),
+                id: this.newId('inc'),
                 name: name,
                 amount: Number(amount) || 0,
                 category: category,
@@ -951,7 +1437,7 @@ document.addEventListener('alpine:init', () => {
         addExpenseItem(name = 'New Expense Item', amount = 0, category = 'General') {
             if (!this.cashflow.expenses) this.cashflow.expenses = [];
             this.cashflow.expenses.push({
-                id: 'exp_' + Date.now(),
+                id: this.newId('exp'),
                 name: name,
                 amount: Number(amount) || 0,
                 category: category
@@ -1057,8 +1543,8 @@ document.addEventListener('alpine:init', () => {
         get totalLiabilities() {
             const hl = Number(this.networth?.homeLoan) || 0;
             const pl = Number(this.networth?.personalLoan) || 0;
-            const cc = Number(this.networth?.creditCard) || Number(this.networth?.credit) || 0;
-            const od = Number(this.networth?.otherLiability) || Number(this.networth?.otherDebt) || 0;
+            const cc = Number(this.networth?.credit) || 0;
+            const od = Number(this.networth?.otherDebt) || 0;
             return hl + pl + cc + od;
         },
         get netWorthTotal() {
@@ -1126,6 +1612,12 @@ document.addEventListener('alpine:init', () => {
         },
 
         invFilter: 'all', // 'all' | 'mf' | 'stocks' | 'debt'
+
+        // The holding currently open on the detail view, by id rather than by
+        // reference: the array is replaced wholesale on every edit and sync, so
+        // a held reference would go stale and silently show the old figures.
+        detailHoldingId: null,
+        detailRange: '1M',
         get filteredInvestments() {
             if (this.invFilter === 'mf') {
                 return (this.investments || []).filter(i => (i.type || '').toLowerCase().includes('mutual'));
@@ -1375,7 +1867,7 @@ document.addEventListener('alpine:init', () => {
                 const payout = inv.payout || inv.payoutFrequency || '';
                 if (/cumulative|maturity/i.test(payout)) return sum;   // paid at the end, not yearly
                 const principal = Number(inv.amount);
-                const rate = Number(inv.rate ?? inv.interestRate);
+                const rate = Number(inv.rate);
                 if (!Number.isFinite(principal) || !Number.isFinite(rate)) return sum;
                 return sum + (principal * rate / 100);
             }, 0);
@@ -1385,86 +1877,49 @@ document.addEventListener('alpine:init', () => {
         get grossAnnualIncome() {
             return this.annualPension
                  + this.annualInterestIncome
+                 + Number(this.tax.salaryIncome || 0)
                  + Number(this.tax.otherIncome);
+        },
+
+        /* The only income the standard deduction may be set against. Everything else in
+           gross — deposit interest, rent, consulting — is expressly outside Sec 16(ia). */
+        get salaryAndPensionIncome() {
+            return this.annualPension + Number(this.tax.salaryIncome || 0);
         },
 
         get totalInterestIncome() { return this.annualInterestIncome; },
         
         // ── CAPITAL GAINS ENGINE (Phase 6) ───────────────────────────
-        // FY 2024-25 Rules:
-        // - Equity LTCG (>12m): 12.5% tax on gains exceeding ₹1.25L exemption
-        // - Equity STCG (≤12m): 20% tax on full gains
-        // - Debt LTCG/STCG: Taxed at slab rate
+        // FY 2024-25 rules:
+        // - Equity LTCG (>12m): 12.5% on gains above the ₹1.25L annual exemption
+        // - Equity STCG (≤12m): 20% on the whole gain
+        //
+        // Gains are ENTERED, not derived, and this is the substantive part of the fix.
+        // Capital gains tax falls due on a REALIZED gain — money from a sale. This app
+        // records holdings, not disposals: no part of the data model knows that anything
+        // was ever sold. The previous engine summed the UNREALIZED gain on every equity
+        // holding and added 12.5% of it to netTaxPayable, inventing a liability nobody
+        // owed. Two further faults hid inside it: it matched ['Stock','Mutual Fund','ETF']
+        // while the Add form only ever writes 'Stock (IND)' / 'Stock (US)' / 'ETF (IND)' /
+        // 'ETF (US)' / 'Mutual Fund' — so it silently taxed mutual funds alone — and it
+        // defaulted isLongTerm to true because no purchase date is collected anywhere.
+        //
+        // What the app CAN do correctly is the arithmetic once the user states the figure,
+        // which is all these getters now do. Unrealized movement is still shown, honestly
+        // labelled as P&L, on every holding row.
         get equityLTCG() {
-            let totalGains = 0;
-            const today = new Date();
-
-            (this.investments || []).forEach(inv => {
-                const isEquity = ['Stock', 'Mutual Fund', 'ETF'].includes(inv.type) || inv.assetClass === 'equity';
-                if (!isEquity) return;
-
-                let isLongTerm = true;
-                if (inv.purchaseDate) {
-                    const buyDate = new Date(inv.purchaseDate);
-                    const days = (today - buyDate) / (1000 * 60 * 60 * 24);
-                    isLongTerm = days > 365;
-                }
-
-                if (isLongTerm) {
-                    const buyCost = (Number(inv.buyPrice) * Number(inv.units)) || Number(inv.amount);
-                    const currentVal = Number(inv.currentValue) || Number(inv.amount);
-                    const gain = Math.max(0, currentVal - buyCost);
-                    totalGains += gain;
-                }
-            });
-
+            const totalGains = Math.max(0, Number(this.tax.realizedEquityLTCG) || 0);
             const exemptionLimit = 125000;
             const exemptionUsed = Math.min(totalGains, exemptionLimit);
             const taxableGains = Math.max(0, totalGains - exemptionLimit);
             const tax = Math.round(taxableGains * 0.125 * 1.04); // 12.5% + 4% cess
-
             return { totalGains, exemptionUsed, taxableGains, tax };
         },
 
         get equitySTCG() {
-            let totalGains = 0;
-            const today = new Date();
-
-            (this.investments || []).forEach(inv => {
-                const isEquity = ['Stock', 'Mutual Fund', 'ETF'].includes(inv.type) || inv.assetClass === 'equity';
-                if (!isEquity) return;
-
-                let isShortTerm = false;
-                if (inv.purchaseDate) {
-                    const buyDate = new Date(inv.purchaseDate);
-                    const days = (today - buyDate) / (1000 * 60 * 60 * 24);
-                    isShortTerm = days <= 365;
-                }
-
-                if (isShortTerm) {
-                    const buyCost = (Number(inv.buyPrice) * Number(inv.units)) || Number(inv.amount);
-                    const currentVal = Number(inv.currentValue) || Number(inv.amount);
-                    const gain = Math.max(0, currentVal - buyCost);
-                    totalGains += gain;
-                }
-            });
-
+            const totalGains = Math.max(0, Number(this.tax.realizedEquitySTCG) || 0);
             const tax = Math.round(totalGains * 0.20 * 1.04); // 20% + 4% cess
-
             return { totalGains, tax };
-        },
-
-        get debtCapitalGains() {
-            let totalGains = 0;
-            (this.investments || []).forEach(inv => {
-                const isDebt = ['Bank FD', 'Bond', 'RBI Bond', 'Post Office', 'Government Scheme'].includes(inv.type) || inv.assetClass === 'debt';
-                if (!isDebt) return;
-                const buyCost = Number(inv.amount);
-                const currentVal = Number(inv.currentValue) || Number(inv.amount);
-                const gain = Math.max(0, currentVal - buyCost);
-                totalGains += gain;
-            });
-            return { totalGains };
         },
 
         get totalCapitalGainsTax() {
@@ -1476,25 +1931,54 @@ document.addEventListener('alpine:init', () => {
 
         get totalTds() { return 0; },
 
+        // The regime the user has actually elected, and the tax that follows from it.
+        // netTaxPayable used to hardcode Math.min(old, new) while tax.regime was stored
+        // and read by nothing — so someone who had elected the old regime was shown the
+        // new regime's bill whenever it happened to be cheaper. 'compare' keeps the
+        // pick-the-cheaper behaviour, and is the default.
+        get effectiveRegime() {
+            const choice = this.tax.regime;
+            if (choice === 'old' || choice === 'new') return choice;
+            // Ties resolve to New, matching optimalRegime: it is the default regime and
+            // the one that requires no election to be filed.
+            return this.oldRegimeTax.tax < this.newRegimeTax.tax ? 'old' : 'new';
+        },
+
+        get incomeTaxPayable() {
+            return this.effectiveRegime === 'old' ? this.oldRegimeTax.tax : this.newRegimeTax.tax;
+        },
+
         get netTaxPayable() {
-            const incomeTax = Math.min(this.oldRegimeTax.tax, this.newRegimeTax.tax);
-            return Math.max(0, incomeTax + this.totalCapitalGainsTax - this.totalTds);
+            return Math.max(0, this.incomeTaxPayable + this.totalCapitalGainsTax - this.totalTds);
         },
 
         // ── OLD REGIME CALCULATION ───────────────────────────────────
         // Old Regime: Standard deduction ₹50K for pension, then all applicable deductions.
-        // Senior Citizen (60–79): No tax up to ₹3L, 5% on 3L-5L, 20% on 5L-10L, 30% above 10L
-        // Super Senior Citizen (80+): No tax up to ₹5L
+        // Below 60:                No tax up to ₹2.5L, 5% on 2.5L-5L, 20% on 5L-10L, 30% above 10L
+        // Senior Citizen (60–79):  No tax up to ₹3L,   5% on 3L-5L,   20% on 5L-10L, 30% above 10L
+        //
+        // The ₹3L senior exemption used to be hardcoded for EVERYONE, and 80TTB — which
+        // only a senior may claim — was granted unconditionally. `tax.seniorCitizen` was
+        // bound to a checkbox on two screens and read by nothing, so ticking it changed no
+        // figure and leaving it unticked still produced a senior's bill. Both now follow
+        // the flag. Only the two bands the app collects an answer for are modelled: there
+        // is no 80+ control, so the ₹5L super-senior exemption is deliberately not applied.
         get oldRegimeTax() {
             const gross = this.grossAnnualIncome;
+            const isSenior = !!this.tax.seniorCitizen;
             // Standard deduction: ₹50,000 for pension income
-            const stdDeduction = Math.min(50000, gross);
+            // Was Math.min(50000, gross) — so a person with no salary and no pension, whose
+            // entire income was deposit interest, still received a ₹50,000 deduction they
+            // are not entitled to. Bounded by qualifying income instead.
+            const stdDeduction = Math.min(50000, this.salaryAndPensionIncome);
             // Section 80C
             const ded80C  = Math.min(Number(this.tax.deduction80C),  150000);
-            // Section 80D — Senior citizen premium limit ₹50K, self + parents max ₹1L
-            const ded80D  = Math.min(Number(this.tax.deduction80D),  50000);
-            // Section 80TTB (seniors) — interest income deduction up to ₹50K
-            const ded80TTB = Math.min(Number(this.tax.deduction80TTB), 50000);
+            // Section 80D — Senior citizen premium limit ₹50K, ₹25K below 60
+            const ded80D  = Math.min(Number(this.tax.deduction80D),  isSenior ? 50000 : 25000);
+            // 80TTB and 80TTA are mutually exclusive by age: a senior deducts up to ₹50K of
+            // deposit interest, everyone else up to ₹10K of savings-account interest.
+            const ded80TTB = isSenior ? Math.min(Number(this.tax.deduction80TTB), 50000) : 0;
+            const ded80TTA = isSenior ? 0 : Math.min(Number(this.tax.deduction80TTA), 10000);
             // Section 24 — Home loan interest (max ₹2L)
             const dedHomeLoan = Math.min(Number(this.tax.homeLoanInterest), 200000);
             // HRA
@@ -1502,19 +1986,21 @@ document.addEventListener('alpine:init', () => {
             // Other
             const dedOther = Number(this.tax.otherDeductions);
 
-            const totalDeductions = stdDeduction + ded80C + ded80D + ded80TTB + dedHomeLoan + dedHRA + dedOther;
+            const totalDeductions = stdDeduction + ded80C + ded80D + ded80TTB + ded80TTA + dedHomeLoan + dedHRA + dedOther;
             const taxableIncome   = Math.max(0, gross - totalDeductions);
 
-            // Senior Citizen slabs (FY 2024-25 / AY 2025-26)
+            // Slabs for FY 2024-25 / AY 2025-26. Only the basic exemption differs by age;
+            // every band above ₹5L is identical, so the two tables share their upper half.
+            const exemptUpTo = isSenior ? 300000 : 250000;
             let tax = 0;
-            if (taxableIncome <= 300000) {
+            if (taxableIncome <= exemptUpTo) {
                 tax = 0;
             } else if (taxableIncome <= 500000) {
-                tax = (taxableIncome - 300000) * 0.05;
+                tax = (taxableIncome - exemptUpTo) * 0.05;
             } else if (taxableIncome <= 1000000) {
-                tax = 10000 + (taxableIncome - 500000) * 0.20;
+                tax = (500000 - exemptUpTo) * 0.05 + (taxableIncome - 500000) * 0.20;
             } else {
-                tax = 110000 + (taxableIncome - 1000000) * 0.30;
+                tax = (500000 - exemptUpTo) * 0.05 + 500000 * 0.20 + (taxableIncome - 1000000) * 0.30;
             }
 
             // Rebate u/s 87A (max ₹12,500 if taxable income ≤ ₹5L) — NOT available for seniors above 60 if income > 5L
@@ -1537,7 +2023,7 @@ document.addEventListener('alpine:init', () => {
                 taxableIncome,
                 tax: Math.round(totalTax),
                 breakdown: {
-                    stdDeduction, ded80C, ded80D, ded80TTB,
+                    stdDeduction, ded80C, ded80D, ded80TTB, ded80TTA,
                     dedHomeLoan, dedHRA, dedOther, surcharge: Math.round(surcharge), cess: Math.round(cess)
                 }
             };
@@ -1549,7 +2035,7 @@ document.addEventListener('alpine:init', () => {
         // Rebate u/s 87A: If income ≤ ₹7L, full rebate (no tax)
         get newRegimeTax() {
             const gross = this.grossAnnualIncome;
-            const stdDeduction = Math.min(75000, gross); // New regime standard deduction
+            const stdDeduction = Math.min(75000, this.salaryAndPensionIncome); // Sec 16(ia), new regime
             const taxableIncome = Math.max(0, gross - stdDeduction);
 
             let tax = 0;
@@ -1634,6 +2120,11 @@ document.addEventListener('alpine:init', () => {
             try { localStorage.setItem('rfm_theme', this.theme); } catch (e) {}
             if (window.RFMMotion) window.RFMMotion.Haptics.commit();
             this.syncNativeChrome();
+            // The chart's colours are read from tokens at draw time, so without
+            // this the line kept the previous theme's brass until something else
+            // happened to redraw it. Reuse makes this an applyOptions, not a
+            // teardown.
+            this.$nextTick(() => this.renderNwChart());
         },
 
         // Status-bar icons must invert with the theme. Style.Dark means DARK
@@ -1656,9 +2147,9 @@ document.addEventListener('alpine:init', () => {
            `activePage = 'x'` writes keep working and deep links stay valid. */
         SURFACES: [
             { id: 'home',      label: 'Overview',  icon: 'account_balance',          root: 'home',        views: ['home'] },
-            { id: 'portfolio', label: 'Holdings',  icon: 'donut_small',              root: 'investments', views: ['investments','maturity','import'] },
+            { id: 'portfolio', label: 'Holdings',  icon: 'donut_small',              root: 'investments', views: ['investments','holding','maturity','import'] },
             { id: 'planning',  label: 'Planning',  icon: 'calendar_month',           root: 'cashflow',    views: ['cashflow','income','pension','emergency','goals','networth','tax'] },
-            { id: 'insights',  label: 'Insights',  icon: 'auto_awesome',             root: 'regen',       views: ['regen','more'] },
+            { id: 'insights',  label: 'Insights',  icon: 'auto_awesome',             root: 'regen',       views: ['regen'] },
         ],
 
         get surface() {
@@ -1667,20 +2158,35 @@ document.addEventListener('alpine:init', () => {
             return hit ? hit.id : 'home';
         },
 
+        get pageLabel() {
+            const labels = {
+                home: 'Dashboard', investments: 'Holdings', holding: 'Holding detail',
+                maturity: 'Maturities', import: 'Import', cashflow: 'Planning',
+                income: 'Cashflow', pension: 'Pension', emergency: 'Emergency fund',
+                goals: 'Goals', networth: 'Assets & debts', tax: 'Tax',
+                regen: 'Insights',
+            };
+            return labels[this.activePage] || 'Corpus';
+        },
+
         /* One line describing how fresh the WHOLE portfolio is. The hero states
            it directly rather than making the user open each holding to find out,
            and it names the worst case — a portfolio is only as current as its
            stalest quote. */
         get portfolioFreshness() {
-            const priced = (this.investments || []).filter(i => i.priceAsOf);
+            const priced = (this.investments || []).filter(i => i.priceAsOf || i.lastNavUpdate);
             if (!priced.length) return { stale: false, label: 'Not synced yet' };
             const states = priced.map(i => this.priceFreshness(i));
             const stale = states.filter(s => s.state === 'stale').length;
             const close = states.filter(s => s.state === 'close').length;
-            if (stale) return { stale: true, label: `${stale} holding${stale > 1 ? 's' : ''} not refreshed today` };
-            const newest = priced.map(i => new Date(i.priceAsOf).getTime()).sort((a, b) => b - a)[0];
+            // "not synced today", never "not refreshed today": the second reads
+            // as a failure to act, and it was firing at holdings that had been
+            // refreshed minutes earlier into a market that was simply shut.
+            if (stale) return { stale: true, label: `${stale} holding${stale > 1 ? 's' : ''} not synced today` };
+            const newest = priced.map(i => new Date(i.lastNavUpdate || i.priceAsOf).getTime())
+                                 .sort((a, b) => b - a)[0];
             const t = new Date(newest).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' });
-            return { stale: false, label: close ? `Valued ${t} · ${close} at closing price` : `Verified ${t}` };
+            return { stale: false, label: close ? `Synced ${t} · ${close} at last close` : `Synced ${t}` };
         },
 
         /* Things that genuinely need a decision. Deliberately capped and
@@ -1698,6 +2204,14 @@ document.addEventListener('alpine:init', () => {
                                detail: `${this.formatCurrency(this.getInvCurrentValue(inv))} · plan the reinvestment`, page: 'maturity' });
                 }
             }
+            for (const sip of this.dueSipDebits.slice(0, 2)) {
+                out.push({ id: 'sip' + sip.id, title: `${sip.name} was due on the ${this.ordinal(sip.dayOfMonth)}`,
+                           detail: `${this.formatCurrency(sip.monthlyAmount)} · confirm it went through`,
+                           // Routes to where the Confirm button actually is. It used to
+                           // point at a tab on the planning page; that tab is gone and
+                           // the recurring-contributions list now lives here.
+                           page: 'income' });
+            }
             if (Number(this.efGap) > 0 && Number(this.emergency.efMonthly) > 0) {
                 out.push({ id: 'ef', title: 'Emergency fund is short',
                            detail: `${this.formatCurrency(this.efGap)} below a ${this.emergency.efMonths}-month buffer`, page: 'emergency' });
@@ -1710,21 +2224,42 @@ document.addEventListener('alpine:init', () => {
 
         /* Allocation as rows rather than a pie. A pie of six slices is harder to
            read than six right-aligned figures, and it cannot show gain. */
+        /* Built by walking every holding through the shared classifier and adding
+           non-holding balances, so the cards sum to totalAssets by construction. */
         get allocationRows() {
             const total = this.totalAssets || 0;
-            const defs = [
-                { key: 'equity', label: 'Stocks',        filter: 'equity', value: this.totalStockValuation, pnlPct: this.totalStockPnLPct },
-                { key: 'mf',     label: 'Mutual funds',  filter: 'mf',     value: this.totalMfValuation,    pnlPct: this.totalMfPnLPct },
-                { key: 'gold',   label: 'Gold',          filter: 'gold',   value: this.totalGoldValuation,  pnlPct: this.totalGoldPnLPct },
-                { key: 'debt',   label: 'Deposits and bonds', filter: 'debt', page: 'investments',
-                  value: (this.debtAndEpfList || []).reduce((a, i) => a + this.getInvCurrentValue(i), 0), pnlPct: null },
-                { key: 'cash',   label: 'Cash and bank',   page: 'networth', filter: 'all',
-                  value: (Number(this.networth.bankBalance) || 0) + (Number(this.networth.cashOnHand) || 0), pnlPct: null },
-            ];
-            return defs
+            const rows = this.HOLDING_CLASSES.map(d => {
+                const items = (this.investments || []).filter(i => this._classOf(i) === d.key);
+                const value = items.reduce((a, i) => a + this.getInvCurrentValue(i), 0);
+                const cost = items.reduce((a, i) => a + this.getInvInvestedCost(i), 0);
+                // Name the row after what is in it when everything in it agrees.
+                // A debt side that is nothing but an EPF account is EPF, not
+                // "Deposits"; a mixed one genuinely IS "Deposits", and calling
+                // that by either instrument's name would be a lie.
+                const kinds = new Set(items.map(i => this._kindOf(i)));
+                return {
+                    key: d.key,
+                    label: kinds.size === 1 ? [...kinds][0] : d.short,
+                    // The row links to a CHIP, and there is no 'us' chip — the
+                    // Holdings list bands by market instead. Sending it to a
+                    // filter that does not exist would open an empty screen.
+                    filter: d.key === 'us' ? 'equity' : d.key,
+                    page: 'investments',
+                    value,
+                    pnlPct: cost > 0 ? ((value - cost) / cost) * 100 : null,
+                };
+            });
+
+            rows.push({ key: 'cash', label: 'Cash and bank', page: 'networth', filter: 'all',
+                        value: (Number(this.networth.bank) || 0) + (Number(this.networth.cash) || 0),
+                        pnlPct: null });
+            rows.push({ key: 'realty', label: 'Property and other assets', page: 'networth', filter: 'all',
+                        value: (Number(this.networth.property) || 0) + (Number(this.networth.otherAsset) || 0),
+                        pnlPct: null });
+
+            return rows
                 .filter(d => Number(d.value) > 0)
-                .map(d => ({ ...d, value: Number(d.value), pct: total ? (Number(d.value) / total) * 100 : 0,
-                             pnlPct: d.pnlPct === null ? null : Number(d.pnlPct) }))
+                .map(d => ({ ...d, pct: total ? (Number(d.value) / total) * 100 : 0 }))
                 .sort((a, b) => b.value - a.value);
         },
 
@@ -1735,13 +2270,56 @@ document.addEventListener('alpine:init', () => {
             } catch (e) { return fallback; }
         },
 
-        holdingFilters: [
-            { key: 'all',    label: 'Everything' },
-            { key: 'equity', label: 'Stocks' },
-            { key: 'mf',     label: 'Mutual funds' },
-            { key: 'debt',   label: 'Deposits and bonds' },
-            { key: 'gold',   label: 'Gold' },
-        ],
+        get holdingFilters() {
+            // _filterOf, not _classOf: there is no separate US chip, because
+            // the list bands by market instead. Labels come from the class of
+            // the same name, so equity reads "Stocks" and covers both.
+            const present = new Set((this.investments || []).map(i => this._filterOf(i)));
+            return [{ key: 'all', label: 'All' },
+                    ...this.HOLDING_CLASSES.filter(d => present.has(d.key))
+                                           .map(d => ({ key: d.key, label: d.short }))];
+        },
+
+        /* The Planning hub.
+           This replaced a four-tab bar that hid SEVEN topics behind four
+           labels — cashflow, income, pension, emergency, goals, net worth and
+           tax — so finding any one of them meant guessing which tab owned it.
+           Each area now states the single figure that answers "do I need to
+           look at this?", and opens its own screen.
+
+           The figures are computed here rather than in the markup so they are
+           assertable, and so the hub cannot quietly disagree with the page it
+           links to. */
+        get planningAreas() {
+            const monthly = Number(this.emergency.efMonthly) || 0;
+            const months  = monthly > 0 ? (Number(this.emergency.efCurrent) || 0) / monthly : null;
+            const goals   = this.goals || [];
+            const target  = goals.reduce((a, g) => a + (Number(g.target) || 0), 0);
+            const outside = (Number(this.networth.bank) || 0) + (Number(this.networth.cash) || 0)
+                          + (Number(this.networth.property) || 0) - this.totalLiabilities;
+            return [
+                { key: 'cashflow',  page: 'income',    label: 'Cashflow',
+                  figure: this.formatCurrency(this.monthlySurplus),
+                  detail: `${this.formatCurrency(this.totalIncome)} in · ${this.formatCurrency(this.totalExpense)} out` },
+                { key: 'goals',     page: 'goals',     label: 'Goals',
+                  figure: target > 0 ? this.formatCurrency(target) : 'Nothing set',
+                  detail: goals.length ? `${goals.length} active` : 'Add what you are saving for' },
+                { key: 'emergency', page: 'emergency', label: 'Emergency fund',
+                  figure: months === null ? 'Not sized' : `${months.toFixed(1)} months`,
+                  detail: months === null ? 'Set a monthly figure first'
+                                          : `against a ${this.emergency.efMonths}-month buffer` },
+                { key: 'tax',       page: 'tax',       label: 'Tax',
+                  figure: this.formatCurrency(this.netTaxPayable),
+                  detail: `${this.effectiveRegime === 'old' ? 'Old' : 'New'} regime` },
+                { key: 'pension',   page: 'pension',   label: 'Pension',
+                  figure: this.formatCurrency(this.pension.monthlyAmount),
+                  detail: Number(this.pension.monthlyAmount) > 0 ? 'every month' : 'Not set up' },
+                { key: 'networth',  page: 'networth',  label: 'Assets and debts',
+                  figure: this.formatCurrency(outside),
+                  detail: 'outside your holdings' },
+            ];
+        },
+
 
         /* One line under a holding's name saying what it actually is, in the
            terms the user entered it in — units and price for market
@@ -1756,7 +2334,7 @@ document.addEventListener('alpine:init', () => {
                 return `${Number(inv.units || 0).toLocaleString('en-IN', { maximumFractionDigits: 3 })} units @ \u20b9${Number(inv.currentPrice || 0).toFixed(2)}`;
             }
             if (t === 'Gold') return `${Number(inv.units || 0)} g`;
-            const rate = inv.rate ?? inv.interestRate;
+            const rate = inv.rate;
             if (Number(rate) > 0) {
                 const m = inv.maturityDate ? ` \u00b7 matures ${this.formatDate(inv.maturityDate)}` : '';
                 return `${rate}%${m}`;
@@ -1764,31 +2342,108 @@ document.addEventListener('alpine:init', () => {
             return inv.issuer || t;
         },
 
+        /* ONE classifier. The Holdings page grouped by this while the Overview's
+           allocation used a separate `debtAndEpfList` filter that did not match
+           'Bank FD' — the default type in the Add form — so every fixed deposit was
+           missing from the allocation while still counted in the Total beneath it. */
         _classOf(inv) {
             const t = inv.type || '';
+            if (inv.currency === 'USD' || t.includes('(US)')) return 'us';
             if (t.includes('Stock') || t.includes('ETF')) return 'equity';
             if (t === 'Mutual Fund') return 'mf';
             if (t === 'Gold') return 'gold';
+            if (t === 'Real Estate') return 'property';
             return 'debt';
         },
 
-        get visibleHoldings() {
-            const all = this.investments || [];
-            return this.invFilter === 'all' ? all : all.filter(i => this._classOf(i) === this.invFilter);
+        /* Which market a HOLDING trades in, or null for anything that does not
+           trade. Distinct from _marketOf below, which reads a bare type string
+           for the symbol search and returns null for an unsuffixed legacy
+           'Stock'. This one has the whole record, so it can fall back to
+           currency — a US holding entered before the type suffix existed
+           carries USD and nothing else — and it defaults the rest to IND,
+           because an unsuffixed holding in an Indian investor's app is Indian.
+
+           Named apart on purpose: two `_marketOf`s in one object literal is
+           not an overload, it is the second one silently winning. That is
+           exactly what happened here, and it threw on the first render. */
+        _marketBand(inv) {
+            const t = (inv && inv.type) || '';
+            if (!t.includes('Stock') && !t.includes('ETF')) return null;
+            return ((inv && inv.currency) === 'USD' || t.includes('(US)')) ? 'US' : 'IND';
         },
 
-        get groupedHoldings() {
-            const defs = [
-                { key: 'equity', label: 'Stocks and ETFs' },
-                { key: 'mf',     label: 'Mutual funds' },
-                { key: 'debt',   label: 'Deposits, bonds and schemes' },
-                { key: 'gold',   label: 'Gold' },
-            ];
-            const vis = this.visibleHoldings;
-            return defs.map(d => {
-                const items = vis.filter(i => this._classOf(i) === d.key);
-                return { ...d, items, total: items.reduce((a, i) => a + this.getInvCurrentValue(i), 0) };
-            }).filter(g => g.items.length);
+        /* Which CHIP a holding belongs under. Deliberately coarser than
+           _classOf: Indian and US equities are separate lines on the dashboard,
+           because knowing the split is the point there — but on the Holdings
+           page they are one list of stocks, banded by market. Two chips meant
+           "Stocks" showed half your equities and the other half hid behind a
+           chip most people never scrolled to. */
+        _filterOf(inv) {
+            const c = this._classOf(inv);
+            return c === 'us' ? 'equity' : c;
+        },
+
+        /* What KIND of thing this is, in the words a row should use. _classOf
+           answers "which bucket"; this answers "which instrument", and on a
+           bucket holding only one instrument the second is strictly more
+           informative — "Deposits ₹28,874" hides the only fact that made the
+           number mean anything, which was that it is an EPF balance.
+
+           'Government Scheme' and 'Other' are containers rather than
+           instruments: EPF, PPF, NPS and SSY all land in them, and EPF is not
+           even in `investmentTypes`. For those the holding's own NAME is the
+           only place the real instrument is recorded, so that is what is
+           used. Everywhere else the name is wrong for this job — "NVIDIA Corp"
+           is a company, not a kind of thing to own. */
+        _kindOf(inv) {
+            const t = (inv && inv.type) || '';
+            const m = this._marketBand(inv);
+            if (t.includes('Stock')) return `Stocks (${m})`;
+            if (t.includes('ETF'))   return `ETFs (${m})`;
+            if (t === 'Mutual Fund') return 'Mutual Funds';
+            if (t === 'Bank FD')     return 'Fixed deposits';
+            if (t === 'Bond')        return 'Bonds';
+            if (t === 'Gold')        return 'Gold';
+            if (t === 'Real Estate') return 'Property';
+            return ((inv && inv.name) || '').trim() || t;
+        },
+
+        HOLDING_CLASSES: [
+            { key: 'equity',   label: 'Stocks and ETFs',             short: 'Stocks' },
+            { key: 'mf',       label: 'Mutual funds',                short: 'Mutual Funds' },
+            { key: 'debt',     label: 'Deposits, bonds and schemes', short: 'Deposits' },
+            { key: 'us',       label: 'US equities',                 short: 'Stocks (US)' },
+            { key: 'gold',     label: 'Gold',                        short: 'Gold' },
+            { key: 'property', label: 'Property',                    short: 'Property' },
+        ],
+
+        get visibleHoldings() {
+            const all = this.investments || [];
+            return this.invFilter === 'all' ? all : all.filter(i => this._filterOf(i) === this.invFilter);
+        },
+
+        /* The Holdings list, banded by market. Stocks and ETFs carry a brass
+           "IND" / "US" heading; everything else has no market to name and sits
+           in one unheaded group above them, so a deposit is not filed under a
+           country it does not trade in.
+
+           Home market first. The two are listed here in the order they are
+           read, not in the order they were asked for. */
+        get holdingGroups() {
+            const plain = [];
+            const banded = { IND: [], US: [] };
+            for (const inv of this.visibleHoldings) {
+                const m = this._marketBand(inv);
+                if (m) banded[m].push(inv);
+                else plain.push(inv);
+            }
+            const out = [];
+            if (plain.length) out.push({ key: 'plain', heading: '', items: plain });
+            for (const m of ['IND', 'US']) {
+                if (banded[m].length) out.push({ key: m, heading: m, items: banded[m] });
+            }
+            return out;
         },
 
         sipDaysUntil(sip) {
@@ -1823,6 +2478,119 @@ document.addEventListener('alpine:init', () => {
             return t.includes('Stock') || t.includes('ETF');
         },
 
+        /* Instruments that carry a stated interest rate. Two call sites each held their
+           own copy of this list, and neither included the types the PDF importer emits
+           ('FD', 'Fixed Deposit'), so editing an imported deposit silently zeroed its
+           rate — and with it the interest income the whole tax screen is built on. */
+        isRateBearing(type) {
+            const t = (type || '').toLowerCase();
+            return /fd|fixed deposit|bond|government|post office|ppf|epf|nsc|scss|rd|recurring/.test(t);
+        },
+
+        /* What ranges an instrument can honestly offer.
+           Offering a range the data cannot fill is inventing history. AMFI
+           publishes ONE NAV per day, so a fund has no intraday series and a
+           '1D' tab on one draws a single point. A deposit has no market price
+           at all — it accrues at a contracted rate — so it gets no chart
+           whatever, and property has no series either. Returning null means
+           "this instrument is not quoted", not "no data yet". */
+        CHART_RANGES: {
+            intraday: ['1D', '1W', '1M', '3M', '6M', '1Y', 'ALL'],
+            daily:    ['1W', '1M', '3M', '6M', '1Y', 'ALL'],
+        },
+
+        chartRangesFor(inv) {
+            if (!inv) return null;
+            if (this.isRateBearing(inv.type)) return null;
+            /* No price source, no series — whatever the type is called. Asking
+               the TYPE whether something is quotable fails on 'Other', on
+               'Real Estate', and on anything the PDF importer invents; asking
+               whether it has a ticker or a scheme code is the same question
+               the sync already answers, so the two cannot disagree. */
+            if (!inv.ticker && !inv.schemeCode) return null;
+            return this.needsTicker(inv.type) ? this.CHART_RANGES.intraday
+                                              : this.CHART_RANGES.daily;
+        },
+
+        // ── Holding detail ──────────────────────────────────────────────
+        get detailHolding() {
+            if (!this.detailHoldingId) return null;
+            return (this.investments || []).find(i => i.id === this.detailHoldingId) || null;
+        },
+
+        openHolding(inv) {
+            if (!inv || !inv.id) return;
+            this.detailHoldingId = inv.id;
+            const ranges = this.chartRangesFor(inv);
+            // '1M' is not always offered — a fund has no 1D, and clamping to a
+            // range the instrument does not have would leave the selector with
+            // nothing active.
+            this.detailRange = ranges && ranges.includes('1M') ? '1M' : (ranges ? ranges[0] : null);
+            this.activePage = 'holding';
+        },
+
+        /* Label-and-value pairs for the detail view, varying by instrument.
+           A deposit's rate and maturity matter and its "units" do not; a US
+           stock needs the USD price and the rate it was converted at, because
+           without them a rupee figure that moved on FX alone looks like a
+           gain. */
+        get holdingFacts() {
+            const i = this.detailHolding;
+            if (!i) return [];
+            const f = [];
+            const units = Number(i.units) || 0;
+            const isUsd = i.currency === 'USD' || ['Stock (US)', 'ETF (US)'].includes(i.type);
+            const pnl = this.getInvPnL(i);
+
+            if (units > 0) {
+                f.push({ label: 'Units held',      value: units.toLocaleString('en-IN') });
+                // buyPrice is stored in the instrument's OWN currency —
+                // getInvInvestedCost applies fxUsdInr on the way out — so
+                // formatting it as rupees printed Broadcom's $218 average as
+                // ₹218, two rows above a "Price in USD" that proved the app
+                // knew better. The INR equivalent is appended rather than
+                // substituted, because both readings are useful.
+                const avg = Number(i.buyPrice) || 0;
+                f.push({ label: 'Average cost', value: isUsd
+                    ? `${this.formatNative(i, avg)}  (${this.formatCurrency(avg * this.fxUsdInr)})`
+                    : this.formatNative(i, avg) });
+            }
+            f.push({ label: 'Amount invested', value: this.formatCurrency(this.getInvInvestedCost(i)) });
+            f.push({ label: 'Current value',   value: this.formatCurrency(this.getInvCurrentValue(i)) });
+            f.push({ label: 'Total gain',      value: this.formatCurrency(pnl), tone: pnl >= 0 ? 'up' : 'down' });
+
+            if (this.isRateBearing(i.type)) {
+                f.push({ label: 'Interest rate', value: `${Number(i.rate) || 0}% p.a.` });
+                if (i.maturityDate) f.push({ label: 'Matures', value: this.formatDate(i.maturityDate) });
+            } else if (this._classOf(i) === 'mf') {
+                f.push({ label: 'NAV', value: this.formatCurrency(Number(i.currentPrice) || Number(i.nav) || 0) });
+                if (i.schemeCode) f.push({ label: 'Scheme code', value: String(i.schemeCode) });
+            }
+            if (isUsd) {
+                f.push({ label: 'Price in USD',   value: `$${(Number(i.currentPrice) || 0).toFixed(2)}` });
+                f.push({ label: 'USD → INR used', value: this.formatCurrency(this.fxUsdInr) });
+            }
+            return f;
+        },
+
+        /* How far a deposit is through its tenure. This is what replaces the
+           chart on a rate-bearing holding: it accrues rather than moves, so
+           the honest visual is progress toward maturity, not a price line. */
+        get depositProgress() {
+            const i = this.detailHolding;
+            if (!i || !this.isRateBearing(i.type) || !i.maturityDate) return null;
+            const end = new Date(i.maturityDate).getTime();
+            const start = i.startDate ? new Date(i.startDate).getTime() : null;
+            if (!Number.isFinite(end)) return null;
+            const now = Date.now();
+            const days = Math.max(0, Math.ceil((end - now) / 864e5));
+            const pct = start && end > start
+                ? Math.min(100, Math.max(0, ((now - start) / (end - start)) * 100))
+                : null;
+            return { pct, days, matures: this.formatDate(i.maturityDate),
+                     opened: i.startDate ? this.formatDate(i.startDate) : null };
+        },
+
         /* The canonical instrument list, in the order an Indian investor is
            likely to hold them rather than alphabetically. */
         investmentTypes: [
@@ -1830,6 +2598,107 @@ document.addEventListener('alpine:init', () => {
             'Stock (IND)', 'Stock (US)', 'ETF (IND)', 'ETF (US)',
             'Gold', 'Real Estate', 'Other',
         ],
+
+        addHoldingContext: 'all',
+
+        openAddHolding(context = null) {
+            const ctx = context || (this.activePage === 'investments' ? this.invFilter : 'all');
+            this.addHoldingContext = ctx;
+            this.resetNewInvForm(ctx);
+            this.addingInv = true;
+        },
+
+        closeAddHolding() {
+            this.resetNewInvForm();
+            this.addingInv = false;
+        },
+
+        resetNewInvForm(context = null) {
+            const ctx = context || this.addHoldingContext || 'all';
+            let defaultType = 'Stock (IND)';
+            if (ctx === 'mf') defaultType = 'Mutual Fund';
+            else if (ctx === 'debt') defaultType = 'Bank FD';
+            else if (ctx === 'gold') defaultType = 'Gold';
+            else if (ctx === 'equity') defaultType = 'Stock (IND)';
+
+            this.newInv = {
+                name: '',
+                type: defaultType,
+                issuer: '',
+                amount: '',
+                rate: '',
+                payout: 'Monthly',
+                rating: '',
+                maturityDate: '',
+                ticker: '',
+                units: '',
+                buyPrice: '',
+                currentPrice: '',
+                schemeCode: '',
+                currency: defaultType.includes('US') ? 'USD' : 'INR'
+            };
+
+            // Clear search query & results so draft state never bleeds into other openings
+            clearTimeout(this.symbolSearch?._timer);
+            if (this.symbolSearch) {
+                this.symbolSearch.query = '';
+                this.symbolSearch.results = [];
+                this.symbolSearch.error = '';
+                this.symbolSearch.loading = false;
+            }
+
+            this.mfSearchQuery = '';
+            this.mfSearchResults = [];
+            this.mfSearchLoading = false;
+        },
+
+        get availableInvestmentTypes() {
+            switch (this.addHoldingContext) {
+                case 'equity':
+                    return ['Stock (IND)', 'Stock (US)', 'ETF (IND)', 'ETF (US)'];
+                case 'mf':
+                    return ['Mutual Fund'];
+                case 'debt':
+                    return ['Bank FD', 'Bond', 'Government Scheme'];
+                case 'gold':
+                    return ['Gold'];
+                default:
+                    return this.investmentTypes;
+            }
+        },
+
+        setHoldingType(type) {
+            if (!type || this.newInv.type === type) return;
+            this.newInv.type = type;
+            this.newInv.currency = type.includes('(US)') ? 'USD' : 'INR';
+            if (this.symbolSearch) {
+                this.symbolSearch.results = [];
+                this.symbolSearch.error = '';
+            }
+            this.mfSearchResults = [];
+            if (this.newInv.name) {
+                if (type === 'Mutual Fund') {
+                    this.searchMfScheme(this.newInv.name, this.newInv);
+                } else if (this.needsTicker(type)) {
+                    this.searchSymbol(this.newInv.name, this.newInv);
+                }
+            }
+            if (window.RFMMotion && window.RFMMotion.Haptics) {
+                window.RFMMotion.Haptics.tap();
+            }
+        },
+
+        /* Every record's id came from Date.now(), in five different shapes across the
+           file — a bare number, a float with Math.random() mixed in, 'inv_' + now, and
+           `ai_${now}_${i}`. Two holdings created inside the same millisecond therefore
+           shared an id, and deleteInvestment filters by id, so removing one removed both
+           and an edit could land on the wrong row. A counter makes that impossible
+           regardless of clock resolution. */
+        _idSeq: 0,
+        newId(prefix) {
+            this._idSeq += 1;
+            return `${prefix}_${Date.now().toString(36)}_${this._idSeq}`;
+        },
 
         ordinal(n) {
             const v = Number(n) || 0;
@@ -1909,8 +2778,8 @@ document.addEventListener('alpine:init', () => {
            rather than with three chained .replace() calls in the template, which
            is where "1 months" came from. */
         get rangeLabel() {
-            return ({ '1M': 'past month', '3M': 'past 3 months', '6M': 'past 6 months',
-                      '1Y': 'past year', 'ALL': 'all time' })[this.nwChartRange] || '';
+            return ({ '1W': 'past week', '1M': 'past month', '3M': 'past 3 months',
+                      '6M': 'past 6 months', '1Y': 'past year', 'ALL': 'all time' })[this.nwChartRange] || '';
         },
 
         /* Signed, unlike efGap which clamps at zero. Positive means over-funded,
@@ -1968,17 +2837,18 @@ document.addEventListener('alpine:init', () => {
             const want = this._marketOf(form && form.type);
             const wantEtf = (form && form.type || '').includes('ETF');
 
-            const url = `https://query2.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(q)}&quotesCount=14&newsCount=0&listsCount=0`;
+            const url1 = `https://query2.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(q)}&quotesCount=14&newsCount=0&listsCount=0`;
+            const url2 = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(q)}&quotesCount=14&newsCount=0&listsCount=0`;
             try {
                 const data = await this.firstSuccessful([
-                    () => this.httpGetJson(url, 4000),
-                    () => this.httpGetJson(`https://corsproxy.io/?${encodeURIComponent(url)}`, 5000),
-                    () => this.httpGetJson(`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`, 6000),
+                    () => this.httpGetJson(url1, 4000),
+                    () => this.httpGetJson(url2, 4000),
+                    () => this.httpGetJson(`https://api.allorigins.win/raw?url=${encodeURIComponent(url1)}`, 6000),
                 ]);
                 // A later keystroke already superseded this lookup.
                 if (seq !== this.symbolSearch._seq) return;
 
-                const rows = (data && data.quotes || [])
+                const allQuotes = (data && data.quotes || [])
                     .filter(r => r.symbol && (r.quoteType === 'EQUITY' || r.quoteType === 'ETF'))
                     .map(r => {
                         const isNse = /\.(NS|BO)$/i.test(r.symbol);
@@ -1990,15 +2860,25 @@ document.addEventListener('alpine:init', () => {
                             market: isNse ? 'IND' : 'US',
                             isEtf: r.quoteType === 'ETF',
                         };
-                    })
+                    });
+
+                const rows = allQuotes
                     .filter(r => !want || r.market === want)
                     .filter(r => !wantEtf || r.isEtf)
                     .slice(0, 7);
 
                 this.symbolSearch.results = rows;
-                this.symbolSearch.error = rows.length ? '' :
-                    (want === 'IND' ? `Nothing on NSE or BSE matching "${q}".`
-                                    : `No ${wantEtf ? 'ETF' : 'listing'} found for "${q}".`);
+                if (!rows.length) {
+                    const hasUs = allQuotes.some(r => r.market === 'US');
+                    if (want === 'IND' && hasUs) {
+                        this.symbolSearch.error = `No Indian listing for "${q}". Tap "Stock (US)" above for US listings.`;
+                    } else {
+                        this.symbolSearch.error = want === 'IND' ? `Nothing on NSE or BSE matching "${q}".`
+                                                                : `No ${wantEtf ? 'ETF' : 'listing'} found for "${q}".`;
+                    }
+                } else {
+                    this.symbolSearch.error = '';
+                }
             } catch (e) {
                 if (seq !== this.symbolSearch._seq) return;
                 this.symbolSearch.results = [];
@@ -2018,6 +2898,79 @@ document.addEventListener('alpine:init', () => {
             this.symbolSearch.results = [];
             this.symbolSearch.query = '';
             if (this.haptics && window.RFMMotion) window.RFMMotion.Haptics.commit();
+        },
+
+        /* ── Logos ──────────────────────────────────────────────────────────
+           A holding is recognised by its mark long before its name is read, so the
+           search list shows the real one where a real one exists.
+
+           The monogram below is NOT replaced by this — it is the layer underneath.
+           The `img` is transparent until its own load event fires, so a symbol with
+           no logo, a 404, or no network at all leaves the monogram showing and never
+           a broken image. That was the whole objection to remote logos, and it is
+           answered by layering rather than by going without.
+
+           Sources, all free and key-less, verified 2026-09-18:
+             NSE  — dharunashokkumar.github.io/indian-listed-company-logos (2,468 NSE
+                    listings, static SVG, clean 404 on a miss)
+             US   — images.financialmodelingprep.com (covers ETFs as well as stocks)
+           Mutual funds have no logo of their own, so they borrow their AMC's. Only
+           AMCs whose parent is NSE-listed AND unambiguous are mapped: "Tata" resolves
+           to Tata Motors, which is a different company, so Tata funds are deliberately
+           left to the monogram. A wrong logo is worse than none. */
+        logoHost(kind) {
+            return kind === 'us'
+                ? 'https://images.financialmodelingprep.com/symbol/'
+                : 'https://dharunashokkumar.github.io/indian-listed-company-logos/nse/NSE_';
+        },
+
+        /* Prefix-matched against the AMFI scheme name, longest first so "Aditya Birla
+           Sun Life" is not shadowed by a shorter entry. */
+        AMC_TICKERS: [
+            ['aditya birla sun life', 'ABSLAMC'],
+            ['icici prudential',      'ICICIBANK'],
+            ['motilal oswal',         'MOTILALOFS'],
+            ['kotak mahindra',        'KOTAKBANK'],
+            ['edelweiss',             'EDELWEISS'],
+            ['360 one',               '360ONE'],
+            ['kotak',                 'KOTAKBANK'],
+            ['hdfc',                  'HDFCAMC'],
+            ['axis',                  'AXISBANK'],
+            ['sbi',                   'SBIN'],
+            ['uti',                   'UTIAMC'],
+            ['jm ',                   'JMFINANCIL'],
+        ],
+
+        _amcTicker(schemeName) {
+            const n = (schemeName || '').trim().toLowerCase();
+            if (!n) return null;
+            for (const [prefix, ticker] of this.AMC_TICKERS) {
+                if (n.startsWith(prefix)) return ticker;
+            }
+            return null;
+        },
+
+        /* Accepts anything carrying a type/ticker/name — a holding, a market search
+           result, or an AMFI scheme. Returns null when nothing sound can be built,
+           which is the signal to render the monogram alone. */
+        logoUrl(entity) {
+            if (!entity) return null;
+            const type = entity.type || (entity.market === 'US' ? 'Stock (US)'
+                        : entity.market === 'IND' ? 'Stock (IND)'
+                        : entity.schemeName || entity.schemeCode ? 'Mutual Fund' : '');
+            const sym = String(entity.ticker || entity.symbol || '')
+                .trim().toUpperCase().replace(/\.(NS|BO)$/, '');
+
+            if (type === 'Mutual Fund') {
+                const amc = this._amcTicker(entity.name || entity.schemeName);
+                return amc ? this.logoHost('nse') + amc + '.svg' : null;
+            }
+            if (!sym || !/^[A-Z0-9.&-]{1,20}$/.test(sym)) return null;
+            if (type.includes('(US)')) return this.logoHost('us') + encodeURIComponent(sym) + '.png';
+            if (type.includes('Stock') || type.includes('ETF')) {
+                return this.logoHost('nse') + encodeURIComponent(sym) + '.svg';
+            }
+            return null;
         },
 
         /* A monogram, generated from the symbol itself. Deliberately not a
@@ -2053,7 +3006,7 @@ document.addEventListener('alpine:init', () => {
         // Pension earners (TDS on pension by bank) are usually exempt,
         // but for self-assessment income they may need to pay.
         get advanceTaxSchedule() {
-            const annualTax = Math.min(this.oldRegimeTax.tax, this.newRegimeTax.tax);
+            const annualTax = this.incomeTaxPayable;
             if (annualTax <= 10000) return null; // Below threshold — no advance tax needed
 
             const year  = new Date().getFullYear();
@@ -2104,8 +3057,10 @@ document.addEventListener('alpine:init', () => {
                 items.push({ cat: 'Deduction Proofs', done: false, doc: '80C Proof (LIC/PPF/NSC/ELSS receipts)', note: `Claimed: ${this.formatCurrency(this.tax.deduction80C)}` });
             if (this.tax.deduction80D > 0)
                 items.push({ cat: 'Deduction Proofs', done: false, doc: '80D Medical Insurance Premium Receipt', note: `Claimed: ${this.formatCurrency(this.tax.deduction80D)}` });
-            if (this.tax.deduction80TTB > 0)
+            if (this.tax.seniorCitizen && this.tax.deduction80TTB > 0)
                 items.push({ cat: 'Deduction Proofs', done: false, doc: '80TTB Interest Income Statement (Senior)', note: `Claimed: ${this.formatCurrency(this.tax.deduction80TTB)}` });
+            if (!this.tax.seniorCitizen && this.tax.deduction80TTA > 0)
+                items.push({ cat: 'Deduction Proofs', done: false, doc: '80TTA Savings Interest Statement', note: `Claimed: ${this.formatCurrency(this.tax.deduction80TTA)}` });
             if (this.tax.homeLoanInterest > 0)
                 items.push({ cat: 'Deduction Proofs', done: false, doc: 'Home Loan Interest Certificate (Sec 24)', note: `Claimed: ${this.formatCurrency(this.tax.homeLoanInterest)}` });
             if (Number(this.cashflow.project) > 0)
@@ -2348,22 +3303,188 @@ document.addEventListener('alpine:init', () => {
 
         get healthStrengths() {
             const s = [];
-            if (this.monthlySurplus > 0) s.push('Positive monthly cash flow');
-            if (this.emergency.efCurrent >= this.emergency.efMonthly * 6) s.push('6-month emergency fund funded');
-            else if (this.emergency.efCurrent >= this.emergency.efMonthly * 3) s.push('3-month emergency buffer exists');
-            if (this.investments.length > 0) s.push('Active investment portfolio');
-            if (this.concentrationWarnings.length === 0 && this.investments.length > 1) s.push('Diversified portfolio');
+            const effectiveMonthlyExp = Number(this.emergency.efMonthly) > 0
+                ? Number(this.emergency.efMonthly)
+                : Number(this.totalExpense) || 0;
+            const liquidBuffer = Number(this.emergency.efCurrent) || 0;
+
+            // 1. Emergency buffer check (ONLY fires if actual expenses AND buffer exist!)
+            if (effectiveMonthlyExp > 0 && liquidBuffer > 0) {
+                const months = liquidBuffer / effectiveMonthlyExp;
+                if (months >= 6) {
+                    s.push({
+                        title: 'Emergency buffer fully funded',
+                        detail: `${months.toFixed(1)} months of expenses reserved (${this.formatCurrency(liquidBuffer)}).`
+                    });
+                } else if (months >= 3) {
+                    s.push({
+                        title: '3-month emergency safety buffer',
+                        detail: `${months.toFixed(1)} months covered (${this.formatCurrency(liquidBuffer)}).`
+                    });
+                }
+            }
+
+            // 2. Cash flow surplus & savings discipline
+            if (this.monthlySurplus > 0) {
+                const rate = Number(this.savingsRate) || 0;
+                s.push({
+                    title: 'Positive monthly cash surplus',
+                    detail: `${this.formatCurrency(this.monthlySurplus)} surplus per month (${rate.toFixed(0)}% savings rate).`
+                });
+            }
+
+            // 3. Asset & Portfolio Breakdown
+            if (this.investments.length > 0) {
+                const totalVal = this.investments.reduce((sum, i) => sum + this.getInvCurrentValue(i), 0);
+                const equities = this.investments.filter(inv => ['Stock', 'Stock (IND)', 'Stock (US)', 'Equity', 'Mutual Fund', 'ETF', 'ETF (IND)', 'ETF (US)'].includes(inv.type));
+                const usHoldings = this.investments.filter(inv => ['Stock (US)', 'ETF (US)'].includes(inv.type));
+                const mfHoldings = this.investments.filter(inv => inv.type === 'Mutual Fund');
+                const debtHoldings = this.investments.filter(inv => ['Bank FD', 'Bond', 'Government Scheme', 'EPF', 'PPF'].includes(inv.type));
+
+                // Global / US diversification
+                if (usHoldings.length > 0 && totalVal > 0) {
+                    const usVal = usHoldings.reduce((sum, h) => sum + (Number(h.amount) || (Number(h.units) * (Number(h.currentPrice) || Number(h.buyPrice)) * (Number(this.usdInrRate) || 86)) || 0), 0);
+                    const usPct = Math.round((usVal / totalVal) * 100);
+                    if (usPct > 0) {
+                        s.push({
+                            title: 'Global currency hedge',
+                            detail: `${usPct}% allocated in US equities (${usHoldings.map(h => h.name).slice(0, 2).join(', ')}), providing a USD hedge against INR depreciation.`
+                        });
+                    }
+                }
+
+                // Dual fund and direct equity structure
+                if (mfHoldings.length > 0 && equities.length > mfHoldings.length) {
+                    s.push({
+                        title: 'Dual active & fund portfolio',
+                        detail: `${mfHoldings.length} mutual fund(s) alongside direct equity positions for broad market exposure.`
+                    });
+                } else if (this.investments.length >= 3 && this.concentrationWarnings.length === 0) {
+                    s.push({
+                        title: 'Well-distributed portfolio',
+                        detail: `${this.investments.length} holdings with no single position dominating portfolio risk.`
+                    });
+                }
+
+                // Multi-asset allocation
+                if (debtHoldings.length > 0 && equities.length > 0 && totalVal > 0) {
+                    s.push({
+                        title: 'Multi-asset allocation active',
+                        detail: 'Portfolio holds both growth assets (equities) and defensive stability (fixed income/deposits).'
+                    });
+                }
+            }
+
+            // 4. SIP & Automated Compounding
+            if (this.activeSips && this.activeSips.length > 0) {
+                s.push({
+                    title: 'Systematic SIP compounding',
+                    detail: `${this.formatCurrency(this.totalMonthlySipOutflow)} committed monthly across ${this.activeSips.length} automated SIPs.`
+                });
+            }
+
             return s;
         },
 
         get healthImprovements() {
             const i = [];
-            if (this.emergency.efCurrent < this.emergency.efMonthly * 6)
-                i.push('Increase emergency fund to 6 months');
-            if (this.concentrationWarnings.length > 0)
-                i.push('Reduce concentration risk — one issuer holds majority of portfolio');
-            if (Number(this.savingsRate) < 20)
-                i.push('Aim for a 20% savings rate');
+            const effectiveMonthlyExp = Number(this.emergency.efMonthly) > 0
+                ? Number(this.emergency.efMonthly)
+                : Number(this.totalExpense) || 0;
+            const liquidBuffer = Number(this.emergency.efCurrent) || 0;
+
+            // 1. Emergency Runway Diagnosis
+            if (effectiveMonthlyExp > 0) {
+                const months = liquidBuffer > 0 ? (liquidBuffer / effectiveMonthlyExp) : 0;
+                if (months < 3) {
+                    const target = effectiveMonthlyExp * 6;
+                    i.push({
+                        title: 'Emergency buffer below safety runway',
+                        detail: liquidBuffer === 0
+                            ? `Zero dedicated buffer. Monthly expenses are ${this.formatCurrency(effectiveMonthlyExp)}. Build a 6-month buffer of ${this.formatCurrency(target)}.`
+                            : `Current liquid buffer only covers ${months.toFixed(1)} months (${this.formatCurrency(liquidBuffer)}). Target 6-month safety buffer is ${this.formatCurrency(target)}.`
+                    });
+                } else if (months < 6) {
+                    i.push({
+                        title: 'Expand emergency runway to 6 months',
+                        detail: `Current buffer covers ${months.toFixed(1)} months. Target is ${this.formatCurrency(effectiveMonthlyExp * 6)}.`
+                    });
+                }
+            } else if (this.totalIncome > 0 && effectiveMonthlyExp === 0) {
+                i.push({
+                    title: 'Monthly expenses not configured',
+                    detail: 'Add monthly expenses in Planning to unlock accurate emergency buffer and cashflow runway calculations.'
+                });
+            }
+
+            // 2. Concentration Risk Check
+            if (this.investments.length > 0) {
+                const totalVal = this.investments.reduce((sum, i) => sum + this.getInvCurrentValue(i), 0);
+                if (totalVal > 0) {
+                    // Find top holding by valuation — through the one valuation
+                    // path, not a local copy with its own hardcoded ₹86 rate.
+                    let topHolding = null;
+                    let topVal = 0;
+                    for (const inv of this.investments) {
+                        const val = this.getInvCurrentValue(inv) || 0;
+                        if (val > topVal) {
+                            topVal = val;
+                            topHolding = inv;
+                        }
+                    }
+                    if (topHolding && topVal > 0) {
+                        const topPct = Math.round((topVal / totalVal) * 100);
+                        const kind = String(topHolding.type || '').toLowerCase();
+                        // "Sharp swings" is true of a stock and false of SCSS or
+                        // PPF, which are government-backed and do not reprice.
+                        // Telling a retired saver their safest holding is a risk
+                        // is exactly the equity-shaped advice this card must not give.
+                        const sovereign = /government|ppf|epf|nps|post office|scss|nsc|kvp|sgb/.test(kind)
+                            || !!window.CorpusSchemes?.match(topHolding);
+                        if (topPct >= 35 && !sovereign) {
+                            i.push(/fd|fixed deposit/.test(kind)
+                                ? { title: `${topPct}% of your book is one deposit`,
+                                    detail: `${topHolding.name} holds ${this.formatCurrency(topVal)}. Spreading deposits across banks and maturity dates keeps both the risk and the reinvestment decision smaller.` }
+                                : { title: `High concentration in ${topHolding.name}`,
+                                    detail: `Accounts for ${topPct}% of your entire portfolio (${this.formatCurrency(topVal)}). Sharp swings will disproportionately impact your corpus.` });
+                        }
+                    }
+
+                    // Check if 100% equity with zero defensive buffer
+                    const debtHoldings = this.investments.filter(inv => ['Bank FD', 'Bond', 'Government Scheme', 'EPF', 'PPF'].includes(inv.type));
+                    if (debtHoldings.length === 0 && liquidBuffer === 0) {
+                        i.push({
+                            title: '100% growth asset exposure',
+                            detail: 'Zero fixed income or liquid defensive buffer. Consider adding liquid debt or gold to cushion equity volatility.'
+                        });
+                    }
+                }
+            }
+
+            // 3. Cashflow & Savings Rate
+            if (this.totalIncome > 0) {
+                const sr = Number(this.savingsRate) || 0;
+                if (this.monthlySurplus <= 0 && this.totalExpense > this.totalIncome) {
+                    i.push({
+                        title: 'Negative cash flow deficit',
+                        detail: `Monthly expenses exceed income by ${this.formatCurrency(Math.abs(this.monthlySurplus))}. Review discretionary outflows.`
+                    });
+                } else if (sr < 20 && sr >= 0) {
+                    i.push({
+                        title: `Savings rate at ${sr.toFixed(0)}% (Target: 20%+)`,
+                        detail: `Increasing your monthly savings from ${this.formatCurrency(this.monthlySurplus)} to ${this.formatCurrency(this.totalIncome * 0.2)} will accelerate compounding.`
+                    });
+                }
+            }
+
+            // 4. Idle Surplus without SIP
+            if (this.monthlySurplus > 5000 && (!this.activeSips || this.activeSips.length === 0)) {
+                i.push({
+                    title: 'Surplus cash is unallocated',
+                    detail: `You have ${this.formatCurrency(this.monthlySurplus)} uncommitted monthly surplus. Automate investing with recurring SIPs in Planning.`
+                });
+            }
+
             return i;
         },
 
@@ -2389,28 +3510,29 @@ document.addEventListener('alpine:init', () => {
 
             const createdInv = {
                 ...this.newInv,
-                id:           Date.now(),
+                id:           this.newId('inv'),
                 amount:       amount,
                 units:        units,
                 buyPrice:     buyPrice,
                 currentPrice: currentPrice || buyPrice,
                 currentValue: amount,
-                rate:         ['Bank FD', 'Bond', 'RBI Bond', 'Government Scheme', 'Post Office'].includes(this.newInv.type) ? (Number(this.newInv.rate) || 0) : 0
+                rate:         this.isRateBearing(this.newInv.type) ? (Number(this.newInv.rate) || 0) : 0
             };
 
             this.investments.push(createdInv);
 
-            // Trigger single price fetch if ticker/schemeCode provided
+            // Trigger single price fetch asynchronously without blocking UI
             if (createdInv.ticker || createdInv.schemeCode) {
-                this.fetchSinglePrice(createdInv);
+                this.fetchSinglePrice(createdInv).catch(err => {
+                    console.warn('[SinglePriceSync] Auto-fetch error:', err);
+                });
             }
 
-            this.newInv = {
-                name: '', type: 'Stock (IND)', issuer: '', amount: '',
-                rate: '', payout: 'Monthly', rating: '', maturityDate: '',
-                ticker: '', units: '', buyPrice: '', currentPrice: '', schemeCode: ''
-            };
+            this.resetNewInvForm();
             this.addingInv = false;
+            if (window.RFMMotion && window.RFMMotion.Haptics) {
+                window.RFMMotion.Haptics.commit();
+            }
         },
 
         deleteInvestment(id) {
@@ -2444,7 +3566,7 @@ document.addEventListener('alpine:init', () => {
                 this.editForm.buyPrice     = buyPrice;
                 this.editForm.currentPrice = currentPrice || buyPrice;
                 this.editForm.currentValue = amount;
-                this.editForm.rate         = ['Bank FD', 'Bond', 'RBI Bond', 'Government Scheme', 'Post Office'].includes(this.editForm.type) ? (Number(this.editForm.rate) || 0) : 0;
+                this.editForm.rate         = this.isRateBearing(this.editForm.type) ? (Number(this.editForm.rate) || 0) : 0;
 
                 this.investments[idx] = { ...this.editForm };
                 this.investments = [...this.investments];
@@ -2454,6 +3576,217 @@ document.addEventListener('alpine:init', () => {
                 }
             }
             this.editingInv = null;
+        },
+
+        // ════════════════════════════════════════════════════════════
+        //  TOPPING UP A HOLDING — amount in, units and average out
+        // ════════════════════════════════════════════════════════════
+        //
+        // You bought ₹20,000 more of a fund, or $500 more of Broadcom. The app
+        // knows the price, so retyping a recomputed quantity and a recomputed
+        // average by hand is arithmetic the app should be doing — and it is
+        // arithmetic that is easy to get wrong at 2 a.m. after a fill.
+        //
+        // Everything here works in the holding's OWN currency. buyPrice is
+        // already stored that way — getInvInvestedCost applies fxUsdInr on the
+        // way out for USD rows — so a dollar amount must never be converted on
+        // the way in, or the average silently becomes a rupee figure sitting in
+        // a dollar field.
+
+        openAddLot(inv) {
+            if (!inv) return;
+            this.addingLot = inv;
+            this.lotForm = { amount: '', timing: 'market' };
+            this.lotError = '';
+            if (window.RFMMotion?.Haptics) window.RFMMotion.Haptics.tap();
+        },
+
+        cancelAddLot() { this.addingLot = null; this.lotError = ''; },
+
+        /* The symbol a price is quoted in. Not a formatter — the sheet has to
+           say "$500" for a US holding and "₹500" for an Indian one, and
+           formatCurrency is hardcoded to INR. */
+        lotCurrency(inv) {
+            return (inv && (inv.currency === 'USD'
+                            || inv.type === 'Stock (US)' || inv.type === 'ETF (US)')) ? 'USD' : 'INR';
+        },
+
+        formatNative(inv, n) {
+            const v = Number(n) || 0;
+            return this.lotCurrency(inv) === 'USD'
+                ? '$' + v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                : this.formatCurrency(v);
+        },
+
+        /* What the sheet shows before you commit. Returns null when there is
+           nothing honest to show yet — an off-hours purchase has NO price,
+           because the session it will fill at has not opened. */
+        get lotPreview() {
+            const inv = this.addingLot;
+            const amount = Number(this.lotForm.amount) || 0;
+            if (!inv || amount <= 0) return null;
+
+            const qty = Number(inv.units) || 0;
+            const avg = Number(inv.buyPrice) || 0;
+
+            if (this.lotForm.timing === 'offhours') {
+                return { pending: true, amount, qty, avg };
+            }
+
+            const price = Number(inv.currentPrice) || avg;
+            if (!(price > 0)) return null;
+            const units = amount / price;
+            const newQty = qty + units;
+            // The average is cost-weighted, not price-averaged: two lots of
+            // different sizes do not contribute equally.
+            const newAvg = newQty > 0 ? ((qty * avg) + amount) / newQty : price;
+            return { pending: false, amount, price, units, qty, avg, newQty, newAvg,
+                     priceAsOf: inv.priceAsOf || null };
+        },
+
+        /* Folds a settled purchase into the position. Idempotent by lot id:
+           a sync that runs twice, or overlaps itself, must not buy the same
+           units twice. */
+        _applyLot(inv, amount, price, lotId) {
+            if (!inv || !(amount > 0) || !(price > 0)) return false;
+            inv.settledLots = Array.isArray(inv.settledLots) ? inv.settledLots : [];
+            if (lotId && inv.settledLots.includes(lotId)) return false;
+
+            const qty = Number(inv.units) || 0;
+            const avg = Number(inv.buyPrice) || 0;
+            const units = amount / price;
+            const newQty = qty + units;
+
+            inv.units = newQty;
+            inv.buyPrice = newQty > 0 ? ((qty * avg) + amount) / newQty : price;
+            const live = Number(inv.currentPrice) || price;
+            inv.currentValue = Math.round(newQty * live * (this.lotCurrency(inv) === 'USD' ? this.fxUsdInr : 1) * 100) / 100;
+            inv.amount = inv.currentValue;
+            if (lotId) inv.settledLots.push(lotId);
+            return true;
+        },
+
+        commitAddLot() {
+            const inv = this.addingLot;
+            const p = this.lotPreview;
+            if (!inv || !p) { this.lotError = 'Enter how much you bought.'; return; }
+
+            const idx = (this.investments || []).findIndex(i => i.id === inv.id);
+            if (idx < 0) { this.lotError = 'That holding is no longer here.'; return; }
+            const row = { ...this.investments[idx] };
+
+            if (p.pending) {
+                // Nothing is folded in yet. The fill price is the open of a
+                // session that has not happened, and inventing units for it
+                // would be inventing a trade.
+                row.pendingLots = Array.isArray(row.pendingLots) ? [...row.pendingLots] : [];
+                row.pendingLots.push({
+                    id: this.newId('lot'),
+                    amount: p.amount,
+                    placedAt: new Date().toISOString(),
+                    basis: 'open',
+                });
+            } else if (!this._applyLot(row, p.amount, p.price, null)) {
+                this.lotError = 'Could not work out a price for that.';
+                return;
+            }
+
+            this.investments[idx] = row;
+            this.investments = [...this.investments];
+            this.addingLot = null;
+            this.lotError = '';
+            if (window.RFMMotion?.Haptics) window.RFMMotion.Haptics.success();
+            if (p.pending) this.settlePendingLots(row).catch(() => {});
+        },
+
+        /* Daily session opens, newest last. A MONTH rather than the 5 days the
+           price path fetches: a lot placed on a Friday evening before a long
+           weekend still has to find its session, and five candles is not
+           enough to guarantee the window straddles the purchase. */
+        async _dailyOpens(inv) {
+            const isUS = this.lotCurrency(inv) === 'USD';
+            const clean = String(inv.ticker || '').trim().toUpperCase().replace(/\.(NS|BO)$/, '');
+            if (!clean) return null;
+            const sym = isUS ? clean : `${clean}.NS`;
+            const data = await this.fetchMarketJson(
+                `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?interval=1d&range=1mo`);
+            const res = data?.chart?.result?.[0];
+            const times = res?.timestamp;
+            const opens = res?.indicators?.quote?.[0]?.open;
+            if (!Array.isArray(times) || !Array.isArray(opens) || !times.length) return null;
+            return { times, opens };
+        },
+
+        /* Settles anything waiting on a market open.
+
+           This is what makes "I bought off hours" work without the app being
+           awake at the open. It never needs to be: the open of a session that
+           has already happened is in the daily candles, so the lot is resolved
+           retroactively the next time the app runs. A later sync then shows the
+           LIVE price as normal — settling fixes the cost basis, not the value.
+
+           A lot is only settled when the candle window provably straddles the
+           purchase. If the window starts AFTER the lot was placed, some session
+           in between may have been the real fill and we cannot see it, so the
+           lot is flagged rather than settled at a price that is merely plausible. */
+        async settlePendingLots(inv) {
+            if (!inv || !Array.isArray(inv.pendingLots) || !inv.pendingLots.length) return 0;
+            if (!inv.ticker) return 0;
+
+            let series = null;
+            try { series = await this._dailyOpens(inv); } catch (e) { return 0; }
+            if (!series) return 0;
+
+            const { times, opens } = series;
+            const windowStart = times[0] * 1000;
+            const keep = [];
+            let settled = 0;
+
+            for (const lot of inv.pendingLots) {
+                const placed = new Date(lot.placedAt).getTime();
+                if (!Number.isFinite(placed)) continue;
+
+                if (placed < windowStart) {
+                    // Older than anything we can see. Surfaced, never guessed.
+                    keep.push({ ...lot, unresolved: true });
+                    continue;
+                }
+                const i = times.findIndex((t, n) => (t * 1000) > placed
+                                                 && Number.isFinite(opens[n]) && opens[n] > 0);
+                if (i < 0) { keep.push(lot); continue; }   // the session has not opened yet
+
+                if (this._applyLot(inv, lot.amount, opens[i], lot.id)) settled++;
+            }
+
+            inv.pendingLots = keep;
+            if (settled) {
+                const idx = (this.investments || []).findIndex(i => i.id === inv.id);
+                if (idx >= 0) { this.investments[idx] = { ...inv }; this.investments = [...this.investments]; }
+            }
+            return settled;
+        },
+
+        async settleAllPendingLots() {
+            const waiting = (this.investments || []).filter(i => (i.pendingLots || []).length);
+            if (!waiting.length) return 0;
+            let n = 0;
+            for (const inv of waiting) {
+                try { n += await this.settlePendingLots(inv); } catch (e) { /* next holding */ }
+            }
+            if (n) this.saveData();
+            return n;
+        },
+
+        get pendingLotCount() {
+            return (this.investments || []).reduce((n, i) => n + ((i.pendingLots || []).length), 0);
+        },
+
+        pendingLotNote(inv) {
+            const lots = (inv && inv.pendingLots) || [];
+            if (!lots.length) return '';
+            const stuck = lots.filter(l => l.unresolved).length;
+            if (stuck) return `${stuck} purchase${stuck > 1 ? 's' : ''} could not be priced — add ${stuck > 1 ? 'them' : 'it'} by hand`;
+            return `${lots.length} purchase${lots.length > 1 ? 's' : ''} waiting for the next market open`;
         },
 
         async fetchLivePrices() {
@@ -2473,7 +3806,7 @@ document.addEventListener('alpine:init', () => {
             if (!this.newGoal.name || !this.newGoal.target) return;
             this.goals.push({
                 ...this.newGoal,
-                id:      Date.now(),
+                id:      this.newId('goal'),
                 target:  Number(this.newGoal.target),
                 current: Number(this.newGoal.current) || 0
             });
@@ -2602,6 +3935,7 @@ document.addEventListener('alpine:init', () => {
             this.importError = '';
             this.importResults = null;
             this.importStats = null;
+            this.statementDiff.active = false;
 
             try {
                 const text = await this.extractPdfText(this.importFile, this.importPassword);
@@ -2616,61 +3950,27 @@ document.addEventListener('alpine:init', () => {
                 const result = window.RFMParser.parseStatement(text);
 
                 if (result.type === 'UNKNOWN' || result.investments.length === 0) {
-                    // Phase 13: AI Classifier fallback — attempt Gemini 2.0 Flash zero-shot classification
-                    const apiKey = localStorage.getItem('rfm_gemini_key');
-                    if (!apiKey) {
-                        // No API key — show helpful error pointing user to set one
-                        this.importError = result.investments.length === 0
-                            ? `Statement recognized as ${result.type.replace('_',' ')} but no holdings extracted. Try enabling AI Classifier (set your Gemini API key above) for unsupported formats.`
-                            : 'Statement format not recognized by the built-in parser. Enable AI Classifier by adding your Gemini API key above to handle any bank/broker format.';
-                        this.aiClassifier.status  = 'idle';
-                        this.importState = 'error';
-                        return;
-                    }
-
-                    // AI Classifier active
-                    this.importState = 'ai_classifying';
-                    this.aiClassifier.status  = 'classifying';
-                    this.aiClassifier.error   = '';
-                    this.aiClassifier.usedAI  = false;
-
-                    try {
-                        const aiResult = await this.classifyWithAI(text, apiKey);
-                        if (!aiResult || !aiResult.investments || aiResult.investments.length === 0) {
-                            throw new Error('AI returned no holdings. The PDF may be image-based or contain no financial data.');
-                        }
-                        // Merge AI result into the standard importResults shape
-                        this.importResults      = aiResult;
-                        this.aiClassifier.usedAI     = true;
-                        this.aiClassifier.docType    = aiResult.type || 'Unknown';
-                        this.aiClassifier.confidence = aiResult.aiConfidence || 'Medium';
-                        this.aiClassifier.status     = 'done';
-                        this.importSelections = {};
-                        aiResult.investments.forEach((_, idx) => {
-                            this.importSelections[idx] = true;
-                        });
-                        this.importState = 'parsed';
-                        return;
-                    } catch (aiErr) {
-                        console.error('[Phase 13] AI Classifier failed:', aiErr);
-                        this.aiClassifier.status  = 'error';
-                        this.aiClassifier.error   = aiErr.message;
-                        this.importError = 'AI Classifier failed: ' + aiErr.message;
-                        this.importState = 'error';
-                        return;
-                    }
+                    // Statement import is intentionally deterministic. The managed
+                    // portfolio-reading service is not a document-processing API,
+                    // so this path never falls back to a hidden personal key.
+                    this.importError = result.investments.length === 0
+                        ? `Statement recognized as ${result.type.replace('_',' ')} but no holdings could be extracted. Add them manually.`
+                        : 'Statement format is not supported by the built-in parser. Add holdings manually.';
+                    this.importState = 'error';
+                    return;
                 }
 
-                // Regex parser succeeded normally
-                this.aiClassifier.usedAI = false;
-                this.aiClassifier.status = 'idle';
+                // Built-in parser succeeded
                 this.importResults = result;
-                // Select all by default
                 this.importSelections = {};
                 result.investments.forEach((_, idx) => {
                     this.importSelections[idx] = true;
                 });
-                this.importState = 'parsed';
+
+                // Compute smart portfolio diff
+                this.generatePortfolioDiff(result);
+                this.importState = 'diff_ready';
+                if (this.haptics && window.RFMMotion) window.RFMMotion.Haptics.tap();
 
             } catch (err) {
                 console.error('Parse error:', err);
@@ -2681,104 +3981,6 @@ document.addEventListener('alpine:init', () => {
                 }
                 this.importState = 'error';
             }
-        },
-
-        // ════════════════════════════════════════════════════════════
-        //  PHASE 13: UNIVERSAL AI STATEMENT CLASSIFIER
-        //  Uses Gemini 2.0 Flash with JSON mode to zero-shot classify
-        //  any bank statement, credit card, broker P&L, or insurance PDF
-        // ════════════════════════════════════════════════════════════
-
-        async classifyWithAI(rawText, apiKey) {
-            // Trim text to keep within token limits (~12K chars ~ 3K tokens)
-            const truncated = rawText.length > 12000
-                ? rawText.slice(0, 12000) + '\n[...document truncated for analysis...]'
-                : rawText;
-
-            const prompt = `You are a financial document parser for an Indian personal finance app. Your ONLY task is to extract structured financial data from the document text below.
-
-Classify the document and extract all financial holdings, transactions, or policies into structured JSON.
-
-## DOCUMENT TEXT:
-"""
-${truncated}
-"""
-
-## CLASSIFICATION TYPES:
-- BANK_STATEMENT — savings/current account transactions
-- CREDIT_CARD_STATEMENT — credit card transactions and outstanding
-- CAS_STATEMENT — CAMS/KFintech Consolidated Account Statement (mutual funds)
-- BROKER_PL — broker P&L / capital gains statement
-- INSURANCE_POLICY — LIC or other insurance policy document
-- FD_RECEIPT — Fixed Deposit receipt or advice
-- BOND_STATEMENT — government/corporate bond holding statement
-- EPFO_STATEMENT — PF/EPF passbook statement
-- NPS_STATEMENT — National Pension System statement
-
-## OUTPUT FORMAT (strict JSON, no markdown):
-{
-  "type": "<one of the CLASSIFICATION TYPES above>",
-  "aiConfidence": "High|Medium|Low",
-  "aiDocumentSummary": "<1-2 sentence summary of what this document is>",
-  "investor": {
-    "name": "<account holder name if found, else null>",
-    "accountNumber": "<masked account number if found, else null>",
-    "pan": "<PAN if found, else null>"
-  },
-  "investments": [
-    {
-      "name": "<investment/scheme/FD name>",
-      "type": "<Bank FD | Bond | Mutual Fund | Stock | ETF | Insurance | Post Office | Government Scheme | Other>",
-      "issuer": "<bank/institution name>",
-      "amount": 0,
-      "rate": 0,
-      "maturityDate": null,
-      "units": 0,
-      "buyPrice": 0,
-      "currentPrice": 0,
-      "purchaseDate": null,
-      "assetClass": "<equity|debt|gold|realestate|insurance|other>"
-    }
-  ],
-  "transactionSummary": {
-    "totalCredits": 0,
-    "totalDebits": 0,
-    "period": null
-  }
-}
-
-RULES: Return ONLY valid JSON. No markdown, no explanation. If a field is unknown use null or 0. Amount must be a number (rupees). Do NOT invent data not in the document.`;
-
-            const activeModel = this.regenWealth.model === 'custom' ? this.regenWealth.customModel : this.regenWealth.model;
-            const parsed = await window.RegenWealth.callLLM(prompt, apiKey, {
-                provider:    this.regenWealth.provider,
-                model:       activeModel,
-                temperature: 0.1
-            });
-
-            // Normalise: ensure all investment fields are correctly typed
-            if (parsed.investments) {
-                parsed.investments = parsed.investments.map((inv, i) => ({
-                    id:           `ai_${Date.now()}_${i}`,
-                    name:         inv.name         || 'Unnamed Holding',
-                    type:         inv.type         || 'Other',
-                    issuer:       inv.issuer        || '',
-                    amount:       Number(inv.amount) || 0,
-                    rate:         Number(inv.rate)   || 0,
-                    maturityDate: inv.maturityDate   || '',
-                    units:        Number(inv.units)  || 0,
-                    buyPrice:     Number(inv.buyPrice)     || 0,
-                    currentPrice: Number(inv.currentPrice) || 0,
-                    currentValue: (Number(inv.units) > 0 && Number(inv.currentPrice) > 0)
-                                    ? Number(inv.units) * Number(inv.currentPrice)
-                                    : Number(inv.amount) || 0,
-                    purchaseDate: inv.purchaseDate || '',
-                    assetClass:   inv.assetClass   || 'other',
-                    payout: 'Monthly', rating: '', ticker: '', schemeCode: ''
-                }));
-            }
-
-            return parsed;
         },
 
         async getPdfWorkerUrl() {
@@ -2823,8 +4025,13 @@ RULES: Return ONLY valid JSON. No markdown, no explanation. If a field is unknow
                 if (err.name === 'PasswordException' || (err.message && err.message.toLowerCase().includes('password'))) {
                     throw err;
                 }
+                // Was a CDN fetch of pdfjs-dist@6.1.200 — the single remaining line in the
+                // app that needed a network, in an app whose whole claim is that it does
+                // not. It was also pinned to a different version than the bundle ships
+                // (6.3.289), so the worker and the API would have disagreed even online.
+                // The .mjs build is vendored beside the .js one; both match the bundle.
                 if (pdfjsLib.GlobalWorkerOptions) {
-                    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://unpkg.com/pdfjs-dist@6.1.200/build/pdf.worker.min.mjs';
+                    pdfjsLib.GlobalWorkerOptions.workerSrc = 'pdf.worker.min.mjs';
                     pdf = await pdfjsLib.getDocument(loadingConfig).promise;
                 } else {
                     throw err;
@@ -2836,7 +4043,7 @@ RULES: Return ONLY valid JSON. No markdown, no explanation. If a field is unknow
                 const page = await pdf.getPage(i);
                 const content = await page.getTextContent();
                 const pageText = content.items.map(item => item.str).join(' ');
-                fullText += pageText + '\n';
+                fullText += `\n--- PAGE ${i} OF ${pdf.numPages} ---\n` + pageText + '\n';
             }
 
             return fullText;
@@ -2857,6 +4064,283 @@ RULES: Return ONLY valid JSON. No markdown, no explanation. If a field is unknow
                 });
             }
             return null;
+        },
+
+        // ════════════════════════════════════════════════════════════
+        //  SMART PORTFOLIO DIFF ENGINE (Groww / MF / Stock Statement Diff)
+        // ════════════════════════════════════════════════════════════
+
+        generatePortfolioDiff(statementResult) {
+            if (!statementResult || !statementResult.investments) return;
+
+            const type = statementResult.type || '';
+            const docCat = (statementResult.documentCategory === 'Stock' || type.includes('STOCK') || type.includes('CAS'))
+                ? 'Stock'
+                : 'Mutual Fund';
+
+            const broker = statementResult.broker || (type.includes('GROWW') ? 'Groww' : (type.includes('CAMS') ? 'CAMS' : (type.includes('KFIN') ? 'KFintech' : 'Broker')));
+            const asOfDate = statementResult.asOfDate || '';
+            const investor = statementResult.investor || {};
+            const summary = statementResult.summary || {};
+
+            // Existing holdings in app for this category
+            const appCategoryHoldings = (this.investments || []).filter(inv => {
+                if (docCat === 'Mutual Fund') {
+                    return inv.type === 'Mutual Fund' || (inv.type || '').toLowerCase().includes('mutual');
+                } else {
+                    return ['Stock', 'Stock (IND)', 'Stock (US)', 'ETF', 'ETF (IND)', 'ETF (US)'].includes(inv.type) ||
+                           (inv.type || '').toLowerCase().includes('stock');
+                }
+            });
+
+            // Normalization helper for fuzzy name matching
+            const simplify = (str) => {
+                return (str || '')
+                    .toLowerCase()
+                    .replace(/\b(direct|regular|plan|growth|dividend|idcw|fund|mutual|equity|index|cap|ltd|limited|shares?|amc)\b/gi, '')
+                    .replace(/[^a-z0-9]/g, ' ')
+                    .replace(/\s+/g, ' ')
+                    .trim();
+            };
+
+            const matched = [];
+            const newItems = [];
+            const matchedExistingIds = new Set();
+
+            const incomingHoldings = statementResult.investments || [];
+
+            incomingHoldings.forEach(inc => {
+                const incSimp = simplify(inc.name);
+                const incFolio = (inc.folioNumber || '').trim();
+                const incIsin = (inc.isin || '').trim();
+
+                let match = null;
+
+                // 1. Folio match (highest accuracy for MF)
+                if (incFolio && incFolio.length > 4) {
+                    match = appCategoryHoldings.find(ex => (ex.folioNumber || '').trim() === incFolio);
+                }
+
+                // 2. ISIN match (highest accuracy for Stocks)
+                if (!match && incIsin) {
+                    match = appCategoryHoldings.find(ex => (ex.isin || '').trim() === incIsin);
+                }
+
+                // 3. Fuzzy name match
+                if (!match && incSimp.length > 3) {
+                    match = appCategoryHoldings.find(ex => {
+                        const exSimp = simplify(ex.name);
+                        if (!exSimp) return false;
+                        return exSimp === incSimp || exSimp.includes(incSimp) || incSimp.includes(exSimp);
+                    });
+                }
+
+                if (match) {
+                    matchedExistingIds.add(match.id);
+                    const oldUnits = Number(match.units) || 0;
+                    const newUnits = Number(inc.units) || 0;
+                    const oldCost = Number(match.amount) || 0;
+                    const newCost = Number(inc.amount) || oldCost;
+                    const oldVal = Number(match.currentValue) || (oldUnits * (Number(match.currentPrice) || Number(match.nav) || 0)) || oldCost;
+                    const newVal = Number(inc.currentValue) || (newUnits * (Number(inc.nav) || Number(inc.currentPrice) || 0)) || newCost;
+                    const oldNav = Number(match.currentPrice) || Number(match.nav) || 0;
+                    const newNav = Number(inc.nav) || Number(inc.currentPrice) || 0;
+
+                    matched.push({
+                        existingId: match.id,
+                        existingName: match.name,
+                        incomingName: inc.name,
+                        type: match.type || inc.type,
+                        issuer: inc.issuer || match.issuer || '',
+                        folioNumber: inc.folioNumber || match.folioNumber || '',
+                        oldUnits: oldUnits,
+                        newUnits: newUnits,
+                        unitsDelta: Math.round((newUnits - oldUnits) * 1000) / 1000,
+                        oldInvested: oldCost,
+                        newInvested: newCost,
+                        investedDelta: Math.round((newCost - oldCost) * 100) / 100,
+                        oldValue: oldVal,
+                        newValue: newVal,
+                        valueDelta: Math.round((newVal - oldVal) * 100) / 100,
+                        oldNav: oldNav,
+                        newNav: newNav,
+                        incomingHolding: inc
+                    });
+                } else {
+                    newItems.push({
+                        name: inc.name,
+                        type: inc.type || docCat,
+                        issuer: inc.issuer || '',
+                        folioNumber: inc.folioNumber || '',
+                        units: Number(inc.units) || 0,
+                        amount: Number(inc.amount) || Number(inc.currentValue) || 0,
+                        currentValue: Number(inc.currentValue) || (Number(inc.units) * Number(inc.nav)) || 0,
+                        nav: Number(inc.nav) || Number(inc.currentPrice) || 0,
+                        incomingHolding: inc
+                    });
+                }
+            });
+
+            // Omitted holdings in app for this category
+            const omitted = appCategoryHoldings
+                .filter(ex => !matchedExistingIds.has(ex.id))
+                .map(ex => ({
+                    id: ex.id,
+                    name: ex.name,
+                    units: Number(ex.units) || 0,
+                    currentValue: Number(ex.currentValue) || Number(ex.amount) || 0
+                }));
+
+            // Synthesize intelligent conversational message
+            const asOfStr = asOfDate ? ` (as of ${this.formatDate(asOfDate)})` : '';
+            let aiMessage = '';
+
+            if (matched.length > 0 && newItems.length === 0) {
+                const names = matched.map(m => `“${m.existingName}”`).join(' and ');
+                aiMessage = `This ${broker} statement${asOfStr} is the current portfolio for the ${matched.length} ${docCat} holding${matched.length === 1 ? '' : 's'} already in Corpus: ${names}. Would you like to update them to the latest units and valuations from this statement?`;
+            } else if (matched.length > 0 && newItems.length > 0) {
+                const mNames = matched.map(m => `“${m.existingName}”`).join(', ');
+                const nNames = newItems.map(n => `“${n.name}”`).join(', ');
+                aiMessage = `This ${broker} statement${asOfStr} matches ${matched.length} existing holding${matched.length === 1 ? '' : 's'} (${mNames}) and includes ${newItems.length} new holding${newItems.length === 1 ? '' : 's'} (${nNames}). Would you like to update matching holdings and add the new one${newItems.length === 1 ? '' : 's'}?`;
+            } else if (matched.length === 0 && newItems.length > 0) {
+                const tot = summary.currentValue || newItems.reduce((s, i) => s + i.currentValue, 0);
+                aiMessage = `This ${broker} statement${asOfStr} contains ${newItems.length} ${docCat} holding${newItems.length === 1 ? '' : 's'} totaling ${this.formatCurrency(tot)}. None of these are currently in your portfolio. Would you like to add them?`;
+            } else {
+                aiMessage = `Identified ${broker} ${docCat} portfolio statement${asOfStr}. Review the portfolio diff below.`;
+            }
+
+            this.statementDiff = {
+                active: true,
+                category: docCat,
+                broker: broker,
+                asOfDate: asOfDate,
+                investor: investor,
+                summary: summary,
+                aiMessage: aiMessage,
+                matched: matched,
+                newItems: newItems,
+                omitted: omitted
+            };
+        },
+
+        applyPortfolioUpdate() {
+            if (!this.statementDiff || !this.statementDiff.active) return;
+
+            let updatedCount = 0;
+            let addedCount = 0;
+
+            // 1. Update matched holdings
+            this.statementDiff.matched.forEach(m => {
+                const idx = this.investments.findIndex(i => i.id === m.existingId);
+                if (idx !== -1) {
+                    const inc = m.incomingHolding;
+                    this.investments[idx] = {
+                        ...this.investments[idx],
+                        units:        m.newUnits,
+                        amount:       m.newInvested || this.investments[idx].amount,
+                        nav:          m.newNav || this.investments[idx].nav,
+                        currentPrice: m.newNav || this.investments[idx].currentPrice,
+                        currentValue: m.newValue,
+                        folioNumber:  m.folioNumber || this.investments[idx].folioNumber,
+                        importSource: this.importResults?.type || 'GROWW_MF',
+                        importDate:   new Date().toISOString().slice(0, 10),
+                        lastNavUpdate: new Date().toISOString()
+                    };
+                    updatedCount++;
+                }
+            });
+
+            // 2. Add new items
+            this.statementDiff.newItems.forEach(n => {
+                this.investments.push(n.incomingHolding);
+                addedCount++;
+            });
+
+            this.investments = [...this.investments];
+            this.saveData({ rescheduleAlerts: true });
+            this.queueNwSnapshot('statement-update');
+            if (this.haptics && window.RFMMotion) window.RFMMotion.Haptics.commit();
+
+            this.importStats = {
+                total: updatedCount + addedCount,
+                imported: updatedCount + addedCount,
+                duplicates: updatedCount,
+                skipped: 0
+            };
+            this.statementDiff.active = false;
+            this.importState = 'done';
+            this.importFile = null;
+        },
+
+        applyCategoryReplace() {
+            if (!this.statementDiff || !this.statementDiff.active) return;
+
+            const cat = this.statementDiff.category;
+            const incomingCount = (this.importResults?.investments || []).length;
+
+            const msg = `Are you sure you want to replace all ${cat} holdings in Corpus with the ${incomingCount} holding${incomingCount === 1 ? '' : 's'} from this statement?\n\nOther investments (like Stocks, FDs, PPF, Gold) will NOT be affected.`;
+            if (!confirm(msg)) return;
+
+            // Remove existing holdings of this category
+            this.investments = this.investments.filter(inv => {
+                if (cat === 'Mutual Fund') {
+                    return !(inv.type === 'Mutual Fund' || (inv.type || '').toLowerCase().includes('mutual'));
+                } else {
+                    return !(['Stock', 'Stock (IND)', 'Stock (US)', 'ETF', 'ETF (IND)', 'ETF (US)'].includes(inv.type) ||
+                             (inv.type || '').toLowerCase().includes('stock'));
+                }
+            });
+
+            // Add all incoming holdings
+            (this.importResults?.investments || []).forEach(inc => {
+                this.investments.push(inc);
+            });
+
+            this.investments = [...this.investments];
+            this.saveData({ rescheduleAlerts: true });
+            this.queueNwSnapshot('category-replace');
+            if (this.haptics && window.RFMMotion) window.RFMMotion.Haptics.commit();
+
+            this.importStats = {
+                total: incomingCount,
+                imported: incomingCount,
+                duplicates: 0,
+                skipped: 0
+            };
+            this.statementDiff.active = false;
+            this.importState = 'done';
+            this.importFile = null;
+        },
+
+        applyAddNew() {
+            if (!this.statementDiff || !this.statementDiff.active) return;
+
+            const incoming = this.importResults?.investments || [];
+            incoming.forEach(inc => {
+                this.investments.push({ ...inc, id: this.newId('inv') });
+            });
+
+            this.investments = [...this.investments];
+            this.saveData({ rescheduleAlerts: true });
+            this.queueNwSnapshot('add-new-holdings');
+            if (this.haptics && window.RFMMotion) window.RFMMotion.Haptics.commit();
+
+            this.importStats = {
+                total: incoming.length,
+                imported: incoming.length,
+                duplicates: 0,
+                skipped: 0
+            };
+            this.statementDiff.active = false;
+            this.importState = 'done';
+            this.importFile = null;
+        },
+
+        cancelDiff() {
+            this.statementDiff.active = false;
+            this.importState = 'idle';
+            this.importFile = null;
+            this.importResults = null;
         },
 
         toggleAllImports(checked) {
@@ -2987,19 +4471,159 @@ RULES: Return ONLY valid JSON. No markdown, no explanation. If a field is unknow
             }
         },
 
+        /* Resolve an AMFI scheme code from the fund's own name.
+
+           Matching is deliberately strict, because the variants of one fund are NOT
+           interchangeable: "Direct" and "Regular" differ by the distributor commission
+           and "Growth" and "IDCW" diverge every time a dividend is paid, so the wrong
+           pick reports a confidently wrong NAV forever. The plan and the option are
+           therefore treated as hard filters, never as tie-breakers, and an ambiguous
+           result resolves to NOTHING with the candidates named. Guessing here would be
+           exactly the invented figure this app exists not to produce. */
+        async resolveSchemeCode(inv) {
+            const name = String(inv.name || '').trim();
+            if (name.length < 4) {
+                return { code: null, message: `${name || 'This fund'} needs a fuller name before its AMFI scheme can be found.` };
+            }
+
+            let rows;
+            try {
+                rows = await this.httpGetJson(`https://api.mfapi.in/mf/search?q=${encodeURIComponent(name)}`, 7000);
+            } catch (e) {
+                return { code: null, message: `Could not reach the AMFI scheme directory to look up ${name}.` };
+            }
+            if (!Array.isArray(rows) || !rows.length) {
+                return { code: null, message: `No AMFI scheme matches "${name}". Check the name against your statement.` };
+            }
+
+            const has = (re, t) => re.test(t);
+            const DIRECT = /\bdirect\b/i, REGULAR = /\bregular\b/i, INCOME = /\b(idcw|dividend|income distribution)\b/i;
+            const wantDirect  = has(DIRECT, name);
+            const wantRegular = has(REGULAR, name);
+            const wantIncome  = has(INCOME, name);
+
+            let pool = rows.filter(r => {
+                const n = String(r.schemeName || '');
+                if (wantDirect  && !has(DIRECT, n))  return false;
+                if (wantRegular && !has(REGULAR, n)) return false;
+                // "Growth" is the absence of an income option, so it is matched by exclusion.
+                if (!wantIncome && has(INCOME, n))   return false;
+                if (wantIncome  && !has(INCOME, n))  return false;
+                return true;
+            });
+            if (!pool.length) pool = rows;
+
+            const norm = t => String(t || '').toLowerCase()
+                .replace(/[^a-z0-9]+/g, ' ')
+                .replace(/\b(fund|scheme|plan|option|mutual|the)\b/g, ' ')
+                .replace(/\s+/g, ' ').trim();
+            const target = norm(name);
+
+            let hit = pool.find(r => norm(r.schemeName) === target);
+            if (!hit && pool.length === 1) hit = pool[0];
+
+            if (!hit) {
+                const names = pool.slice(0, 3).map(r => `"${r.schemeName}"`).join(', ');
+                return { code: null, message: `"${name}" matches ${pool.length} AMFI schemes (${names}). Rename the holding to match one exactly — the plan and option change the NAV.` };
+            }
+            return { code: String(hit.schemeCode), name: hit.schemeName };
+        },
+
+        /* MFAPI is useful for its small per-scheme JSON response, but it is not
+           the authority and it can intermittently time out from Android. AMFI
+           publishes the same daily NAVs in its complete report. The report is
+           deliberately fetched only after MFAPI fails, then shared by every
+           fund in the current refresh; six funds must not create six multi-MB
+           downloads. Nothing is cached as a quote here: the returned report's
+           declared NAV date remains the price's provenance. */
+        async fetchOfficialAmfiNavRow(schemeCode) {
+            const today = this.localDateKey();
+            if (!this._amfiNavReport || this._amfiNavReportDate !== today) {
+                this._amfiNavReportDate = today;
+                this._amfiNavReport = this.fetchMarketText(
+                    'https://portal.amfiindia.com/spages/NAVAll.txt', 16000
+                ).catch(error => {
+                    // Do not cache an outage. A later Retry must make a real
+                    // request instead of immediately replaying this failure.
+                    this._amfiNavReport = null;
+                    this._amfiNavReportDate = '';
+                    throw error;
+                });
+            }
+
+            const prefix = `${String(schemeCode || '').trim()};`;
+            const report = String(await this._amfiNavReport || '');
+            const line = report.split(/\r?\n/).find(row => row.startsWith(prefix));
+            if (!line) throw new Error('AMFI did not list this scheme in its latest NAV report.');
+
+            const fields = line.split(';');
+            const nav = Number(fields[6]);
+            const date = String(fields[7] || '').trim();
+            if (!Number.isFinite(nav) || nav <= 0 || !this.parseAmfiDate(date)) {
+                throw new Error('AMFI returned an invalid NAV record.');
+            }
+            return { nav, date };
+        },
+
+        /* MFAPI can answer successfully with a NAV several days behind. A
+           transport success is not proof that its `latest` record is current.
+           Allow up to three calendar days for weekends/market holidays; beyond
+           that, verify against AMFI's official daily report. */
+        amfiNavDateAgeDays(date) {
+            const parsed = this.parseAmfiDate(date);
+            if (!parsed) return Infinity;
+            const dayNumber = value => {
+                const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+                return match ? Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])) / 86400000 : NaN;
+            };
+            return dayNumber(this.localDateKey()) - dayNumber(this.localDateKey(new Date(parsed)));
+        },
+
         // Fetch one instrument. A mutual fund must use an explicitly chosen AMFI scheme.
         async fetchSinglePrice(inv) {
             if (!inv) return null;
 
             if (inv.type === 'Mutual Fund' || inv.schemeCode) {
+                // A fund with no scheme code used to dead-end here: "needs an AMFI scheme
+                // code before it can be synced" is true but useless, because the app never
+                // said where to get one and the Edit sheet has no field for it. Holdings
+                // imported from a statement, or typed rather than picked from the dropdown,
+                // all landed in that state. The name IS the lookup key, so it is used.
                 if (!inv.schemeCode) {
-                    throw new Error(`${inv.name || 'Mutual fund'} needs an AMFI scheme code before it can be synced.`);
+                    const resolved = await this.resolveSchemeCode(inv);
+                    if (!resolved.code) throw new Error(resolved.message);
+                    inv.schemeCode = resolved.code;
                 }
 
-                const data = await this.httpGetJson(`https://api.mfapi.in/mf/${encodeURIComponent(inv.schemeCode)}`);
-                const row = data?.data?.[0];
+                // MFAPI is the fast path. A bounded official AMFI fallback is
+                // used only when that provider fails, so one flaky JSON endpoint
+                // cannot leave the fund stuck on last week's NAV.
+                const navUrl = `https://api.mfapi.in/mf/${encodeURIComponent(inv.schemeCode)}`;
+                let row = null;
+                let mfapiError = null;
+                try {
+                    const data = await this.fetchMarketJson(navUrl, 10000);
+                    const candidate = data?.data?.[0];
+                    if (Number.isFinite(Number(candidate?.nav)) && Number(candidate.nav) > 0) {
+                        const ageDays = this.amfiNavDateAgeDays(candidate.date);
+                        if (Number.isFinite(ageDays) && ageDays <= 3) row = candidate;
+                        else mfapiError = new Error(`MFAPI NAV is outdated${candidate.date ? ` (dated ${candidate.date})` : ''}.`);
+                    } else mfapiError = new Error('MFAPI returned no valid NAV.');
+                } catch (error) {
+                    mfapiError = error;
+                }
+
+                if (!row) {
+                    try {
+                        row = await this.fetchOfficialAmfiNavRow(inv.schemeCode);
+                    } catch (amfiError) {
+                        const first = mfapiError?.message || 'MFAPI did not return a NAV';
+                        throw new Error(`${first}; AMFI fallback: ${amfiError?.message || 'unavailable'}`);
+                    }
+                }
                 const newNav = Number(row?.nav);
                 if (!Number.isFinite(newNav) || newNav <= 0) throw new Error('No valid NAV was returned.');
+                if (!this.parseAmfiDate(row?.date)) throw new Error('The NAV source did not provide a valid NAV date.');
 
                 inv.currentPrice = newNav;
                 if (Number(inv.units) > 0) {
@@ -3008,7 +4632,7 @@ RULES: Return ONLY valid JSON. No markdown, no explanation. If a field is unknow
                 // AMFI publishes one NAV per business day, so a fund is "as of" its own
                 // declared date, not the moment we happened to fetch it.
                 inv.priceSource   = 'AMFI';
-                inv.priceAsOf     = this.parseAmfiDate(row?.date) || new Date().toISOString();
+                inv.priceAsOf     = this.parseAmfiDate(row.date);
                 inv.priceIsClose  = true;
                 inv.lastNavUpdate = new Date().toISOString();
                 return newNav;
@@ -3021,16 +4645,7 @@ RULES: Return ONLY valid JSON. No markdown, no explanation. If a field is unknow
             const querySymbol = isUS ? cleanSymbol : `${cleanSymbol}.NS`;
             const targetUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(querySymbol)}?interval=1d&range=5d`;
 
-            // Native HTTP is not bound by CORS, so Android hits Yahoo directly — one request.
-            // In a browser the direct call CANNOT succeed (Yahoo sends no CORS header) yet still
-            // costs a full round trip, so it is omitted there and the proxies are RACED rather
-            // than tried one after another.
-            const data = this.canUseNativeHttp
-                ? await this.httpGetJson(targetUrl)
-                : await this.firstSuccessful([
-                    () => this.httpGetJson(`https://corsproxy.io/?${encodeURIComponent(targetUrl)}`),
-                    () => this.httpGetJson(`https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`)
-                  ]);
+            const data = await this.fetchMarketJson(targetUrl);
 
             const meta = data?.chart?.result?.[0]?.meta;
             const live = Number(meta?.regularMarketPrice);
@@ -3065,14 +4680,20 @@ RULES: Return ONLY valid JSON. No markdown, no explanation. If a field is unknow
             return price;
         },
 
-        // AMFI returns "08-09-2026" (DD-MM-YYYY), which bare Date() misreads as Aug 9.
+        // AMFI has returned both "08-09-2026" and "23-Sep-2026". Bare Date()
+        // parsing is locale-dependent and can misread the numeric form as Aug 9.
         // Anchored at UTC NOON, not local midnight: local midnight in IST is 18:30 UTC the
         // PREVIOUS day, so the ISO date component would be off by one and any date-string
         // comparison would silently use the wrong day.
         parseAmfiDate(s) {
-            const m = /^(\d{2})-(\d{2})-(\d{4})$/.exec(String(s || '').trim());
-            if (!m) return null;
-            const day = Number(m[1]), month = Number(m[2]), year = Number(m[3]);
+            const value = String(s || '').trim();
+            const numeric = /^(\d{2})-(\d{2})-(\d{4})$/.exec(value);
+            const named = /^(\d{2})-([A-Za-z]{3})-(\d{4})$/.exec(value);
+            if (!numeric && !named) return null;
+            const monthNames = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+            const day = Number((numeric || named)[1]);
+            const month = numeric ? Number(numeric[2]) : monthNames.indexOf(named[2].toLowerCase()) + 1;
+            const year = Number((numeric || named)[3]);
             if (month < 1 || month > 12 || day < 1 || day > 31 || year < 1990 || year > 2999) return null;
             // Local noon. Date.UTC would silently roll "99-99-2026" over into a valid date,
             // and a UTC anchor renders as the wrong day east of UTC+12. Noon local is stable
@@ -3083,18 +4704,46 @@ RULES: Return ONLY valid JSON. No markdown, no explanation. If a field is unknow
             return d.toISOString();
         },
 
-        // Is this holding's price a live quote, or the last close / an old sync?
+        /* Two separate facts, and conflating them made the refresh warning
+           impossible to clear:
+
+             WHEN DID WE FETCH?   lastNavUpdate — the only thing a refresh moves.
+             HOW OLD IS THE QUOTE? priceAsOf — set by the market, not by us.
+
+           A US holding's quote is the last US close, roughly 01:30 IST and
+           older over a weekend, so measuring staleness against priceAsOf meant
+           every US row read "not refreshed today" at every hour of every Indian
+           day, no matter how many times you synced. Only a missed SYNC is
+           stale; a shut market is "at last close", which is a fact about the
+           market rather than a task for the user. */
         priceFreshness(inv) {
-            if (!inv?.priceAsOf) return { state: 'unknown', label: 'not synced' };
-            const ageMs = Date.now() - new Date(inv.priceAsOf).getTime();
-            if (inv.priceIsClose) {
-                // A fund has no intraday price at all — its NAV is simply the day's value —
-                // so calling that a "last close" would overstate the problem.
-                const word = inv.priceSource === 'AMFI' ? 'NAV' : 'last close';
-                return { state: 'close', label: `${word} · ${this.formatDate(inv.priceAsOf)}` };
+            const syncedAt = inv && (inv.lastNavUpdate || inv.priceAsOf);
+            if (!syncedAt) return { state: 'unknown', label: 'not synced' };
+
+            if (this.localDateKey(new Date(syncedAt)) !== this.localDateKey()) {
+                return { state: 'stale', label: `synced ${this.formatDate(syncedAt)}` };
             }
-            if (ageMs > 24 * 60 * 60 * 1000) {
-                return { state: 'stale', label: `${this.formatDate(inv.priceAsOf)}` };
+
+            const quoteAt = inv.priceAsOf || syncedAt;
+            // A fund has no intraday price at all — its NAV is simply the day's
+            // value — so calling that a "last close" would overstate it.
+            //
+            // AMFI publishes ONE NAV per business day, after the market shuts.
+            // A Friday date showing on a Tuesday afternoon is the publishing
+            // calendar, not a failed sync, and the label now says so — reading
+            // a stale-looking date next to a working refresh button is what
+            // made a correct number look broken.
+            if (inv.priceIsClose) {
+                if (inv.priceSource === 'AMFI') {
+                    return { state: 'close', label: `NAV ${this.formatDate(quoteAt)} · end of day` };
+                }
+                return { state: 'close', label: `last close · ${this.formatDate(quoteAt)}` };
+            }
+            // Six hours, not twenty-four: an Indian close at 15:30 is still the
+            // last close at 21:00 the same evening, and a quote minutes old
+            // during the session is genuinely live.
+            if (Date.now() - new Date(quoteAt).getTime() > 6 * 60 * 60 * 1000) {
+                return { state: 'close', label: `last close · ${this.formatDate(quoteAt)}` };
             }
             return { state: 'live', label: `${inv.priceSource || 'live'}` };
         },
@@ -3106,6 +4755,7 @@ RULES: Return ONLY valid JSON. No markdown, no explanation. If a field is unknow
             const holdings = (this.investments || []).filter(inv => inv.schemeCode || inv.ticker || inv.type === 'Mutual Fund');
             if (!holdings.length) {
                 this.navFetchState = 'done';
+                this.navFetchProgress = { completed: 0, total: 0, updated: 0, failed: 0 };
                 this.navFetchError = 'Add a ticker or AMFI scheme code to sync a holding.';
                 return;
             }
@@ -3159,6 +4809,13 @@ RULES: Return ONLY valid JSON. No markdown, no explanation. If a field is unknow
                 this.lastNavFetchTime = new Date().toISOString();
                 this.investments = [...this.investments];
 
+                // Anything bought off-hours settles here, BEFORE the snapshot
+                // below: a lot that fills today changes the cost basis, and
+                // recording the day's net worth first would date the purchase
+                // to tomorrow. Settling never touches the live price — it fixes
+                // what the units cost, not what they are worth now.
+                await this.settleAllPendingLots();
+
                 // The sweep is the honesty mechanism, not decoration: it travels
                 // only over rows whose quote actually landed, so a sync that
                 // updated 3 of 11 holdings looks like one.
@@ -3184,7 +4841,12 @@ RULES: Return ONLY valid JSON. No markdown, no explanation. If a field is unknow
         // ════════════════════════════════════════════════════════════
 
         async scheduleMaturityAlerts() {
-            // Only run on native Android/iOS — LocalNotifications plugin not available in browser
+            // Only run on native Android/iOS when explicitly opted in
+            if (localStorage.getItem('corpus_alerts_enabled') !== 'true') {
+                this.alertsState = 'disabled';
+                return;
+            }
+
             const plugins = window.AppPlugins;
             if (!plugins || !plugins.Capacitor?.isNativePlatform() || !plugins.LocalNotifications) {
                 this.alertsState = 'unsupported';
@@ -3197,12 +4859,15 @@ RULES: Return ONLY valid JSON. No markdown, no explanation. If a field is unknow
             try {
                 const { LocalNotifications } = plugins;
 
-                // 1. Request permission — required on Android 13+ (API 33+)
-                const permResult = await LocalNotifications.requestPermissions();
+                // 1. Check permission before requesting — avoids UI freeze or redundant prompts
+                let permResult = await LocalNotifications.checkPermissions();
+                if (permResult.display !== 'granted') {
+                    permResult = await LocalNotifications.requestPermissions();
+                }
                 this.notifPermissionGranted = (permResult.display === 'granted');
                 if (!this.notifPermissionGranted) {
                     this.alertsState = 'error';
-                    this.alertsError = 'Notification permission denied. Enable in Android Settings → App Info → Notifications.';
+                    this.alertsError = 'Notification permission not granted.';
                     return;
                 }
 
@@ -3228,7 +4893,7 @@ RULES: Return ONLY valid JSON. No markdown, no explanation. If a field is unknow
                             id:    10000 + i,
                             title: '📅 Maturity Alert — RFM',
                             body:  `${inv.name} of ${this.formatCurrency(inv.amount)} matures in 7 days (${this.formatDate(inv.maturityDate)}). Plan reinvestment now.`,
-                            schedule: { at: alertAt, allowWhileIdle: true },
+                            schedule: { at: alertAt },
                             sound:    'default',
                             smallIcon: 'ic_stat_notification',
                             channelId: 'rfm_maturity'
@@ -3243,7 +4908,7 @@ RULES: Return ONLY valid JSON. No markdown, no explanation. If a field is unknow
                             id:    11000 + i,
                             title: '🔔 Maturity Today — RFM',
                             body:  `${inv.name} (${this.formatCurrency(inv.amount)}) matures TODAY. Contact ${inv.issuer || 'your bank'} to reinvest.`,
-                            schedule: { at: sameDayAlert, allowWhileIdle: true },
+                            schedule: { at: sameDayAlert },
                             sound:    'default',
                             smallIcon: 'ic_stat_notification',
                             channelId: 'rfm_maturity'
@@ -3251,26 +4916,25 @@ RULES: Return ONLY valid JSON. No markdown, no explanation. If a field is unknow
                     }
                 });
 
-                // 4. SIP Reminders — 1 day before debit day, for next 12 months
+                // 4. SIP Reminders — upcoming 1 debit reminder per active SIP
                 (this.activeSips || []).forEach((sip, i) => {
                     const debitDay = Number(sip.dayOfMonth) || 5;
-                    for (let month = 0; month < 12; month++) {
-                        const reminderAt = new Date(now.getFullYear(), now.getMonth() + month, debitDay - 1, 9, 0, 0, 0);
-                        if (reminderAt > now) {
-                            alerts.push({
-                                id:    20000 + (i * 100) + month,
-                                title: '💰 SIP Reminder — RFM',
-                                body:  `₹${this.formatCurrency(sip.monthlyAmount)} for "${sip.name}" debits tomorrow (${debitDay}th). Ensure sufficient balance.`,
-                                schedule: { at: reminderAt, allowWhileIdle: true },
-                                sound:    'default',
-                                smallIcon: 'ic_stat_notification',
-                                channelId: 'rfm_sip'
-                            });
-                        }
+                    const reminderAt = new Date(now.getFullYear(), now.getMonth(), debitDay - 1, 9, 0, 0, 0);
+                    if (reminderAt <= now) {
+                        reminderAt.setMonth(reminderAt.getMonth() + 1);
                     }
+                    alerts.push({
+                        id:    20000 + (i * 100),
+                        title: '💰 SIP Reminder — RFM',
+                        body:  `${this.formatCurrency(sip.monthlyAmount)} for "${sip.name}" debits tomorrow (${debitDay}th). Ensure sufficient balance.`,
+                        schedule: { at: reminderAt },
+                        sound:    'default',
+                        smallIcon: 'ic_stat_notification',
+                        channelId: 'rfm_sip'
+                    });
                 });
 
-                // 5. Schedule all built notifications in one batch call
+                // 5. Schedule in one batch call
                 if (alerts.length > 0) {
                     await LocalNotifications.schedule({ notifications: alerts });
                 }
@@ -3279,98 +4943,196 @@ RULES: Return ONLY valid JSON. No markdown, no explanation. If a field is unknow
                 this.alertsState = 'scheduled';
 
             } catch (err) {
-                console.error('[Phase 12] Failed to schedule notifications:', err);
+                console.warn('[Phase 12] Notification scheduling issue:', err);
                 this.alertsState = 'error';
-                this.alertsError = err.message || 'Unknown error scheduling notifications.';
+                this.alertsError = err.message || 'Error scheduling notifications.';
             }
         },
 
         // ════════════════════════════════════════════════════════════
-        //  UTILITIES (duplicate removed — canonical formatCurrency is at ~line 1636)
+        //  UTILITIES
         // ════════════════════════════════════════════════════════════
-        formatDate(str) {
-            if (!str) return '—';
-            return new Date(str).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
-        },
+        // A SECOND formatDate used to live here. Two methods of the same name in one object
+        // literal is not an error — the later one simply wins — so the guarded version above
+        // was dead, and an unparseable date rendered as "Invalid Date" instead of being
+        // echoed back. Deleted rather than merged; the survivor already does more.
 
         // ════════════════════════════════════════════════════════════
         //  REGENERATIVE WEALTH METHODS
         // ════════════════════════════════════════════════════════════
 
-        getActiveRegenModel() {
-            const model = this.regenWealth.model === 'custom'
-                ? this.regenWealth.customModel
-                : this.regenWealth.model;
-            return (model || '').trim();
+        // ════════════════════════════════════════════════════════════
+        //  THE PERSON — one-time questions
+        // ════════════════════════════════════════════════════════════
+        /* Offered on first open, including to installs that predate it. A skip
+           records WHEN, and the questions come back after a week rather than
+           on every launch — asking every time is nagging, never asking again
+           leaves the reading generic for good. */
+        PROFILE_RETRY_MS: 7 * 24 * 60 * 60 * 1000,
+
+        get shouldAskProfile() {
+            if (this.profile.completedAt) return false;
+            const skipped = Date.parse(this.profile.skippedAt || '');
+            return !Number.isFinite(skipped) || Date.now() - skipped >= this.PROFILE_RETRY_MS;
         },
 
-        async loadRegenModelCatalog() {
-            const key = (this.regenWealth.apiKey || '').trim();
-            const provider = this.regenWealth.provider === 'auto'
-                ? window.RegenWealth?.detectProvider(key)
-                : this.regenWealth.provider;
+        PROFILE_OPTIONS: {
+            goal: [
+                { v: 'grow',       t: 'Grow over the long term',  d: 'Higher returns, and I can ride out the dips' },
+                { v: 'balanced',   t: 'Balanced growth',          d: 'Some growth, some safety' },
+                { v: 'safe',       t: 'Keep it safe',             d: 'Protecting what I have matters most' },
+                { v: 'income',     t: 'Pay me a regular income',  d: 'Monthly or quarterly payouts' },
+                { v: 'retirement', t: 'Build towards retirement', d: 'Growing a corpus for later' },
+                { v: 'retired',    t: 'I\u2019m retired',         d: 'Steady income and safety of capital' },
+            ],
+            risk: [
+                { v: 'low',    t: 'Sell to stop the loss', d: 'I would rather not see it fall further' },
+                { v: 'medium', t: 'Wait it out',           d: 'Markets recover; I would hold' },
+                { v: 'high',   t: 'Buy more',              d: 'A fall is a chance to buy cheaper' },
+            ],
+            payout: [
+                { v: 'monthly',   t: 'Monthly' }, { v: 'quarterly', t: 'Quarterly' },
+                { v: 'yearly',    t: 'Yearly' },  { v: 'none',      t: 'No, let it grow' },
+            ],
+            horizon: [
+                { v: 'lt3', t: 'Under 3 years' }, { v: '3to7', t: '3 to 7 years' },
+                { v: '7to15', t: '7 to 15 years' }, { v: 'gt15', t: 'More than 15 years' },
+            ],
+            interests: [
+                { v: 'stocks', t: 'Stocks' }, { v: 'mf', t: 'Mutual funds' },
+                { v: 'gold', t: 'Gold & silver' }, { v: 'schemes', t: 'Government schemes', d: 'PPF, SCSS, post office' },
+                { v: 'fdbonds', t: 'FDs & bonds' }, { v: 'us', t: 'US markets' },
+            ],
+        },
 
-            if (provider !== 'openrouter') {
-                this.regenWealth.modelCatalog = [];
-                this.regenWealth.modelCatalogState = 'idle';
-                this.regenWealth.modelCatalogError = 'The live catalog is available for OpenRouter keys only.';
-                return;
+        // Payouts are asked only of someone whose goal implies them.
+        get onboardingSteps() {
+            const d = this.onboarding.draft || {};
+            const steps = ['name', 'age', 'goal', 'risk'];
+            if (['income', 'retired', 'safe'].includes(d.goal)) steps.push('payout');
+            steps.push('horizon', 'interests');
+            return steps;
+        },
+        get onboardingStep() { return this.onboardingSteps[this.onboarding.step] || 'name'; },
+
+        get onboardingCanNext() {
+            const d = this.onboarding.draft || {};
+            switch (this.onboardingStep) {
+                case 'name': return String(d.name || '').trim().length > 0;
+                case 'age': { const a = Number(d.age); return Number.isFinite(a) && a >= 12 && a <= 110; }
+                case 'interests': return (d.interests || []).length > 0;
+                default: return !!d[this.onboardingStep];
             }
+        },
 
-            this.regenWealth.modelCatalogState = 'loading';
-            this.regenWealth.modelCatalogError = '';
+        openOnboarding(editing = false) {
+            this.onboarding.draft = {
+                name: this.profile.name || '', age: this.profile.age || '', goal: this.profile.goal,
+                risk: this.profile.risk, payout: this.profile.payout, horizon: this.profile.horizon,
+                interests: [...(this.profile.interests || [])],
+            };
+            this.onboarding.step = 0;
+            this.onboarding.editing = editing;
+            this.onboarding.open = true;
+        },
+
+        onboardingPick(key, value) {
+            this.onboarding.draft[key] = value;
+            if (window.RFMMotion?.Haptics && this.haptics) window.RFMMotion.Haptics.tap();
+            // A single choice moves on by itself; typing and multi-select wait for Next.
+            if (['goal', 'risk', 'payout', 'horizon'].includes(key)) setTimeout(() => this.onboardingNext(), 220);
+        },
+
+        onboardingToggleInterest(v) {
+            const list = this.onboarding.draft.interests;
+            const i = list.indexOf(v);
+            if (i >= 0) list.splice(i, 1); else list.push(v);
+        },
+
+        onboardingNext() {
+            if (!this.onboardingCanNext) return;
+            if (this.onboarding.step < this.onboardingSteps.length - 1) this.onboarding.step++;
+            else this.finishOnboarding();
+        },
+
+        onboardingBack() {
+            if (this.onboarding.step > 0) this.onboarding.step--;
+        },
+
+        finishOnboarding() {
+            const d = this.onboarding.draft;
+            const age = Math.round(Number(d.age));
+            this.profile = {
+                name: String(d.name || '').trim().slice(0, 40), age,
+                goal: d.goal, risk: d.risk,
+                payout: this.onboardingSteps.includes('payout') ? d.payout : null,
+                horizon: d.horizon, interests: [...d.interests],
+                completedAt: new Date().toISOString(), skippedAt: null,
+            };
+            // Age decides the tax slabs and 80TTB; the person just told us it.
+            this.tax.seniorCitizen = age >= 60;
+            this.onboarding.open = false;
+            if (window.RFMMotion?.Haptics && this.haptics) window.RFMMotion.Haptics.success();
+            // A new profile is a new brief — the cached one was written for someone else.
+            this.maybeRunDaily(true);
+        },
+
+        skipOnboarding() {
+            if (!this.onboarding.editing) this.profile.skippedAt = new Date().toISOString();
+            this.onboarding.open = false;
+        },
+
+        get profileGreetingName() {
+            return this.profile.completedAt && this.profile.name ? this.profile.name.split(/\s+/)[0] : '';
+        },
+
+        // ════════════════════════════════════════════════════════════
+        //  THE DAILY BRIEF
+        // ════════════════════════════════════════════════════════════
+        /* Prepared on the first open of each local day. One gateway request
+           per person per day; the cache answers every later open. Failure is
+           quiet on purpose: the card falls back to the on-device health score,
+           which needs no network and is never wrong about the user's own numbers. */
+        async maybeRunDaily(force = false) {
+            if (!window.RegenWealth || this.daily.loading) return;
+            if (!this.profile.completedAt && !this.hasAnyPortfolioData) return;
+            const cached = window.RegenWealth.loadDaily(this.$data);
+            if (cached && !force) { this.daily.brief = cached; return; }
+            if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+            this.daily.loading = true;
+            this.daily.error = '';
             try {
-                const data = await this.fetchJsonWithTimeout(
-                    'https://openrouter.ai/api/v1/models?output_modalities=text&sort=latency-low-to-high',
-                    6000
-                );
-                const models = (data?.data || [])
-                    .filter(model => model?.id && model?.name)
-                    .slice(0, 120)
-                    .map(model => ({ id: model.id, name: model.name }));
-                if (!models.length) throw new Error('No text models were returned.');
-
-                this.regenWealth.modelCatalog = models;
-                this.regenWealth.modelCatalogState = 'ready';
-            } catch (error) {
-                this.regenWealth.modelCatalogState = 'error';
-                this.regenWealth.modelCatalogError = 'Could not load the live OpenRouter catalog. Use a custom model ID or retry.';
+                this.daily.brief = await window.RegenWealth.runDaily(this.$data, { force });
+            } catch (e) {
+                this.daily.error = e?.message || 'Today\u2019s brief is unavailable.';
+            } finally {
+                this.daily.loading = false;
             }
         },
 
-        // Save API key & provider/model settings
-        saveRegenApiKey(closePanel = true) {
-            const key = (this.regenWealth.apiKey || '').trim();
-            if (key.length < 10) {
-                this.regenWealth.error = 'Please enter a valid API key (OpenRouter, Gemini, or OpenAI).';
-                return;
-            }
-            localStorage.setItem('rfm_api_key', key);
-            localStorage.setItem('rfm_gemini_key', key); // Backward compatibility
-            localStorage.setItem('rfm_api_provider', this.regenWealth.provider || 'auto');
-            localStorage.setItem('rfm_api_model', this.regenWealth.model || 'openai/gpt-4o-mini');
-            localStorage.setItem('rfm_api_custom_model', this.regenWealth.customModel || '');
-
-            this.regenWealth.apiKeySet    = true;
-            this.regenWealth.showKeyInput = false;
-            if (closePanel) this.regenWealth.activeTab = null;
-            this.regenWealth.error        = '';
-            this.loadRegenModelCatalog();
+        get dailyPreparedLabel() {
+            const at = Date.parse(this.daily.brief?.preparedAt || '');
+            if (!Number.isFinite(at)) return '';
+            const t = new Date(at).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' });
+            return `Prepared today at ${t}`;
         },
 
-        // Remove stored API key & settings
-        clearRegenApiKey() {
-            localStorage.removeItem('rfm_api_key');
-            localStorage.removeItem('rfm_gemini_key');
-            localStorage.removeItem('rfm_api_provider');
-            localStorage.removeItem('rfm_api_model');
-            localStorage.removeItem('rfm_api_custom_model');
-            this.regenWealth.apiKey       = '';
-            this.regenWealth.apiKeySet    = false;
-            this.regenWealth.showKeyInput = false;
-            this.regenWealth.activeTab    = 'key';
-            this.regenWealth.analysis     = null;
-            window.RegenWealth?.clearCache();
+        // `icon:` keys, so scripts/icon-names.mjs sees these glyphs and the
+        // font subset carries them — a missing glyph renders as its NAME.
+        DAILY_KINDS: {
+            news: { icon: 'newspaper' }, rate: { icon: 'percent' }, price: { icon: 'monitoring' },
+            action: { icon: 'task_alt' }, reminder: { icon: 'event' },
+        },
+        dailyKindIcon(kind) {
+            return (this.DAILY_KINDS[kind] || this.DAILY_KINDS.news).icon;
+        },
+
+        fitClass(status) {
+            return status === 'on-track' ? 'is-add' : status === 'off-track' ? 'is-cut' : '';
+        },
+
+        fitLabel(status) {
+            return { 'on-track': 'On track', drifting: 'Drifting', 'off-track': 'Off track' }[status] || '';
         },
 
         // Clear cached analysis and force fresh fetch
@@ -3380,41 +5142,40 @@ RULES: Return ONLY valid JSON. No markdown, no explanation. If a field is unknow
         },
 
         // Main analysis runner — called by the Analyze button
-        async runRegenWealthAnalysis() {
+        /* `force` is what the Re-run button passes. Without it, a reading that
+           is still valid is served from cache: the portfolio has not moved, the
+           prices have not moved and the headlines have not moved, so a fresh
+           pass would spend twenty-odd requests and a paid model call to arrive
+           at the same answer. The cache already knew this — nothing had ever
+           asked it. */
+        async runRegenWealthAnalysis(force = false) {
             if (!window.RegenWealth) {
                 this.regenWealth.error = 'Analysis engine not loaded. Please refresh the page.';
                 return;
             }
-            if (!this.regenWealth.apiKeySet) {
-                this.regenWealth.showKeyInput = true;
-                this.regenWealth.activeTab    = 'key';
-                return;
+            if (this.regenWealth.loading) return;   // a second tap is not a second run
+
+            if (!force) {
+                const cached = window.RegenWealth.loadCached(this.$data);
+                if (cached) {
+                    this.regenWealth.analysis = cached;
+                    this.regenWealth.error = '';
+                    if (window.RFMMotion) this.$nextTick(() => window.RFMMotion.revealInsights());
+                    return;
+                }
             }
 
             this.regenWealth.loading     = true;
             this.regenWealth.error       = '';
             this.regenWealth.progressMsg = 'Starting analysis...';
 
-            const activeModel = this.getActiveRegenModel();
-            if (!activeModel) {
-                this.regenWealth.error = 'Choose a model from the live catalog or enter a custom model ID.';
-                this.regenWealth.loading = false;
-                if (this.regenWealth.analysis && window.RFMMotion) {
-                    this.$nextTick(() => window.RFMMotion.revealInsights());
-                }
-                this.regenWealth.progressMsg = '';
-                return;
-            }
-
             try {
-                const result = await window.RegenWealth.analyze(
+                const result = await window.RegenWealth.analyzeManaged(
                     this.$data,
-                    this.regenWealth.apiKey,
-                    {
-                        provider: this.regenWealth.provider,
-                        model:    activeModel
-                    },
-                    (msg) => { this.regenWealth.progressMsg = msg; }
+                    (msg) => { this.regenWealth.progressMsg = msg; },
+                    // An unforced run may share a research pack the daily brief
+                    // gathered minutes ago; Re-run always fetches afresh.
+                    { reuse: !force }
                 );
                 this.regenWealth.analysis    = result;
                 this.regenWealth.progressMsg = '';
@@ -3429,42 +5190,13 @@ RULES: Return ONLY valid JSON. No markdown, no explanation. If a field is unknow
             }
         },
 
-        // Helper: priority badge colour class
-        regenPriorityClass(priority) {
-            if (priority === 'High')   return 'bg-[#d4af37]/20 text-[#d4af37] border-[#d4af37]/40';
-            if (priority === 'Medium') return 'bg-primary-container/40 text-primary border-primary/30';
-            return 'bg-white/10 text-on-surface-variant border-white/10';
-        },
-
-        // Helper: priority glow class for card border
-        regenCardGlow(priority) {
-            if (priority === 'High')   return 'border-[#d4af37]/40 shadow-[0_8px_30px_rgba(212,175,55,0.15)]';
-            if (priority === 'Medium') return 'border-primary/30 shadow-[0_8px_30px_rgba(0,201,167,0.12)]';
-            return 'border-white/8 shadow-[0_4px_16px_rgba(0,0,0,0.3)]';
-        },
-
-        // Helper: asset class icon name
-        regenAssetIcon(assetClass) {
-            const map = {
-                'Gold': 'diamond', 'Sovereign Gold Bonds': 'diamond',
-                'Bonds': 'account_balance', 'RBI Bonds': 'account_balance',
-                'Fixed Deposits': 'savings', 'SCSS': 'savings',
-                'Mutual Funds': 'trending_up', 'PPF': 'savings',
-                'Equity': 'candlestick_chart',
-                'Real Estate': 'home', 'REITs': 'home',
-                'NPS': 'shield',
-            };
-            return map[assetClass] || 'auto_awesome';
-        },
-
-        // Helper: sentiment colour
-        regenSentimentClass(sentiment) {
-            if (!sentiment) return 'text-on-surface-variant';
-            const s = sentiment.toLowerCase();
-            if (s.includes('bullish')) return 'text-primary';
-            if (s.includes('bearish')) return 'text-red-400';
-            if (s.includes('cautious')) return 'text-[#d4af37]';
-            return 'text-on-surface-variant';
+        /* Buy and Trim are the two verdicts that should stop a thumb. Hold,
+           Keep and Review stay quiet — colouring every verdict would make the
+           colour mean nothing. */
+        regenVerdictClass(verdict) {
+            if (verdict === 'Buy' || verdict === 'Add')  return 'is-add';
+            if (verdict === 'Exit' || verdict === 'Trim') return 'is-cut';
+            return '';
         },
 
         // ════════════════════════════════════════════════════════════
@@ -3476,7 +5208,7 @@ RULES: Return ONLY valid JSON. No markdown, no explanation. If a field is unknow
         // NOT included: a backup is a plaintext file the user emails or copies around.
         BACKUP_KEYS: ['rfm_v1', 'rfm_nw_history', 'rfm_usd_inr_rate', 'rfm_api_provider', 'rfm_api_model', 'rfm_api_custom_model'],
 
-        backupData() {
+        async backupData() {
             const data = localStorage.getItem('rfm_v1');
             if (!data) {
                 alert('No data to backup.');
@@ -3487,15 +5219,76 @@ RULES: Return ONLY valid JSON. No markdown, no explanation. If a field is unknow
                 const v = localStorage.getItem(k);
                 if (v !== null) payload.keys[k] = v;
             }
-            const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
+            const jsonStr = JSON.stringify(payload, null, 2);
+            const filename = `corpus_backup_${new Date().toISOString().slice(0, 10)}.json`;
+
+            // Native Android / Capacitor environment
+            if (window.AppPlugins?.Capacitor?.isNativePlatform?.() && window.AppPlugins?.Filesystem) {
+                try {
+                    const { Filesystem, Directory, Share } = window.AppPlugins;
+
+                    // 1. Write file to Cache directory for native sharing via FileProvider
+                    const fileResult = await Filesystem.writeFile({
+                        path: filename,
+                        data: jsonStr,
+                        directory: Directory.Cache,
+                        encoding: 'utf8'
+                    });
+
+                    // 2. Also save a persistent copy to Documents folder
+                    try {
+                        await Filesystem.writeFile({
+                            path: filename,
+                            data: jsonStr,
+                            directory: Directory.Documents,
+                            encoding: 'utf8'
+                        });
+                    } catch (docErr) {
+                        console.warn('Could not write to Documents directory:', docErr);
+                    }
+
+                    // 3. Open Android system Share / Save dialog
+                    let shared = false;
+                    if (Share && fileResult?.uri) {
+                        try {
+                            await Share.share({
+                                title: 'Corpus Backup',
+                                text: `Corpus financial portfolio backup (${new Date().toLocaleDateString('en-IN')})`,
+                                url: fileResult.uri,
+                                dialogTitle: 'Save or Share Backup'
+                            });
+                            shared = true;
+                        } catch (shareErr) {
+                            console.log('Share dismissed or cancelled:', shareErr);
+                        }
+                    }
+
+                    if (window.RFMMotion?.Haptics) {
+                        window.RFMMotion.Haptics.success();
+                    }
+
+                    if (!shared) {
+                        alert(`Backup saved successfully!\n\nFile: ${filename}\nSaved to Documents folder.`);
+                    }
+                    return;
+                } catch (nativeErr) {
+                    console.error('Native backup error:', nativeErr);
+                }
+            }
+
+            // Web / Desktop browser fallback
+            const blob = new Blob([jsonStr], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `rfm_backup_${new Date().toISOString().slice(0, 10)}.json`;
+            a.download = filename;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
+            if (window.RFMMotion?.Haptics) {
+                window.RFMMotion.Haptics.tap();
+            }
         },
 
         async restoreData(event) {
@@ -3572,7 +5365,7 @@ RULES: Return ONLY valid JSON. No markdown, no explanation. If a field is unknow
                 const holdingType = schemeCode ? 'Mutual Fund' : 'Stock (IND)';
 
                 existingHolding = {
-                    id:            'inv_' + Date.now(),
+                    id:            this.newId('inv'),
                     name:          name,
                     type:          holdingType,
                     schemeCode:    schemeCode,
@@ -3591,19 +5384,19 @@ RULES: Return ONLY valid JSON. No markdown, no explanation. If a field is unknow
 
             const createdSip = {
                 ...this.newSip,
-                id:                 Date.now(),
+                id:                 this.newId('sip'),
                 monthlyAmount:      Number(this.newSip.monthlyAmount),
                 dayOfMonth:         Number(this.newSip.dayOfMonth) || 5,
                 linkedInvestmentId: existingHolding.id,
                 schemeCode:         schemeCode || existingHolding.schemeCode || '',
                 ticker:             ticker || existingHolding.ticker || '',
-                lastExecutedMonth:  ''
+                // Starts settled for the current month. Creating a plan on the 20th is not
+                // evidence that this month's instalment was paid, and the old code bought a
+                // month of units the instant the form was submitted.
+                lastExecutedMonth:  this.currentMonthKey
             };
 
             this.sips.push(createdSip);
-
-            // Execute immediate debit check for current month
-            await this.checkSipDebits();
 
             this.newSip = {
                 name: '', type: 'SIP', monthlyAmount: '',
@@ -3615,85 +5408,99 @@ RULES: Return ONLY valid JSON. No markdown, no explanation. If a field is unknow
             this.saveData();
         },
 
-        // ── AUTOMATED MONTHLY SIP EXECUTION ENGINE ─────────────────────
-        // Checks active SIP debit dates against current date. When debit day passes,
-        // automatically adds monthly capital to the linked holding, purchases units @ live NAV,
-        // and updates Total Net Worth.
-        async checkSipDebits() {
-            if (!this.sips || this.sips.length === 0) return;
+        // ── SIP INSTALMENTS — RECORDED, NOT ASSUMED ────────────────────
+        // This replaces an "automated execution engine" that ran inside loadData() on every
+        // launch. When a debit day had passed it created any missing holding, bought units
+        // at whatever price it could find, and — when it could find none — at a hardcoded
+        // ₹100 NAV. So opening the app silently rewrote the portfolio using a made-up price,
+        // in an app whose stated contract is that it never invents one.
+        //
+        // The deeper fault is that it could not possibly know. Nothing here talks to a bank.
+        // A mandate can bounce, an AMC can reject, a plan can be paused at the AMC without
+        // being paused here — in each case the app had already recorded units nobody owned.
+        // A SIP is a PLAN. An instalment is an EVENT. The user is the only witness to the
+        // event, so the app now surfaces what looks due and records only what is confirmed.
 
+        get currentMonthKey() {
             const now = new Date();
-            const currentYear = now.getFullYear();
-            const currentMonth = now.getMonth();
-            const currentDay = now.getDate();
-            const currentMonthKey = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}`;
+            return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+        },
 
-            let executedCount = 0;
+        /* Active SIPs whose debit day has passed this month and which have not yet been
+           settled either way. */
+        get dueSipDebits() {
+            const today = new Date().getDate();
+            const monthKey = this.currentMonthKey;
+            return (this.activeSips || []).filter(sip =>
+                today >= (Number(sip.dayOfMonth) || 5) && sip.lastExecutedMonth !== monthKey
+            );
+        },
 
-            for (const sip of this.sips) {
-                if (sip.status !== 'Active') continue;
-                const debitDay = Number(sip.dayOfMonth) || 5;
+        _linkedHolding(sip) {
+            return (this.investments || []).find(inv =>
+                inv.id === sip.linkedInvestmentId ||
+                (sip.schemeCode && inv.schemeCode === sip.schemeCode) ||
+                (inv.name || '').toLowerCase() === (sip.name || '').toLowerCase()
+            ) || null;
+        },
 
-                // If current date >= debitDay and SIP hasn't executed for this month
-                if (currentDay >= debitDay && sip.lastExecutedMonth !== currentMonthKey) {
-                    let inv = (this.investments || []).find(i =>
-                        i.id === sip.linkedInvestmentId ||
-                        (sip.schemeCode && i.schemeCode === sip.schemeCode) ||
-                        (i.name || '').toLowerCase() === (sip.name || '').toLowerCase()
-                    );
+        /* The user confirms the money left their account. Only then do units appear — and
+           only at a price that actually came from a provider. Without one there is nothing
+           honest to write, so it says so and stops rather than guessing. */
+        async confirmSipDebit(sip) {
+            const holding = this._linkedHolding(sip);
+            if (!holding) {
+                this.sipDebitError = `${sip.name} is not linked to a holding yet. Open it and pick one first.`;
+                return false;
+            }
 
-                    if (!inv) {
-                        inv = {
-                            id:           'inv_' + Date.now(),
-                            name:         sip.name,
-                            type:         sip.schemeCode ? 'Mutual Fund' : 'Stock (IND)',
-                            schemeCode:   sip.schemeCode || '',
-                            units:        0,
-                            buyPrice:     0,
-                            currentPrice: 0,
-                            amount:       0,
-                            lastNavUpdate: now.toISOString()
-                        };
-                        this.investments.push(inv);
-                        sip.linkedInvestmentId = inv.id;
-                    }
-
-                    const debitAmount = Number(sip.monthlyAmount) || 0;
-                    if (debitAmount > 0) {
-                        let price = Number(inv.currentPrice) || Number(inv.buyPrice) || 0;
-                        if (price <= 0) {
-                            price = await this.fetchSinglePrice(inv) || 100;
-                        }
-
-                        const isUsd = inv.currency === 'USD' || ['Stock (US)', 'ETF (US)'].includes(inv.type);
-                        const rate = isUsd ? this.fxUsdInr : 1;
-                        const priceInInr = price * rate;
-
-                        const newUnits = debitAmount / priceInInr;
-                        const oldUnits = Number(inv.units) || 0;
-                        const oldCost = Number(inv.amount) || (oldUnits * (Number(inv.buyPrice) || 0) * rate);
-
-                        const totalUnits = oldUnits + newUnits;
-                        const totalCost = oldCost + debitAmount;
-
-                        inv.units = Math.round(totalUnits * 1000) / 1000;
-                        inv.amount = Math.round(totalCost * 100) / 100;
-                        inv.buyPrice = Math.round((totalCost / totalUnits / rate) * 100) / 100;
-                        inv.currentValue = Math.round(totalUnits * priceInInr * 100) / 100;
-                        inv.lastNavUpdate = now.toISOString();
-
-                        sip.lastExecutedMonth = currentMonthKey;
-                        executedCount++;
-
-                        console.log(`[SIP Engine] Executed ₹${debitAmount} SIP for ${inv.name}. Added ${newUnits.toFixed(3)} units @ NAV ₹${price}. Total units: ${inv.units}`);
-                    }
+            let price = Number(holding.currentPrice) || Number(holding.buyPrice) || 0;
+            if (price <= 0) {
+                try {
+                    price = Number(await this.fetchSinglePrice(holding)) || 0;
+                } catch (e) {
+                    price = 0;
                 }
             }
-
-            if (executedCount > 0) {
-                this.saveData();
+            if (price <= 0) {
+                this.sipDebitError = `No price is available for ${holding.name}, so the units cannot be worked out. Sync prices and try again, or enter the units by hand.`;
+                return false;
             }
+
+            const debitAmount = Number(sip.monthlyAmount) || 0;
+            if (debitAmount <= 0) return false;
+
+            const isUsd = holding.currency === 'USD' || ['Stock (US)', 'ETF (US)'].includes(holding.type);
+            const priceInInr = price * (isUsd ? this.fxUsdInr : 1);
+            const addedUnits = debitAmount / priceInInr;
+
+            const totalUnits = (Number(holding.units) || 0) + addedUnits;
+            const totalCost  = (Number(holding.amount) || 0) + debitAmount;
+
+            holding.units        = Math.round(totalUnits * 1000) / 1000;
+            holding.amount       = Math.round(totalCost * 100) / 100;
+            holding.buyPrice     = Math.round((totalCost / totalUnits / (isUsd ? this.fxUsdInr : 1)) * 100) / 100;
+            holding.currentValue = Math.round(totalUnits * priceInInr * 100) / 100;
+
+            sip.lastExecutedMonth = this.currentMonthKey;
+            this.sipDebitError = '';
+            this.investments = [...this.investments];
+            this.saveData();
+            this.queueNwSnapshot('sip-instalment');
+            if (this.haptics && window.RFMMotion) window.RFMMotion.Haptics.commit();
+            return true;
         },
+
+        /* The instalment did not happen — a bounced mandate, or a plan paused at the AMC.
+           Settles the month without touching the holding. */
+        skipSipDebit(sip) {
+            sip.lastExecutedMonth = this.currentMonthKey;
+            this.sipDebitError = '';
+            this.sips = [...this.sips];
+            this.saveData();
+        },
+
+        sipDebitError: '',
 
         // ════════════════════════════════════════════════════════════
         //  SIP MODAL: AMFI MUTUAL FUND TYPEAHEAD AUTOCOMPLETE

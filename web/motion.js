@@ -44,25 +44,43 @@
        The View Transition API does the cross-fade natively at compositor
        speed. Where it is unavailable we fall back to a short GSAP fade so
        the change still reads as a transition rather than a jump cut. */
-    function transition(mutate) {
+    // Anything that builds a canvas or measures layout must not run while a View
+    // Transition is capturing the page — that combination deadlocks the renderer.
+    // The flag is read by those callers; it is the only safe way to know, because a
+    // transition can be started by navigation OR settle around an unrelated timer.
+    let transitioning = false;
+    function isTransitioning() { return transitioning; }
+
+    function transition(mutate, afterward) {
+        const done = () => {
+            transitioning = false;
+            try { afterward && afterward(); } catch (e) { console.warn('post-transition error:', e); }
+        };
         if (reduced || typeof document.startViewTransition !== 'function') {
-            mutate();
+            try { mutate(); } catch (e) { console.warn('Transition mutate error:', e); }
+            done();
             if (!reduced && window.gsap) {
                 const el = document.querySelector('main[x-show]:not([style*="display: none"])');
                 if (el) window.gsap.fromTo(el, { opacity: 0, y: 6 }, { opacity: 1, y: 0, duration: 0.22, ease: 'ledger' });
             }
             return;
         }
-        // Starting a transition while one is running ABORTS the old one, and its
-        // ready/finished promises reject with "Transition was skipped". Nothing
-        // was catching them, so tapping two destinations in quick succession —
-        // which people do constantly — produced an unhandled rejection. The
-        // abort itself is correct and expected; only the noise is a bug.
-        const vt = document.startViewTransition(mutate);
-        const swallow = (e) => { if (!e || e.name !== 'AbortError') throw e; };
-        vt.ready.catch(swallow);
-        vt.finished.catch(swallow);
-        vt.updateCallbackDone.catch(swallow);
+        try {
+            transitioning = true;
+            const vt = document.startViewTransition(() => {
+                try { mutate(); } catch (e) { console.warn('VT mutate error:', e); }
+            });
+            const swallow = (e) => { /* Ignore skipped/aborted transitions */ };
+            if (vt.ready) vt.ready.catch(swallow);
+            if (vt.updateCallbackDone) vt.updateCallbackDone.catch(swallow);
+            // Anything that builds a canvas or measures layout waits for `finished`.
+            // Running it earlier competes with the transition's own capture.
+            if (vt.finished) vt.finished.then(done, () => done());
+            else done();
+        } catch (err) {
+            try { mutate(); } catch (e) {}
+            done();
+        }
     }
 
     /* ── The price-sync sweep ────────────────────────────────────────────
@@ -218,12 +236,11 @@
         document.addEventListener('corpus:navigated', watchHero);
     }
 
-    window.RFMMotion = { transition, hapticsEnabled, syncSweep, flashValue, enhanceLists, revealInsights, watchAppBar, Haptics, startTour, TOUR_KEY, reduced };
+    window.RFMMotion = { transition, isTransitioning, hapticsEnabled, syncSweep, flashValue, enhanceLists, revealInsights, watchAppBar, Haptics, startTour, TOUR_KEY, reduced };
 
-    // Lists appear as pages are visited, so re-scan after Alpine settles.
+    // Initialize app bar and lists once after Alpine settles.
     document.addEventListener('alpine:initialized', () => {
         watchAppBar();
         enhanceLists();
-        setInterval(() => enhanceLists(), 1500);
     });
 })();

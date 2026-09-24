@@ -6,8 +6,8 @@ import { pathToFileURL } from 'node:url';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
-const ROUTES = ['home','investments','import','maturity','cashflow','income','goals',
-                'emergency','networth','tax','pension','regen','more'];
+const ROUTES = ['home','investments','holding','import','maturity','cashflow','income','goals',
+                'emergency','networth','tax','pension','regen'];
 const seed = readFileSync('scripts/seed.json', 'utf8');
 let fails = 0;
 
@@ -22,6 +22,8 @@ for (const theme of ['light','dark']) {
       if (on) localStorage.setItem('rfm_v1', s);
       localStorage.setItem('corpus_theme', t);
       localStorage.setItem('rfm_tour_v1','seen');
+      // The first-run questions are tested in verify-profile; here they are answered.
+      localStorage.setItem('rfm_v1', JSON.stringify((v => ({ ...v, profile: v.profile || { completedAt: '2026-09-01T00:00:00.000Z', name: 'Test', age: 40, goal: 'balanced', risk: 'medium', horizon: '7to15', interests: ['stocks'] } }))(JSON.parse(localStorage.getItem('rfm_v1') || '{}'))));
     }, [seed, theme, seeded]);
     await p.route('**/*', r => r.request().url().startsWith('file://') ? r.continue() : r.abort());
     await p.goto(pathToFileURL(path.resolve('web/index.html')).href);

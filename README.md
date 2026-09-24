@@ -75,7 +75,7 @@ src/         build inputs — vendor bundle, Capacitor bridge, Tailwind entry
 web/         what actually ships (Capacitor webDir)
 scripts/     verification harness + seed fixture
 android/     Capacitor Android project
-docs/        architecture notes; docs/legacy holds retired shells
+docs/        architecture notes
 ```
 
 Build outputs (`web/vendor.js`, `web/tailwind.css`, `web/boot.js`,
@@ -86,9 +86,16 @@ synced to Android without a build step.
 
 ## Data sources
 
-AMFI (mutual fund NAVs), Yahoo Finance (NSE and US quotes), CAMS/KFintech CAS
-and bank statement PDFs, and public FX endpoints for USD→INR. Market data is
-requested directly by the client; there is no backend.
+AMFI (mutual fund NAVs and scheme lookup), Yahoo Finance (NSE and US quotes),
+CAMS/KFintech CAS and bank statement PDFs, and public FX endpoints for USD→INR.
+Company and AMC logos come from a static NSE logo directory and a public US symbol
+CDN, layered over a generated monogram so a miss is never a broken image.
+Market data is requested directly by the client; there is no backend.
+
+Yahoo answers `429` to any client that sends no browser User-Agent. On Android the
+native HTTP bridge sets one and calls Yahoo directly; a browser cannot set that
+header at all, so the web build goes through a public relay. Quotes are therefore
+more reliable in the app than in the browser preview.
 
 ---
 

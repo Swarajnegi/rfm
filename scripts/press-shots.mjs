@@ -23,8 +23,12 @@ const FRAMES = [
 ];
 
 const seed = readFileSync('scripts/seed.json', 'utf8');
+// Local calendar keys, matching what the app writes. toISOString() is UTC and
+// dated every fixture a day early east of Greenwich.
+const key = i => { const d = new Date(); d.setDate(d.getDate() - i);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 const hist = JSON.stringify(Array.from({ length: 44 }, (_, i) => ({
-  date: new Date(Date.now() - (43 - i) * 864e5).toISOString().slice(0, 10),
+  date: key(43 - i),
   value: Math.round(1_150_000 + i * 3_400 + Math.sin(i / 5) * 41_000), source: 'press',
 })));
 
@@ -38,7 +42,7 @@ for (const f of FRAMES) {
     localStorage.setItem('rfm_v1', s);
     localStorage.setItem('rfm_nw_history', h);
     localStorage.setItem('rfm_usd_inr_rate', '88.41');
-    localStorage.setItem('corpus_tour_v1', 'seen');
+    localStorage.setItem('corpus_tour_v1', 'seen'); localStorage.setItem('rfm_v1', JSON.stringify((v => ({ ...v, profile: v.profile || { completedAt: '2026-09-01T00:00:00.000Z', name: 'Test', age: 40, goal: 'balanced', risk: 'medium', horizon: '7to15', interests: ['stocks'] } }))(JSON.parse(localStorage.getItem('rfm_v1') || '{}'))));
     localStorage.setItem('corpus_theme', t);
     localStorage.setItem('corpus_last_visit', JSON.stringify({
       at: new Date(Date.now() - 3 * 864e5).toISOString(), value: 1_237_000,
