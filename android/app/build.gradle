@@ -1,5 +1,12 @@
 apply plugin: 'com.android.application'
 
+// Release signing comes from android/keystore.properties, which is gitignored
+// along with the key itself. Without that file the release build is simply
+// unsigned — a debug build, or a checkout on another machine, still works.
+def keystorePropsFile = rootProject.file('keystore.properties')
+def keystoreProps = new Properties()
+if (keystorePropsFile.exists()) keystorePropsFile.withInputStream { keystoreProps.load(it) }
+
 android {
     namespace = "com.swarajnegi.corpus"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -21,6 +28,14 @@ android {
             v1SigningEnabled true
             v2SigningEnabled true
         }
+        if (keystorePropsFile.exists()) {
+            release {
+                storeFile file(keystoreProps['storeFile'])
+                storePassword keystoreProps['storePassword']
+                keyAlias keystoreProps['keyAlias']
+                keyPassword keystoreProps['keyPassword']
+            }
+        }
     }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_21
@@ -31,6 +46,7 @@ android {
             signingConfig signingConfigs.debug
         }
         release {
+            if (keystorePropsFile.exists()) signingConfig signingConfigs.release
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }

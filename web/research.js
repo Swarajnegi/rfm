@@ -381,41 +381,65 @@
         }
     }
 
-    /* Indian policy and market news. The same three feeds the old code named,
-       but fetched through a transport that works on a phone. rss2json is a
-       third-party bridge and can be down; an empty list says so rather than
-       pretending the macro picture is clear. */
-    const RSS2JSON = 'https://api.rss2json.com/v1/api.json?count=8&rss_url=';
+    /* rss2json turns a feed into JSON a phone can read. NO `count` parameter:
+       since September 2026 it answers `count` without a paid key with a 422,
+       and every feed had been failing that way — the AI was reading no market
+       or policy news at all, on every platform, and nothing said so. The free
+       tier returns ten items, which is plenty. */
+    const RSS2JSON = 'https://api.rss2json.com/v1/api.json?rss_url=';
+
+    /* Every news source is an Economic Times section feed. Two others were
+       tried and measured out on 2026-09-24: Google News answers most searches
+       from Cloudflare's servers with a 503 (a different four topics out of
+       five each minute), and Yahoo's news search returns nothing for a phrase
+       like "gold price". ET's section feeds answered every request, current to
+       the day. The RBI and Moneycontrol feeds this list once named no longer
+       parse at all. */
+    const et = (name, path) => ({ name, url: `https://economictimes.indiatimes.com/${path}.cms` });
     const INDIA_FEEDS = [
-        { name: 'Economic Times Markets', url: 'https://economictimes.indiatimes.com/markets/rssfeeds/1977021501.cms' },
-        { name: 'Moneycontrol Top News',  url: 'https://www.moneycontrol.com/rss/MCtopnews.xml' },
-        { name: 'RBI Press Releases',     url: 'https://www.rbi.org.in/Scripts/rss.aspx' },
+        et('ET Markets', 'markets/rssfeeds/1977021501'),
+        et('ET Economy and policy', 'news/economy/rssfeeds/1373380680'),
+        et('ET Personal finance', 'wealth/personal-finance-news/rssfeeds/49674901'),
     ];
 
-    /* Google News search, through the same bridge. Which searches run is
-       decided by the person, not only the portfolio: someone who asked Corpus
-       to watch gold and government schemes hears about them before they hold
-       any. */
-    const newsSearch = (name, q) => ({
-        name, url: `https://news.google.com/rss/search?q=${encodeURIComponent(q + ' when:7d')}&hl=en-IN&gl=IN&ceid=IN:en`,
-    });
+    /* Which extra sections are read is decided by the person, not only the
+       portfolio: someone who asked Corpus to watch gold and government schemes
+       hears about them before they hold any. */
     function profileSearches(profile) {
         const want = new Set(profile?.interests || []);
         const out = [];
-        if (want.has('gold')) out.push(newsSearch('Gold and silver in India', 'gold silver price India'));
+        if (want.has('gold')) out.push(et('ET Commodities (gold, silver)', 'markets/commodities/rssfeeds/1808152121'));
         if (want.has('schemes') || profile?.goal === 'retired' || Number(profile?.age) >= 60) {
-            out.push(newsSearch('Government savings schemes', 'small savings scheme interest rate post office'));
+            out.push(et('ET Savings (schemes, deposits)', 'wealth/save/rssfeeds/47119915'));
         }
         if (want.has('fdbonds') || profile?.goal === 'income' || profile?.goal === 'safe') {
-            out.push(newsSearch('RBI and deposit rates', 'RBI repo rate fixed deposit rates'));
+            out.push(et('ET Bonds and rates', 'markets/bonds/rssfeeds/2146846'));
         }
-        if (want.has('stocks') || want.has('mf')) out.push(newsSearch('Indian markets', 'Sensex Nifty market today'));
+        if (want.has('mf')) out.push(et('ET Mutual funds', 'mf/mf-news/rssfeeds/1107225967'));
         return out.slice(0, 4);
+    }
+
+    /* Our own gateway reads the feed first (worker/src/index.js, /v1/feed) and
+       answers in rss2json's shape. It is fetched DIRECTLY — not through
+       fetchMarketJson, which in the browser would wrap our own URL in the
+       market proxy. rss2json stays as the fallback. */
+    function feedGateway(url) {
+        const ai = String(window.CorpusAiConfig?.endpoint || '');
+        return /^https:\/\//.test(ai) ? ai.replace(/\/v1\/[^/]+$/, '/v1/feed?url=') + encodeURIComponent(url) : null;
+    }
+    async function viaGateway(app, url) {
+        const gw = feedGateway(url);
+        if (!gw) throw new Error('no gateway');
+        const left = deadline ? deadline - Date.now() : PER_CALL_MS;
+        if (left <= 0) throw new Error('research budget spent');
+        const data = await withTimeout(app.httpGetJson(gw, PER_CALL_MS), Math.min(PER_CALL_MS, left));
+        if (data?.status !== 'ok') throw new Error('gateway feed failed');
+        return data;
     }
 
     async function feed(app, f) {
         try {
-            const data = await get(app, RSS2JSON + encodeURIComponent(f.url));
+            const data = await viaGateway(app, f.url).catch(() => get(app, RSS2JSON + encodeURIComponent(f.url)));
             if (data?.status !== 'ok') throw new Error('feed parse');
             const items = (data.items || []).filter(i => i && i.title).slice(0, 6).map(i => ({
                 title: String(i.title).slice(0, 180),

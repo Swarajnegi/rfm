@@ -46,7 +46,7 @@ const JSON_HEADERS = {
     'content-type': 'application/json; charset=utf-8',
     'cache-control': 'no-store',
     'access-control-allow-origin': '*',
-    'access-control-allow-methods': 'POST, OPTIONS',
+    'access-control-allow-methods': 'GET, POST, OPTIONS',
     'access-control-allow-headers': 'content-type, x-corpus-client'
 };
 
@@ -138,10 +138,136 @@ async function attempt(env, models, prompt, timeoutMs) {
     return { ok: true, content, ms };
 }
 
+/* Crash reports from web/crash.js. Written to the Worker's log (Cloudflare
+   Workers Logs, observability enabled in wrangler.toml) and nowhere else. The
+   client scrubs amounts, numbers, emails and paths before sending; this side
+   bounds every field again, because the endpoint is public and its input is
+   untrusted. Read them with `npx wrangler tail` or the dashboard's Logs tab. */
+const CRASH_FIELDS = { kind: 20, message: 300, source: 120, stack: 1200, version: 20, platform: 20, ua: 160 };
+async function crash(request, env) {
+    if (env.CRASH_LIMIT) {
+        const { success } = await env.CRASH_LIMIT.limit({ key: request.headers.get('cf-connecting-ip') || 'unknown' });
+        if (!success) return new Response(null, { status: 429, headers: JSON_HEADERS });
+    }
+    if (Number(request.headers.get('content-length') || 0) > 8192) return new Response(null, { status: 413, headers: JSON_HEADERS });
+    let input;
+    // Arrives as text/plain from sendBeacon (no preflight) or JSON from fetch.
+    try { input = JSON.parse((await request.text()).slice(0, 8192)); }
+    catch (_) { return new Response(null, { status: 400, headers: JSON_HEADERS }); }
+    if (!input || typeof input !== 'object' || !input.message) return new Response(null, { status: 400, headers: JSON_HEADERS });
+    const report = { event: 'crash', at: new Date().toISOString(), country: request.cf?.country || null };
+    for (const [k, max] of Object.entries(CRASH_FIELDS)) report[k] = String(input[k] ?? '').slice(0, max);
+    report.line = Number.isFinite(Number(input.line)) ? Number(input.line) : null;
+    report.col = Number.isFinite(Number(input.col)) ? Number(input.col) : null;
+    console.log(JSON.stringify(report));
+    return new Response(null, { status: 204, headers: JSON_HEADERS });
+}
+
+/* Market data for the browser build. Browsers cannot call these sources
+   directly (no CORS), and the free public relays it used before rate-limited
+   and saw every ticker a user holds. This forwards ONLY to the exact sources
+   the app reads, each with an edge-cache lifetime, so it cannot serve as an
+   open proxy and repeat requests do not reach the source at all. */
+const MARKET_SOURCES = [
+    // Query strings allow what encodeURIComponent leaves unescaped (' ( ) ! * ~),
+    // so a search for "Dr. Reddy's" is not refused.
+    { re: /^https:\/\/query[12]\.finance\.yahoo\.com\/v8\/finance\/chart\/[^?#\/]+\?[\w=&%.\-!'()*~]*$/, ttl: 120 },
+    { re: /^https:\/\/query[12]\.finance\.yahoo\.com\/v1\/finance\/search\?[\w=&%.\-+!'()*~]*$/, ttl: 3600 },
+    { re: /^https:\/\/api\.nasdaq\.com\/api\/(quote|analyst|company)\/[A-Za-z.\-]{1,12}\/[\w\-]+(\?[\w=&%.\-]*)?$/, ttl: 1800 },
+    { re: /^https:\/\/api\.mfapi\.in\/mf\/(\d{3,8}|search\?q=[\w%+.\-!'()*~]*)$/, ttl: 1800 },
+    { re: /^https:\/\/api\.rss2json\.com\/v1\/api\.json\?(count=\d+&)?rss_url=[\w%.\-]+$/, ttl: 900 },
+    { re: /^https:\/\/portal\.amfiindia\.com\/spages\/NAVAll\.txt$/, ttl: 3600 },
+];
+const BROWSER_HEADERS = {
+    'user-agent': 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Mobile Safari/537.36',
+    'accept': 'application/json, text/plain, */*',
+    'accept-language': 'en-IN,en;q=0.9',
+};
+async function market(request, env) {
+    if (env.MARKET_LIMIT) {
+        const { success } = await env.MARKET_LIMIT.limit({ key: request.headers.get('cf-connecting-ip') || 'unknown' });
+        if (!success) return fail(429, 'Too many market requests. Please wait a minute.', { stage: 'market-limit' });
+    }
+    const target = new URL(request.url).searchParams.get('u') || '';
+    const source = MARKET_SOURCES.find(s => s.re.test(target));
+    if (!source) return fail(400, 'Not an allowed market source.', { stage: 'market-allowlist' });
+    let upstream;
+    try {
+        upstream = await fetch(target, { headers: BROWSER_HEADERS, signal: AbortSignal.timeout(12000),
+                                         cf: { cacheTtl: source.ttl, cacheEverything: true } });
+    } catch (_) {
+        return fail(504, 'The market source did not answer.', { stage: 'market-upstream' });
+    }
+    const headers = { ...JSON_HEADERS, 'content-type': upstream.headers.get('content-type') || 'text/plain; charset=utf-8',
+                      'cache-control': `public, max-age=${Math.min(source.ttl, 300)}` };
+    return new Response(upstream.body, { status: upstream.status, headers });
+}
+
+/* News feeds, read here and returned in rss2json's shape so the app's reader
+   is unchanged. rss2json itself cannot sit behind this Worker: its free tier
+   limits requests per IP per day, and Cloudflare's shared egress had spent the
+   day's allowance before any request of ours ("Daily rate limit exceeded"). It
+   had also started refusing its own `count` parameter without a paid key.
+   Reading the RSS here removes that third party altogether. */
+// Economic Times section feeds only: Google News refuses most requests from
+// Cloudflare (503), and a source that fails four times in five is not one.
+const FEED_SOURCES = [
+    { re: /^https:\/\/economictimes\.indiatimes\.com\/[a-z0-9\/\-]+\/rssfeeds\/\d+\.cms$/, ttl: 900 },
+];
+const ENTITIES = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' };
+function decodeXml(s) {
+    return String(s || '')
+        .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
+        .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCodePoint(parseInt(h, 16)))
+        .replace(/&#(\d+);/g, (_, d) => String.fromCodePoint(Number(d)))
+        .replace(/&([a-z]+);/gi, (m, n) => ENTITIES[n.toLowerCase()] ?? m)
+        .replace(/<[^>]+>/g, '')
+        .trim();
+}
+function parseRss(xml, max = 10) {
+    const items = [];
+    for (const m of String(xml).matchAll(/<item\b[^>]*>([\s\S]*?)<\/item>/gi)) {
+        const title = decodeXml((m[1].match(/<title\b[^>]*>([\s\S]*?)<\/title>/i) || [])[1]);
+        const pubDate = decodeXml((m[1].match(/<pubDate\b[^>]*>([\s\S]*?)<\/pubDate>/i) || [])[1]);
+        // rss2json's date format ("2026-09-24 06:00:00"), which the app reads
+        // by its first ten characters; RSS's "Wed, 24 Sep 2026" would print as
+        // "Wed, 24 Se".
+        const t = Date.parse(pubDate);
+        if (title) items.push({ title: title.slice(0, 300),
+                                pubDate: Number.isFinite(t) ? new Date(t).toISOString().replace('T', ' ').slice(0, 19) : null });
+        if (items.length >= max) break;
+    }
+    return items;
+}
+async function feed(request, env) {
+    if (env.MARKET_LIMIT) {
+        const { success } = await env.MARKET_LIMIT.limit({ key: request.headers.get('cf-connecting-ip') || 'unknown' });
+        if (!success) return fail(429, 'Too many requests. Please wait a minute.', { stage: 'feed-limit' });
+    }
+    const target = new URL(request.url).searchParams.get('url') || '';
+    const source = FEED_SOURCES.find(s => s.re.test(target));
+    if (!source) return fail(400, 'Not an allowed news feed.', { stage: 'feed-allowlist' });
+    let res;
+    try {
+        res = await fetch(target, { headers: { ...BROWSER_HEADERS, accept: 'application/rss+xml, application/xml, text/xml' },
+                                    signal: AbortSignal.timeout(10000), cf: { cacheTtl: source.ttl, cacheEverything: true } });
+    } catch (_) {
+        return fail(504, 'The news feed did not answer.', { stage: 'feed-upstream' });
+    }
+    if (!res.ok) return json({ status: 'error', message: `feed answered ${res.status}` }, 502);
+    const items = parseRss(await res.text());
+    return new Response(JSON.stringify({ status: 'ok', items }),
+                        { headers: { ...JSON_HEADERS, 'cache-control': 'public, max-age=300' } });
+}
+
 export default {
     async fetch(request, env) {
         if (request.method === 'OPTIONS') return new Response(null, { headers: JSON_HEADERS });
-        if (request.method !== 'POST' || new URL(request.url).pathname !== '/v1/portfolio-reading') {
+        const path = new URL(request.url).pathname;
+        if (request.method === 'POST' && path === '/v1/crash') return crash(request, env);
+        if (request.method === 'GET' && path === '/v1/market') return market(request, env);
+        if (request.method === 'GET' && path === '/v1/feed') return feed(request, env);
+        if (request.method !== 'POST' || path !== '/v1/portfolio-reading') {
             return fail(404, 'Not found.');
         }
         if (!env.OPENROUTER_API_KEY) return fail(503, 'Corpus AI is not configured yet.', { stage: 'config' });

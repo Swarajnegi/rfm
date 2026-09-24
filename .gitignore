@@ -13,3 +13,18 @@ worker/.env
 
 # Codex scratch attachments
 .codex-remote-attachments/
+
+# Release signing: the upload key and its password never enter git.
+# Back both up off this laptop.
+android/keystore/
+keystore.properties
+*.jks
+*.keystore
+*.aab
+
+# wrangler files
+.wrangler
+.dev.vars*
+!.dev.vars.example
+.env*
+!.env.example

@@ -31,13 +31,19 @@
         try { return localStorage.getItem('corpus_haptics') !== 'off'; } catch (e) { return true; }
     }
 
+    // The plugin's calls return promises, and on an iPhone the web fallback
+    // REJECTS ("Browser does not support the vibrate API" — iOS has no web
+    // vibration at all). try/catch never sees an async rejection, so each one
+    // surfaced as an unhandled error, and would have filled the crash log.
+    // `quiet` swallows both the sync throw and the async rejection.
+    const quiet = call => { try { const r = call(); if (r && typeof r.catch === 'function') r.catch(() => {}); } catch (e) {} };
     const Haptics = {
         _p: () => (hapticsEnabled() && (activated || (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform())))
                   ? (window.AppPlugins && window.AppPlugins.Haptics) : null,
-        tap()     { try { this._p() && this._p().impact({ style: 'Light'  }); } catch (e) {} },
-        commit()  { try { this._p() && this._p().impact({ style: 'Medium' }); } catch (e) {} },
-        success() { try { this._p() && this._p().notification({ type: 'SUCCESS' }); } catch (e) {} },
-        warn()    { try { this._p() && this._p().notification({ type: 'WARNING' }); } catch (e) {} },
+        tap()     { const p = this._p(); if (p) quiet(() => p.impact({ style: 'Light'  })); },
+        commit()  { const p = this._p(); if (p) quiet(() => p.impact({ style: 'Medium' })); },
+        success() { const p = this._p(); if (p) quiet(() => p.notification({ type: 'SUCCESS' })); },
+        warn()    { const p = this._p(); if (p) quiet(() => p.notification({ type: 'WARNING' })); },
     };
 
     /* ── Page transitions ────────────────────────────────────────────────
@@ -51,12 +57,23 @@
     let transitioning = false;
     function isTransitioning() { return transitioning; }
 
+    /* WebKit — every browser on an iPhone, and desktop Safari — does not get
+       View Transitions. Measured 2026-09-24 in WebKit 26.6 at iPhone 12 size:
+       switching to Insights through a View Transition crashed the page, every
+       time over three round trips, and never with transitions off. No single
+       element was the cause (hiding each section in turn changed nothing; only
+       the amount of content did), so there is no CSS fix to make. A crash the
+       first time someone opens Insights costs far more than a cross-fade, so
+       WebKit takes the GSAP fade below. Chromium (the Android app) keeps them. */
+    const ua = navigator.userAgent || '';
+    const webkitEngine = (/AppleWebKit/.test(ua) && !/Chrome|Chromium|Android/.test(ua)) || /CriOS|FxiOS|EdgiOS/.test(ua);
+
     function transition(mutate, afterward) {
         const done = () => {
             transitioning = false;
             try { afterward && afterward(); } catch (e) { console.warn('post-transition error:', e); }
         };
-        if (reduced || typeof document.startViewTransition !== 'function') {
+        if (reduced || webkitEngine || typeof document.startViewTransition !== 'function') {
             try { mutate(); } catch (e) { console.warn('Transition mutate error:', e); }
             done();
             if (!reduced && window.gsap) {

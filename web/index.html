@@ -4,6 +4,15 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Corpus</title>
+<!-- Home-screen install (iPhone Safari → Share → Add to Home Screen, and
+     Android browsers). Opens full screen, with the app's own icon. -->
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Corpus">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#061A12">
 <script>
 (function(){var d=document.documentElement,t="";try{t=localStorage.getItem("corpus_theme")||localStorage.getItem("rfm_theme")||"";}catch(e){}
 d.setAttribute("data-theme",(t==="light"||t==="dark")?t:"dark");})();/* Deep green is the identity, so an untouched install lands on it rather than on whatever the OS happens to prefer. A stored choice always wins. */
@@ -1873,6 +1882,15 @@ d.setAttribute("data-theme",(t==="light"||t==="dark")?t:"dark");})();/* Deep gre
   </section>
 </div>
 
+<!-- Not deferred: listening for errors before anything else can throw. -->
+<script src="crash.js"></script>
+<!-- Offline shell for the web build only: the Android app loads from its APK,
+     and file:// (the test harness) has no service workers. -->
+<script>
+if ('serviceWorker' in navigator && location.protocol === 'https:' && !(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform())) {
+  window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () {}); });
+}
+</script>
 <script defer src="ai-service-config.js"></script>
 <script defer src="vendor.js"></script>
 <script defer src="plugins.js"></script>

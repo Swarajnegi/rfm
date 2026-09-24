@@ -58,7 +58,10 @@ async function boot({ investments = [], profile = null, reply = DAILY, clock = n
     await page.route('**/*', route => {
         const url = route.request().url();
         if (url.startsWith('file://')) return route.continue();
-        if (url.includes('workers.dev')) {
+        // Crash reports share the gateway's host; they are not AI requests
+        // and must not be counted as spending the allowance.
+        if (url.includes('/v1/crash')) return route.fulfill({ status: 204, body: '' });
+        if (url.includes('/v1/portfolio-reading')) {
             let body = {};
             try { body = JSON.parse(route.request().postData() || '{}'); } catch (_) {}
             sent.push(body.prompt || '');
@@ -296,6 +299,24 @@ console.log('\nDAILY — once per day, on the local calendar');
     await page.evaluate(`${$d}.maybeRunDaily()`);
     await page.waitForTimeout(400);
     ok('changing the answers prepares a fresh brief', sent.length === 3, `${sent.length} requests`);
+    await ctx.close();
+}
+
+console.log('\nFIRST HOLDING — an empty-book brief does not last the day');
+{
+    // Measured live: the brief started the moment the questions were answered,
+    // before any holding was added, and said "no holdings yet" all day.
+    const { ctx, page, sent } = await boot({ investments: [], profile: PROFILE_RETIRED });
+    await page.waitForTimeout(3800);
+    const first = sent.length;
+    await page.evaluate(`${$d}.investments.push(${JSON.stringify(SCSS)})`);
+    await page.waitForTimeout(2200);
+    const afterFirstHolding = sent.length;
+    await page.evaluate(`${$d}.investments.push(${JSON.stringify(MIS)})`);
+    await page.waitForTimeout(2200);
+    ok('a brief was prepared for the empty book', first === 1, `${first}`);
+    ok('the first holding earns a fresh brief', afterFirstHolding === 2, `${afterFirstHolding}`);
+    ok('later holdings do not spend the allowance again', sent.length === 2, `${sent.length}`);
     await ctx.close();
 }
 

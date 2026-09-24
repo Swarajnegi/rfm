@@ -1,0 +1,10 @@
+# The web build of Corpus (the iPhone home-screen app), served as static files
+# from web/. The AI gateway is a separate Worker in worker/.
+#   npx wrangler deploy --config wrangler.web.toml
+# Nothing personal is uploaded: each person's portfolio lives in their own
+# phone's storage.
+name = "corpus-app"
+compatibility_date = "2026-09-22"
+
+[assets]
+directory = "./web"

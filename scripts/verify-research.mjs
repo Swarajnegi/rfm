@@ -56,7 +56,7 @@ async function boot(investments, llmReply) {
     await page.route('**/*', route => {
         const url = route.request().url();
         if (url.startsWith('file://')) return route.continue();
-        if (url.includes('openrouter.ai') || url.includes('corpus-ai-gateway.test.workers.dev')) {
+        if (url.includes('openrouter.ai') || url.includes('corpus-ai-gateway.test.workers.dev/v1/portfolio-reading')) {
             try { sent.push(JSON.parse(route.request().postData() || '{}')); } catch (_) { sent.push(null); }
             // The sentinel makes the model answer in prose instead of JSON —
             // the commonest real failure and one the parser must name.
@@ -490,6 +490,34 @@ console.log('\nNEWS TRANSPORT — the device bug, tested');
     ok('every request went through fetchMarketJson', r.calls.length > 0, `${r.calls.length} calls`);
     ok('including the RSS feeds', r.calls.some(u => u.includes('rss2json')),
        r.calls.filter(u => u.includes('rss2json')).length + ' feed calls');
+    // News follows the person: each interest reads its own ET section, and
+    // our gateway is asked before any third party.
+    const topics = await page.evaluate(async () => {
+        const d = document.querySelector('[x-data]')._x_dataStack[0];
+        window.CorpusAiConfig = { endpoint: 'https://corpus-ai-gateway.test.workers.dev/v1/portfolio-reading' };
+        const realHttp = d.httpGetJson, realMarket = d.fetchMarketJson;
+        const asked = [];
+        d.httpGetJson = async url => {
+            asked.push(url);
+            if (url.includes('/v1/feed?url=')) return { status: 'ok', items: [{ title: 'Headline for ' + decodeURIComponent(url.split('url=')[1]).split('/').slice(3, 5).join('/'), pubDate: '2026-09-24 06:00:00' }] };
+            throw new Error('no');
+        };
+        d.fetchMarketJson = async () => { throw new Error('no'); };
+        try {
+            window.CorpusResearch._resetReuse();
+            const pack = await window.CorpusResearch.buildPack(d, null, { profile: { interests: ['gold', 'schemes', 'mf'] } });
+            return { sources: (pack.macro.profile || []).map(f => `${f.source}:${f.items.length}`), asked };
+        } finally { d.httpGetJson = realHttp; d.fetchMarketJson = realMarket; }
+    });
+    ok('gold, schemes and funds each read their own section',
+       ['Commodities', 'Savings', 'Mutual funds'].every(k => topics.sources.some(s => s.includes(k) && s.endsWith(':1'))),
+       topics.sources.join(', '));
+    ok('through our gateway, not a third party', topics.asked.length > 0 && topics.asked.every(u => u.includes('/v1/feed?url=')),
+       `${topics.asked.length} feed requests`);
+    // rss2json answers `count` without a paid key with a 422; every feed was
+    // failing that way, silently, on every platform.
+    ok('no feed request uses the paid-only count parameter',
+       r.calls.filter(u => u.includes('rss2json')).every(u => !/[?&]count=/.test(u)));
     ok('Indian feeds were read for an Indian book',
        r.pack.macro.india.some(f => f.items.length), JSON.stringify(r.pack.coverage));
     ok('a policy headline survives', JSON.stringify(r.pack.macro.india).includes('repo rate'));

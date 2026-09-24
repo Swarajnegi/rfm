@@ -367,10 +367,31 @@ document.addEventListener('alpine:init', () => {
             } finally { if (timer) clearTimeout(timer); }
         },
 
+        /* The browser build (the iPhone home-screen app) cannot call these sources
+           directly — no CORS headers. It used to race two free public relays, which
+           rate-limited a second research pass to nothing and passed every ticker the
+           user holds through strangers' servers. Our own gateway now forwards to an
+           allowlist of exactly these sources; the public relays remain only as a
+           fallback. Null on native, where the app fetches directly. */
+        get marketProxy() {
+            if (this.canUseNativeHttp) return null;
+            const ai = String(window.CorpusAiConfig?.endpoint || '');
+            return /^https:\/\//.test(ai) ? ai.replace(/\/v1\/[^/]+$/, '/v1/market?u=') : null;
+        },
+
+        _viaProxy(targetUrl) {
+            return this.marketProxy ? [() => this.marketProxy + encodeURIComponent(targetUrl)] : [];
+        },
+
         /* Native goes straight to the source with a real User-Agent — one request, no
-           relay. The browser has no such option, so it races what is left. */
+           relay. The browser goes through our gateway, then the relays. */
         async fetchMarketJson(targetUrl, timeoutMs = 8000) {
             if (this.canUseNativeHttp) return this.httpGetJson(targetUrl, timeoutMs);
+            const viaGateway = this._viaProxy(targetUrl).map(u => async () =>
+                JSON.parse(await this.httpGetText(u(), timeoutMs + 1000)));
+            // Sequenced, not raced: the gateway is ours and usually answers; a
+            // relay is only worth a request when it has not.
+            try { if (viaGateway.length) return await viaGateway[0](); } catch (_) { /* fall back */ }
             return this.firstSuccessful(this.PRICE_RELAYS.map(relay => async () => {
                 const body = await this.httpGetText(relay.url(targetUrl), timeoutMs + 1000);
                 return relay.loose ? this._looseJson(body)
@@ -384,6 +405,10 @@ document.addEventListener('alpine:init', () => {
         // a WebView fetch that cannot reach the source.
         async fetchMarketText(targetUrl, timeoutMs = 8000) {
             if (this.canUseNativeHttp) return this.httpGetText(targetUrl, timeoutMs);
+            if (this.marketProxy) {
+                try { return await this.httpGetText(this.marketProxy + encodeURIComponent(targetUrl), timeoutMs + 1000); }
+                catch (_) { /* fall back to the relays */ }
+            }
             return this.firstSuccessful(this.PRICE_RELAYS.map(relay =>
                 () => this.httpGetText(relay.url(targetUrl), timeoutMs + 1000)
             ));
@@ -484,9 +509,14 @@ document.addEventListener('alpine:init', () => {
                     this.scheduleMaturityAlerts().catch(e => console.warn('[Phase 12] Initial alerts schedule failed:', e));
                 }, 4000);
             }
+            let hadHoldings = this.investments.length > 0;
             this.$watch('investments',  () => {
                 this.saveData();
                 this.queueNwSnapshot('portfolio-change');
+                // The first holding changes what today's brief can say.
+                const has = this.investments.length > 0;
+                if (has && !hadHoldings) setTimeout(() => this.maybeRunDaily(), 1500);
+                hadHoldings = has;
             }, { deep: true });
             this.$watch('cashflow',     () => this.saveData(), { deep: true });
             this.$watch('networth',     () => {
@@ -2841,6 +2871,7 @@ document.addEventListener('alpine:init', () => {
             const url2 = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(q)}&quotesCount=14&newsCount=0&listsCount=0`;
             try {
                 const data = await this.firstSuccessful([
+                    ...(this.marketProxy ? [async () => JSON.parse(await this.httpGetText(this.marketProxy + encodeURIComponent(url1), 5000))] : []),
                     () => this.httpGetJson(url1, 4000),
                     () => this.httpGetJson(url2, 4000),
                     () => this.httpGetJson(`https://api.allorigins.win/raw?url=${encodeURIComponent(url1)}`, 6000),

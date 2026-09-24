@@ -14,3 +14,21 @@ required = ["OPENROUTER_API_KEY"]
 name = "PER_CLIENT"
 namespace_id = "7301"
 simple = { limit = 4, period = 60 }
+
+# Crash reports: a separate, looser limit so a crashing loop cannot eat the
+# AI allowance, and cannot flood the log either.
+[[ratelimits]]
+name = "CRASH_LIMIT"
+namespace_id = "7302"
+simple = { limit = 10, period = 60 }
+
+# Market data for the browser build: one research pass is ~25 requests, so
+# this allows a couple of passes a minute per phone and stops a scraper.
+[[ratelimits]]
+name = "MARKET_LIMIT"
+namespace_id = "7303"
+simple = { limit = 120, period = 60 }
+
+# Keeps console.log output (crash reports) in Workers Logs.
+[observability]
+enabled = true

@@ -2,7 +2,12 @@
 //
 //     npm run apk
 //     npm run apk -- --release     (unsigned; a device will refuse to install it)
+//     npm run aab                  (signed release bundle for the Play Store)
 //     adb install -r rfm-app.apk
+//
+// The bundle is signed with the upload key named in android/keystore.properties
+// (gitignored, like the key). Google re-signs for devices with its own app
+// signing key; ours only proves an upload came from us.
 //
 // It is one command because it is three ordered steps whose failure mode is SILENT:
 // `cap sync` only COPIES web/ into the Android project, so skipping `npm run build`
@@ -33,8 +38,9 @@ import os from 'node:os';
 
 const ROOT = process.cwd();
 const ANDROID = path.join(ROOT, 'android');
-const OUT = path.join(ROOT, 'rfm-app.apk');
-const RELEASE = process.argv.includes('--release');
+const BUNDLE = process.argv.includes('--bundle');
+const OUT = path.join(ROOT, BUNDLE ? 'corpus-release.aab' : 'rfm-app.apk');
+const RELEASE = BUNDLE || process.argv.includes('--release');
 const WIN = os.platform() === 'win32';
 
 const run = (cmd, args, opts = {}) => {
@@ -110,13 +116,21 @@ const sha = b => createHash('sha256').update(b).digest('hex').slice(0, 12);
 
 // Each check answers "would this run on a device", not "did Gradle exit 0".
 function inspect(file) {
-    const { entries, read } = readApk(file);
+    const zip = readApk(file);
     const problems = [];
+    // An .aab holds the same files under base/, with the manifest and dex in
+    // their own folders. Map each APK path to where the bundle keeps it.
+    const where = p => !BUNDLE ? p
+        : p === 'AndroidManifest.xml' ? 'base/manifest/AndroidManifest.xml'
+        : p === 'classes.dex' ? 'base/dex/classes.dex'
+        : `base/${p}`;
+    const entries = { has: p => zip.entries.has(where(p)) };
+    const read = p => zip.read(where(p));
     // native-bridge.js is the one whose absence is invisible until every plugin fails.
     for (const need of ['assets/native-bridge.js', 'assets/capacitor.config.json',
                         'assets/capacitor.plugins.json', 'assets/public/index.html',
                         'assets/public/app.js', 'AndroidManifest.xml', 'classes.dex']) {
-        if (!entries.has(need)) problems.push(`missing ${need}`);
+        if (!entries.has(need)) problems.push(`missing ${where(need)}`);
     }
     if (entries.has('assets/native-bridge.js')) {
         const bridge = read('assets/native-bridge.js').toString('utf8');
@@ -124,7 +138,7 @@ function inspect(file) {
     }
     // The packaged web layer must be the one on disk, not a previous sync.
     for (const f of ['index.html', 'app.js', 'plugins.js', 'corpus.css', 'motion.js', 'parser.js', 'ai-service-config.js',
-                     'regenWealth.js', 'research.js', 'schemes.js']) {
+                     'regenWealth.js', 'research.js', 'schemes.js', 'crash.js']) {
         const packed = read(`assets/public/${f}`);
         if (!packed) { problems.push(`missing assets/public/${f}`); continue; }
         if (sha(packed) !== sha(readFileSync(path.join(ROOT, 'web', f)))) {
@@ -144,10 +158,16 @@ if (!JAVA_HOME) {
 console.log(`  JDK: ${JAVA_HOME}`);
 
 const gradlew = JSON.stringify(path.join(ANDROID, WIN ? 'gradlew.bat' : 'gradlew'));
-const task = RELEASE ? 'assembleRelease' : 'assembleDebug';
-const built = path.join(ANDROID, 'app', 'build', 'outputs', 'apk',
-                        RELEASE ? 'release' : 'debug',
-                        RELEASE ? 'app-release-unsigned.apk' : 'app-debug.apk');
+if (BUNDLE && !existsSync(path.join(ANDROID, 'keystore.properties'))) {
+    console.error('\n  android/keystore.properties is missing, so the bundle would be unsigned and');
+    console.error('  Play would refuse it. Restore the upload key and its properties file first.\n');
+    process.exit(1);
+}
+const task = BUNDLE ? 'bundleRelease' : RELEASE ? 'assembleRelease' : 'assembleDebug';
+const built = BUNDLE
+    ? path.join(ANDROID, 'app', 'build', 'outputs', 'bundle', 'release', 'app-release.aab')
+    : path.join(ANDROID, 'app', 'build', 'outputs', 'apk', RELEASE ? 'release' : 'debug',
+                RELEASE ? 'app-release-unsigned.apk' : 'app-debug.apk');
 const gradleEnv = { cwd: ANDROID, env: { ...process.env, JAVA_HOME } };
 
 run('npm', ['run', 'build']);            // the web bundle FIRST — cap sync only copies
@@ -174,8 +194,19 @@ if (problems.length) {
     process.exit(1);
 }
 
+// A bundle must actually carry a signature — "signed" is a claim until checked.
+if (BUNDLE) {
+    const r = spawnSync(path.join(JAVA_HOME, 'bin', WIN ? 'jarsigner.exe' : 'jarsigner'),
+                        ['-verify', built], { encoding: 'utf8' });
+    if (!/jar verified/i.test(`${r.stdout}${r.stderr}`)) {
+        console.error(`\n  The bundle is not signed:\n${r.stdout}${r.stderr}\n`);
+        process.exit(1);
+    }
+}
+
 copyFileSync(built, OUT);
-console.log(`\n  rfm-app.apk  ${(statSync(OUT).size / 1048576).toFixed(1)} MiB  ` +
-            `(${RELEASE ? 'release, UNSIGNED' : 'debug, installable'})`);
+console.log(`\n  ${path.basename(OUT)}  ${(statSync(OUT).size / 1048576).toFixed(1)} MiB  ` +
+            `(${BUNDLE ? 'release bundle, signed with the upload key' : RELEASE ? 'release, UNSIGNED' : 'debug, installable'})`);
 console.log('  verified: native bridge packaged, web layer matches web/ on disk');
-console.log('  install with:  adb install -r rfm-app.apk\n');
+console.log(BUNDLE ? '  upload in Play Console → Testing → Closed testing → Create release\n'
+                   : '  install with:  adb install -r rfm-app.apk\n');

@@ -27,7 +27,7 @@ window.RegenWealth = (() => {
        every time, the throw was swallowed, and the prompt silently fell back to
        "no market context". The phone was getting an AI reading with no news in
        it at all. research.js goes through fetchMarketJson, which is
-       CapacitorHttp on native and a relay in the browser. */
+       CapacitorHttp on native and our own gateway in the browser. */
 
     // ── Portfolio Snapshot Builder ─────────────────────────────────────────────
     // Distills app state into a lean snapshot with values calculated from holdings,
@@ -921,7 +921,12 @@ Respond ONLY with compact valid JSON:
     // ── Daily brief: cache and runner ──────────────────────────────────────────
     const localDay = (d = new Date()) =>
         `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    const profileKey = p => JSON.stringify(p || null);
+    // Who the brief was for, and whether they held anything yet. The second
+    // half exists because a brief prepared the moment the questions were
+    // answered — before a single holding was added — said "no holdings yet"
+    // for the rest of the day. An empty book turning non-empty earns one new
+    // brief; ordinary edits after that do not spend the allowance.
+    const briefKey = appData => JSON.stringify([normProfile(appData?.profile), (appData?.investments || []).length > 0]);
 
     // Today's brief, for this person — or null. A new day, or a changed
     // profile, is a new brief.
@@ -929,7 +934,7 @@ Respond ONLY with compact valid JSON:
         try {
             const cached = JSON.parse(localStorage.getItem(DAILY_KEY) || 'null');
             if (!cached || cached.day !== localDay()) return null;
-            if (cached.profileKey !== profileKey(normProfile(appData?.profile))) return null;
+            if (cached.briefKey !== briefKey(appData)) return null;
             return cached;
         } catch (_) { return null; }
     }
@@ -963,7 +968,7 @@ Respond ONLY with compact valid JSON:
             }
             const data = await res.json();
             const brief = validateDaily(parseJSONResponse(data?.choices?.[0]?.message?.content));
-            const out = { day, profileKey: profileKey(snapshot.profile), preparedAt: new Date().toISOString(),
+            const out = { day, briefKey: briefKey(appData), preparedAt: new Date().toISOString(),
                           ...brief, sources: pack ? researchSources(pack) : [] };
             try { localStorage.setItem(DAILY_KEY, JSON.stringify(out)); } catch (_) {}
             return out;

@@ -10,17 +10,23 @@ Legend: **[you]** needs you (an account, a payment, a decision, a phone) ·
 
 ## Phase 1 — Free groundwork (now)
 
-- [ ] **[claude]** Commit everything since 17 Sept to git, on a branch
-- [ ] **[claude]** Crash reporting — JavaScript errors from real phones reach us
-      (through our own Cloudflare Worker, no third-party SDK, no portfolio data)
-- [ ] **[claude]** Signed release build (`.aab`) instead of the debug APK
+- [x] **[claude]** Commit everything since 17 Sept to git, on a branch — `launch-prep` (24 Sept)
+- [x] **[claude]** Crash reporting — JavaScript errors from real phones reach us
+      (through our own Cloudflare Worker, no third-party SDK, no portfolio data) —
+      read them with `npx wrangler tail --config worker/wrangler.toml` (24 Sept).
+      Not covered: native Java crashes (those appear in Play Console once live)
+- [x] **[claude]** Signed release build (`.aab`) instead of the debug APK —
+      `npm run aab` → `corpus-release.aab` (24 Sept)
 - [ ] **[you]** Back up the release signing key and its password somewhere safe
-      off this laptop — losing it complicates every future update
-- [ ] **[claude]** iPhone web app for family testing: installable to the home
-      screen, market data through our own Worker instead of public relays,
-      hosted on Cloudflare Pages
+      off this laptop — losing it complicates every future update. The two files:
+      `android/keystore/corpus-upload.jks` and `android/keystore.properties`
+- [x] **[claude]** iPhone web app for family testing: installable to the home
+      screen, market data and news through our own Worker instead of public
+      relays — live at https://corpus-app.swarajnegi999.workers.dev (24 Sept)
 - [ ] **[you]** Install on your Android phone and on dad's / sister's / gf's
       iPhones; use it for a week with real portfolios; report what breaks
+- [x] **[claude]** Test in WebKit (the iPhone engine) at iPhone size — `verify-webkit`;
+      found and fixed a crash opening Insights and a haptics error (24 Sept)
 - [ ] **[claude]** Test on a low-end Android phone profile (small screen, slow CPU)
 
 ## Phase 2 — Decide what the product is allowed to say
@@ -108,4 +114,7 @@ Legend: **[you]** needs you (an account, a payment, a decision, a phone) ·
   OpenRouter credit has ever been bought (then 1,000/day). Fine for family
   testing, not for launch.
 - **Unofficial data endpoints** can break without warning (Nasdaq already did once).
-- **Nothing is device-tested yet.**
+- **Nothing is tested on a physical phone yet** — WebKit and Chromium emulation only.
+- **News:** every source is now an Economic Times section feed read by our own
+  Worker; rss2json (paid-only `count`, shared-IP limits) and Google News
+  (refuses Cloudflare) were measured out on 24 Sept.

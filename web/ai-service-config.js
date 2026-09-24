@@ -4,5 +4,8 @@
  * service is used by every app without exposing an API key in the APK.
  */
 window.CorpusAiConfig = Object.freeze({
-    endpoint: 'https://corpus-ai-gateway.swarajnegi999.workers.dev/v1/portfolio-reading'
+    endpoint: 'https://corpus-ai-gateway.swarajnegi999.workers.dev/v1/portfolio-reading',
+    // Stamped on crash reports. Keep in step with versionName/versionCode in
+    // android/app/build.gradle.
+    version: '1.1 (2)'
 });

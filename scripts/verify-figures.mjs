@@ -544,7 +544,9 @@ console.log('\nMUTUAL FUNDS — a missing scheme code is resolved, never guessed
         };
         d.fetchMarketJson = async (url) => {
             via.push(['fetchMarketJson', url]);
-            if (/mfapi\.in\/mf\/\d+/.test(url)) return { data: [{ nav: '315.7119', date: '17-09-2026' }] };
+            // Yesterday, always: a fixed date expires (the app refuses a NAV older than
+            // three days), which is how this test started failing on its own.
+            if (/mfapi\.in\/mf\/\d+/.test(url)) return { data: [{ nav: '315.7119', date: (() => { const t = new Date(Date.now() - 86400000); return String(t.getDate()).padStart(2, '0') + '-' + String(t.getMonth() + 1).padStart(2, '0') + '-' + t.getFullYear(); })() }] };
             throw new Error('not stubbed: ' + url);
         };
         const inv = { name: 'Quant Small Cap Fund - Direct Plan Growth', type: 'Mutual Fund',
@@ -571,7 +573,7 @@ console.log('\nMUTUAL FUNDS — a missing scheme code is resolved, never guessed
         let n = 0;
         d.fetchMarketJson = async () => {
             ++n;
-            return { data: [{ nav: '320.7702', date: '18-09-2026' }] };
+            return { data: [{ nav: '320.7702', date: (() => { const t = new Date(Date.now() - 86400000); return String(t.getDate()).padStart(2, '0') + '-' + String(t.getMonth() + 1).padStart(2, '0') + '-' + t.getFullYear(); })() }] };
         };
         const inv = { name: 'Quant', type: 'Mutual Fund', units: 10, schemeCode: '120828' };
         try { const nav = await d.fetchSinglePrice(inv); return { n, nav, err: null }; }
