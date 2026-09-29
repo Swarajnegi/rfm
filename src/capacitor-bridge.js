@@ -1,5 +1,6 @@
 import { Capacitor, CapacitorHttp, registerPlugin } from '@capacitor/core';
 import { App } from '@capacitor/app';
+import { Browser } from '@capacitor/browser';
 import { NativeBiometric } from '@capgo/capacitor-native-biometric';
 import { SplashScreen } from '@capacitor/splash-screen';
 import { StatusBar, Style } from '@capacitor/status-bar';
@@ -28,7 +29,9 @@ window.AppPlugins = {
     Capacitor,
     CapacitorHttp,
     AnalysisJob: registerPlugin('AnalysisJob'),
+    SessionVault: registerPlugin('SessionVault'),
     App,
+    Browser,
     NativeBiometric,
     SplashScreen,
     StatusBar,

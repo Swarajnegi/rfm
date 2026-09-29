@@ -38,16 +38,23 @@ console.log('WEBKIT — iPhone 12, the engine every iPhone browser uses');
     await page.goto(URL, { waitUntil: 'load' });
     await page.waitForTimeout(1200);
     ok('the first-run questions open', await page.locator('.onboard').isVisible());
-    await page.fill('.onboard__input', 'Rajan'); await page.tap('.onboard__foot .btn');
-    await page.fill('.onboard__input', '64'); await page.tap('.onboard__foot .btn'); await page.waitForTimeout(350);
-    await page.tap('.onboard__opt:has-text("retired")'); await page.waitForTimeout(350);
-    await page.tap('.onboard__opt:has-text("Wait it out")'); await page.waitForTimeout(350);
-    await page.tap('.onboard__opt:has-text("Monthly")'); await page.waitForTimeout(350);
-    await page.tap('.onboard__opt:has-text("3 to 7 years")'); await page.waitForTimeout(350);
-    await page.tap('.onboard__opt:has-text("Gold")');
-    await page.tap('.onboard__foot .btn'); await page.waitForTimeout(500);
+    const next = async () => { await page.tap('.onboard .foot .btn-gold'); await page.waitForTimeout(350); };
+    await page.fill('#ob-name', 'Rajan'); await next();
+    await page.fill('#ob-age', '64'); await next();
+    // Eleven screens; several answers each; per-asset rows tapped in WebKit.
+    const everyRow = async label => { for (const card of await page.locator('.pcls').all()) await card.locator('.pchip', { hasText: label }).first().tap(); };
+    await page.tap('.onboard__opt:has-text("Government schemes")'); await page.tap('.onboard__opt:has-text("Gold")'); await next();
+    await everyRow('Regular income'); await everyRow('Keep it safe'); await next();
+    await everyRow('Wait it out'); await next();
+    await everyRow('3 to 7 yrs'); await next();
+    await everyRow('Monthly'); await next();
+    await page.tap('.onboard__opt:has-text("Pension")'); await next();
+    await page.tap('.onboard__opt:has-text("No one")'); await page.tap('.onboard__opt:has-text("Health insurance")'); await next();
+    await page.tap('.onboard__opt:has-text("Nothing planned")'); await next();
+    await everyRow('Many years');
+    await next(); await page.waitForTimeout(150);
     const p = await page.evaluate(`JSON.parse(JSON.stringify(${$d}.profile))`);
-    ok('tapping through saves the answers', !!p.completedAt && p.goal === 'retired' && p.payout === 'monthly', JSON.stringify(p).slice(0, 90));
+    ok('tapping through saves the answers', !!p.completedAt && p.version === 2 && p.purpose.schemes.join() === 'income,safe' && p.payout.gold.join() === 'monthly', JSON.stringify(p).slice(0, 120));
     ok('no script errors', errors.length === 0, errors[0] || '');
     await ctx.close();
 }
@@ -65,7 +72,7 @@ console.log('WEBKIT — iPhone 12, the engine every iPhone browser uses');
                 { id: 'r1', name: 'Reliance Industries', type: 'Stock (IND)', ticker: 'RELIANCE', units: 40, buyPrice: 1300, currentPrice: 1320 },
                 { id: 'm1', name: 'Quant Small Cap Fund Direct Plan Growth', type: 'Mutual Fund', schemeCode: '120828', units: 800, buyPrice: 250, currentPrice: 262 },
             ],
-            profile: { completedAt: '2026-09-24', name: 'Rajan', age: 64, goal: 'retired', risk: 'low', payout: 'monthly', horizon: '3to7', interests: ['gold'] } }));
+            profile: { version: 2, completedAt: '2026-09-24', name: 'Rajan', age: 64, holdings: ['schemes', 'in_stocks', 'mf'], purpose: { schemes: ['income'] } } }));
     });
     await page.route('**/*', r => r.request().url().startsWith('file://') ? r.continue() : r.abort());
     await page.goto(URL, { waitUntil: 'load' });

@@ -24,7 +24,7 @@ const AMFI = [
 const b = await chromium.launch();
 const p = await b.newPage({ viewport: { width: 390, height: 844 } });
 const errs = []; p.on('pageerror', e => errs.push(e.message));
-await p.addInitScript(s => { localStorage.setItem('rfm_v1', s); localStorage.setItem('corpus_tour_v1','x'); localStorage.setItem('rfm_v1', JSON.stringify((v => ({ ...v, profile: v.profile || { completedAt: '2026-09-01T00:00:00.000Z', name: 'Test', age: 40, goal: 'balanced', risk: 'medium', horizon: '7to15', interests: ['stocks'] } }))(JSON.parse(localStorage.getItem('rfm_v1') || '{}')))); },
+await p.addInitScript(s => { localStorage.setItem('rfm_v1', s); localStorage.setItem('corpus_tour_v1','x'); localStorage.setItem('rfm_v1', JSON.stringify((v => ({ ...v, profile: v.profile || { version: 2, completedAt: '2026-09-01T00:00:00.000Z', name: 'Test', age: 40, goal: 'balanced', risk: 'medium', horizon: '7to15', interests: ['stocks'] } }))(JSON.parse(localStorage.getItem('rfm_v1') || '{}')))); },
                       readFileSync('scripts/seed.json','utf8'));
 
 await p.route('**/*', r => {
@@ -46,20 +46,20 @@ const check = (name, ok, detail='') => {
   console.log(`  ${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? ' — ' + detail : ''}`);
 };
 
-async function run(label, { type, query, pick, expect }) {
-  await p.evaluate(t => {
+async function run(label, { kind, query, pick, expect }) {
+  await p.evaluate(k => {
     const d = document.querySelector('[x-data]')._x_dataStack[0];
-    d.addingInv = true; d.newInv.type = t; d.newInv.name = ''; d.newInv.ticker = '';
+    d.openAddHolding('all'); d.setAddKind(k); d.newInv.name = ''; d.newInv.ticker = '';
     d.symbolSearch.results = []; d.mfSearchResults = [];
-  }, type);
+  }, kind);
   await p.waitForTimeout(350);
 
-  const input = p.locator('.bsheet:visible input.field[type="text"]').first();
+  const input = p.locator('.bsheet:visible .field input[type="text"]').first();
   await input.fill(query);
   await input.dispatchEvent('input');
 
   // The lookup is debounced by design; wait for the list rather than a fixed sleep.
-  let items = p.locator('.bsheet:visible .typeahead__item');
+  let items = p.locator('.bsheet:visible .results button.res');
   try { await items.first().waitFor({ state:'visible', timeout: 4000 }); }
   catch { check(`${label}: results appear`, false, `nothing listed for "${query}"`); return; }
 
@@ -80,16 +80,17 @@ async function run(label, { type, query, pick, expect }) {
   }
   check(`${label}: list closes after choosing`, form.open === 0, `${form.open} still listed`);
 
-  await p.evaluate(() => { document.querySelector('[x-data]')._x_dataStack[0].addingInv = false; });
+  await p.evaluate(() => { document.querySelector('[x-data]')._x_dataStack[0].closeAddHolding(); });
   await p.waitForTimeout(250);
 }
 
 console.log('\nTYPEAHEAD\n');
-await run('US stock', { type:'Stock (US)', query:'nvidia', pick:0,
+// One Stock sheet searches both markets; the listing picked decides which.
+await run('US stock', { kind:'st', query:'nvidia', pick:0,
   expect: { name:'NVIDIA Corporation', ticker:'NVDA', type:'Stock (US)', currency:'USD' } });
-await run('India stock', { type:'Stock (IND)', query:'reliance', pick:0,
+await run('India stock', { kind:'st', query:'reliance', pick:2,
   expect: { name:'Reliance Industries Limited', ticker:'RELIANCE', type:'Stock (IND)', currency:'INR' } });
-await run('Mutual fund', { type:'Mutual Fund', query:'invesco mid', pick:0,
+await run('Mutual fund', { kind:'mf', query:'invesco mid', pick:0,
   expect: { name:'Invesco India Midcap Fund - Direct Plan Growth' } });
 
 // A US search must not offer an NSE listing: the price path and the currency

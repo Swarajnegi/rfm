@@ -36,10 +36,11 @@ document.addEventListener('alpine:init', () => {
             else { apply(); afterward(); }
         },
 
-        showNotifications: false,
 
         // ── Data Stores ─────────────────────────────────────────────
         investments: [],
+        bankTransactions: [],
+        bankImportAccount: '',
 
         // ── Net Worth History (daily valuation snapshots) ────────────
         nwHistory: [],   // [{ date: 'YYYY-MM-DD', capturedAt, value, source }]
@@ -87,6 +88,34 @@ document.addEventListener('alpine:init', () => {
             efMonthly: 0, efMonths: 6, efCurrent: 0
         },
 
+        cpi: null,
+        cpiOffline: false,
+
+        get cpiStale() {
+            if (!this.cpi?.releasedOn) return true;
+            const published = Date.parse(this.cpi.releasedOn);
+            return !Number.isFinite(published) || Date.now() - published > 50 * 86400000;
+        },
+
+        get cpiLabel() {
+            if (!Number.isFinite(Number(this.cpi?.rate))) return 'India CPI unavailable';
+            return `${Number(this.cpi.rate).toFixed(2)}% · ${this.cpi.referenceMonth}${this.cpiStale || this.cpiOffline ? ' · last available' : ''}`;
+        },
+
+        async refreshCpi() {
+            const endpoint = String(window.CorpusAiConfig?.endpoint || '').replace(/\/v1\/portfolio-reading$/, '/v1/cpi/latest');
+            if (!endpoint || !endpoint.endsWith('/v1/cpi/latest')) return;
+            try {
+                const res = await fetch(endpoint, { signal: AbortSignal.timeout(12000) });
+                if (!res.ok) throw new Error('CPI endpoint unavailable');
+                const next = await res.json();
+                if (!Number.isFinite(Number(next.rate)) || !/^\w+ \d{4}$/.test(next.referenceMonth || '') || !next.releasedOn) throw new Error('Invalid CPI');
+                this.cpi = next;
+                this.cpiOffline = false;
+                this.saveData();
+            } catch (_) { this.cpiOffline = true; }
+        },
+
         // ── Tax Data Store (Phase 3) ─────────────────────────────
         tax: {
             // Inputs
@@ -107,6 +136,8 @@ document.addEventListener('alpine:init', () => {
             // holdings list — see the capital gains engine below.
             realizedEquityLTCG: 0,  // Equity/equity-MF units held > 12 months, then sold
             realizedEquitySTCG: 0,  // Equity/equity-MF units held ≤ 12 months, then sold
+            sales: [],
+            gainsSource: 'manual', // Migrate legacy input without counting it alongside sales.
             regime:          'compare', // 'old' | 'new' | 'compare'
             // Defaults to false. The app was built for a 60+ user, so this was seeded true;
             // for a general release most users are not, and a wrong value silently changes
@@ -122,10 +153,10 @@ document.addEventListener('alpine:init', () => {
            reading was written for one imagined reader, a young equity investor.
            Persisted inside rfm_v1, so backup and restore carry it. */
         profile: {
-            name: '', age: null, goal: null, risk: null, payout: null, horizon: null,
-            interests: [], completedAt: null, skippedAt: null,
+            version: 2, name: '', age: null, holdings: [], purpose: {}, fall: {}, horizon: {}, payout: {}, knows: {},
+            income: [], dependents: [], cover: [], plans: {}, completedAt: null, skippedAt: null, catchUpSkippedAt: null,
         },
-        onboarding: { open: false, step: 0, draft: null, editing: false },
+        onboarding: { open: false, step: 0, draft: null, editing: false, catchUp: false },
 
         // ── The daily brief (the card under the AI card) ─────────────
         daily: { brief: null, loading: false, error: '' },
@@ -140,6 +171,12 @@ document.addEventListener('alpine:init', () => {
         editingInv: null,
         editForm: {},
         addingInv: false,
+        saleHolding: null,
+        saleForm: { date: '', quantity: '', proceeds: '', fees: 0, sttEligible: false, fundTaxClass: '', bondListing: '', proceedsDestination: 'cash' },
+        saleError: '',
+        acquisitionHolding: null,
+        acquisitionForm: { date: '', quantity: '', cost: '' },
+        acquisitionError: '',
         addingGoal: false,
 
         // ── Topping up a holding you already own ────────────────────
@@ -163,10 +200,12 @@ document.addEventListener('alpine:init', () => {
         // ── Add Forms ───────────────────────────────────────────────
         newInv: {
             name: '', type: 'Bank FD', issuer: '', amount: '',
-            rate: '', payout: 'Monthly', rating: '', maturityDate: '',
+            rate: '', payout: 'Monthly', rating: '', maturityDate: '', startDate: '',
             ticker: '', units: '', buyPrice: '', currentPrice: '',
-            purchaseDate: '', assetClass: 'equity', schemeCode: ''
+            purchaseDate: '', assetClass: 'equity', schemeCode: '', annualDeposit: '', monthlyDeposit: '',
+            metal: 'gold', metalUnit: 'g', purity: 100, metalValuationMode: 'benchmark', manualPrice: ''
         },
+        addKind: 'st',
         newGoal: {
             name: '', type: 'Emergency Fund',
             target: '', current: '', targetDate: ''
@@ -221,6 +260,8 @@ document.addEventListener('alpine:init', () => {
         importSelections: {},
         importDuplicateMode: 'skip',
         importStats: null,
+        bankImport: null,
+        bankImportSelections: {},
 
         // ── Smart Portfolio Diff State (Groww & AI Portfolio Ingestion) ─
         statementDiff: {
@@ -245,6 +286,17 @@ document.addEventListener('alpine:init', () => {
         },
 
         // ── Pull-to-Refresh Gesture State ─────────────────────────────
+        // One line on the inverse surface after a background action ends.
+        snack: { text: '', on: false },
+        _snackTimer: 0,
+        showSnack(text) {
+            if (!text) return;
+            clearTimeout(this._snackTimer);
+            this.snack.text = text;
+            this.snack.on = true;
+            this._snackTimer = setTimeout(() => { this.snack.on = false; }, 3200);
+        },
+
         pullToRefresh: {
             distance: 0,
             isRefreshing: false,
@@ -488,6 +540,9 @@ document.addEventListener('alpine:init', () => {
         // ════════════════════════════════════════════════════════════
         init() {
             this.loadData();
+            this.refreshCpi();
+            this.$store.account?.attach(this);
+            this._repairSipLinks();
             this.initCapacitor();
             this.fetchUsdInrRate();
             this.syncNativeChrome();
@@ -504,7 +559,7 @@ document.addEventListener('alpine:init', () => {
 
             // Tutorial is available on demand from Insights/Settings.
             // Schedule alerts only if explicitly opted in
-            if (localStorage.getItem('corpus_alerts_enabled') === 'true') {
+            if (localStorage.getItem('corpus_alerts_enabled') !== 'false') {
                 setTimeout(() => {
                     this.scheduleMaturityAlerts().catch(e => console.warn('[Phase 12] Initial alerts schedule failed:', e));
                 }, 4000);
@@ -529,7 +584,7 @@ document.addEventListener('alpine:init', () => {
             this.$watch('pension',      () => this.saveData(), { deep: true });
             this.$watch('sips',         () => this.saveData(), { deep: true });
             this.$watch('profile',      () => this.saveData(), { deep: true });
-            if (this.shouldAskProfile) this.openOnboarding();
+            if (this.shouldAskProfile) this.openOnboarding(false, !!this.profile.completedAt && this.profile.version !== 2);
             // ITR checklist state (UI-only, not persisted)
             this.itrCheckState = {};
 
@@ -547,9 +602,27 @@ document.addEventListener('alpine:init', () => {
                     .finally(() => { this.regenWealth.loading = false; this.regenWealth.progressMsg = ''; });
             }
 
+            // A field the designs drew as a box around its text is one target: a
+            // tap anywhere on it focuses the input inside, and it takes the
+            // design's focused look while it has focus.
+            document.addEventListener('click', e => {
+                const f = e.target.closest && e.target.closest('.field');
+                if (!f || e.target.closest('input, select, textarea, button')) return;
+                const input = f.querySelector('input:not([type="hidden"]), select, textarea');
+                if (input) input.focus();
+            });
+            document.addEventListener('focusin', e => { const f = e.target.closest && e.target.closest('.field'); if (f) f.classList.add('focus'); });
+            document.addEventListener('focusout', e => { const f = e.target.closest && e.target.closest('.field'); if (f) f.classList.remove('focus'); });
+
             // Bound on the next tick: initPullToRefresh reaches for #ptr, which
             // does not exist until Alpine has rendered the shell.
             this.$nextTick(() => this.initPullToRefresh());
+            try {
+                const back = sessionStorage.getItem('corpus_return');
+                if (back) { sessionStorage.removeItem('corpus_return'); this.activePage = back; }
+            } catch (e) {}
+            this.initKeyboardAvoidance();
+            this.initScrollFlag();
 
             // Read history BEFORE the opening snapshot. hasAnyPortfolioData counts
             // nwHistory, #nwChart lives behind it, and loadNwHistory used to be
@@ -648,6 +721,7 @@ document.addEventListener('alpine:init', () => {
 
                 history = this._normalizeHistory(history);
                 localStorage.setItem('rfm_nw_history', JSON.stringify(history));
+                document.dispatchEvent(new Event('corpus:data-saved'));
                 this.nwHistory = history;
             } catch (e) {
                 console.warn('[NW Snapshot]', e);
@@ -756,9 +830,7 @@ document.addEventListener('alpine:init', () => {
             const d = new Date(`${String(key || '').slice(0, 10)}T00:00:00`);
             if (Number.isNaN(d.getTime())) return '';
             const long = this.nwChartRange === '1Y' || this.nwChartRange === 'ALL';
-            return d.toLocaleDateString('en-IN',
-                long ? { day: 'numeric', month: 'short', year: '2-digit' }
-                     : { day: 'numeric', month: 'short' });
+            return long ? `${this.shortDate(d)} ${String(d.getFullYear()).slice(2)}` : this.shortDate(d);
         },
 
         /* The caption under the chart. The pill says what was asked for; this
@@ -770,8 +842,8 @@ document.addEventListener('alpine:init', () => {
             const n = pts.length;
             const count = `${n} observation${n === 1 ? '' : 's'}`;
             const last = this.formatObsDate(pts[n - 1].date);
-            return n === 1 ? `${last} · ${count}`
-                           : `${this.formatObsDate(pts[0].date)} — ${last} · ${count}`;
+            return n === 1 ? `${last}, ${count}`
+                           : `${this.formatObsDate(pts[0].date)} to ${last}, ${count}`;
         },
 
         /* The honest reading of two snapshots.
@@ -816,208 +888,39 @@ document.addEventListener('alpine:init', () => {
             return '\u20b9' + n.toLocaleString('en-IN', { maximumFractionDigits: 0 });
         },
 
+        // The same figure for a screen reader. TalkBack reads "\u20b91.54 Cr" as
+        // letters, so the units are spelled out.
+        formatIndianSpoken(v) {
+            const n = Number(v) || 0;
+            const a = Math.abs(n);
+            const sign = n < 0 ? 'minus ' : '';
+            if (a >= 1e7) return `${sign}${+(a / 1e7).toFixed(2)} crore rupees`;
+            if (a >= 1e5) return `${sign}${+(a / 1e5).toFixed(2)} lakh rupees`;
+            return `${sign}${Math.round(a).toLocaleString('en-IN')} rupees`;
+        },
+
+        rangeSpoken(r) {
+            return ({ '1W': '1 week', '1M': '1 month', '3M': '3 months',
+                      '6M': '6 months', '1Y': '1 year', 'ALL': 'All time' })[r] || r;
+        },
+
+        // The canvas says nothing to assistive tech, so the chart carries its
+        // reading as a label: where the line starts, where it ends, over what.
+        get nwChartSpoken() {
+            const pts = this.nwChartData;
+            if (!pts.length) return 'Corpus value chart, no history yet';
+            const last = pts[pts.length - 1];
+            if (pts.length === 1) return `Corpus value chart, one observation: ${this.formatIndianSpoken(last.value)} on ${this.formatObsDate(last.date)}`;
+            return `Corpus value chart, ${this.rangeLabel}: from ${this.formatIndianSpoken(pts[0].value)} on ${this.formatObsDate(pts[0].date)} to ${this.formatIndianSpoken(last.value)} on ${this.formatObsDate(last.date)}`;
+        },
+
+        /* The chart is an SVG bound to nwSvg, so it redraws by itself whenever
+           the history or the range changes. This only refreshes the history and
+           replays the draw-in, for the callers that used to rebuild a canvas. */
         renderNwChart() {
-            // Net worth chart canvas only lives and renders on the 'home' overview page
             if (this.activePage !== 'home') return;
-
-            // NEVER build the chart while a View Transition is capturing the page.
-            // Lightweight Charts creates a canvas and measures its container, and doing
-            // that mid-capture deadlocks Chromium's renderer: the page keeps painting and
-            // stops running script. The guard lives HERE rather than at the call sites
-            // because the dangerous caller is not navigation — it is queueNwSnapshot's
-            // 300ms debounce, which fires on any portfolio write and can land inside a
-            // transition nobody associated with the chart.
-            if (window.RFMMotion?.isTransitioning?.()) {
-                clearTimeout(this._nwChartDefer);
-                this._nwChartDefer = setTimeout(() => this.renderNwChart(), 120);
-                return;
-            }
-
-            const el = document.getElementById('nwChart');
-            if (!el || !window.LW) return;
-
             this.loadNwHistory();
-
-            // Nothing observed inside this window. Tear the chart down and let the
-            // template's honest placeholder stand in its place. The old code did
-            // two dishonest things here instead: it fell back to the ENTIRE
-            // history when a window came back empty, and when there was no
-            // history at all it invented a point at today's value — which for a
-            // brand-new user plotted a ₹0 observation that never happened.
-            //
-            // This has to come BEFORE the width check below: an empty window
-            // hides the canvas, a hidden canvas measures 0 wide, and the width
-            // check would then defer forever waiting for a box that is never
-            // coming.
-            const points = this.nwChartSeries
-                .map(p => ({ time: p.date, value: Number(p.value) }))
-                .filter(p => Number.isFinite(p.value));
-            if (!points.length) { this._nwChartRetries = 0; this._destroyNwChart(); return; }
-
-            // Lightweight Charts measures its container. Inside an x-show'd page
-            // that is display:none the measurement is 0x0 and the chart renders
-            // blank with no error, so defer until the element actually has a box.
-            // BOUNDED, because this used to set a flag the callback cleared on
-            // its way back in — "retry once" that was really "retry forever",
-            // and a page that never gets a box is then a page that never runs
-            // anything else again.
-            if (!el.clientWidth) {
-                if ((this._nwChartRetries || 0) < 10) {
-                    this._nwChartRetries = (this._nwChartRetries || 0) + 1;
-                    this.$nextTick(() => {
-                        if (this.activePage === 'home') this.renderNwChart();
-                    });
-                }
-                return;
-            }
-            this._nwChartRetries = 0;
-
-            const c = this._nwChartColors();
-            const single = points.length === 1;
-            const seriesOpts = {
-                lineColor: single ? 'rgba(0,0,0,0)' : c.stroke,
-                lineWidth: single ? 0 : 2,
-                topColor: single ? 'rgba(0,0,0,0)' : c.fill,
-                bottomColor: c.clear,
-                priceLineVisible: false,
-                lastValueVisible: false,
-                crosshairMarkerRadius: 4,
-                crosshairMarkerBorderColor: c.stroke,
-                crosshairMarkerBackgroundColor: c.stroke,
-            };
-
-            // Reuse beats rebuild. A range tap, a quote refresh and a theme
-            // switch all change only DATA or COLOUR, and remove()/createChart()
-            // on each of those threw away a canvas and its listeners to redraw
-            // the same shape — the very teardown the View Transition guard above
-            // exists to keep away from a capturing renderer.
-            const held = window._rfmNw;
-            if (window._rfmNwChart && held && held.el === el && held.series) {
-                try {
-                    held.series.applyOptions(seriesOpts);
-                    held.series.setData(points);
-                    window._rfmNwChart.applyOptions({
-                        width: el.clientWidth,
-                        layout: { textColor: c.ink },
-                        crosshair: { vertLine: { color: c.stroke } },
-                        localization: { priceFormatter: (v) => this.formatIndianShort(v) },
-                    });
-                    this._markSingleObservation(points, c.stroke, single);
-                    window._rfmNwChart.timeScale().fitContent();
-                    return;
-                } catch (e) {
-                    // A library that refuses an update still has to draw, so fall
-                    // through to a rebuild rather than leave a stale series up.
-                    this._destroyNwChart();
-                }
-            }
-
-            this._destroyNwChart();
-
-            const chart = window.LW.createChart(el, {
-                width: el.clientWidth,
-                height: el.clientHeight || 140,
-                layout: { background: { color: 'transparent' }, textColor: c.ink, attributionLogo: false },
-                grid: { vertLines: { visible: false }, horzLines: { visible: false } },
-                rightPriceScale: { visible: false },
-                leftPriceScale: { visible: false },
-                timeScale: { visible: false, fixLeftEdge: true, fixRightEdge: true },
-                handleScroll: false,
-                handleScale: false,
-                crosshair: {
-                    vertLine: { color: c.stroke, width: 1, style: 3, labelVisible: false },
-                    horzLine: { visible: false, labelVisible: false },
-                },
-                localization: { priceFormatter: (v) => this.formatIndianShort(v) },
-            });
-
-            const series = chart.addSeries(window.LW.AreaSeries, seriesOpts);
-            series.setData(points);
-            chart.timeScale().fitContent();
-
-            window._rfmNwChart = chart;
-            window._rfmNw = { series, markers: null, el };
-            this._markSingleObservation(points, c.stroke, single);
-
-            // The readout. There is no time axis and no price scale — that is the
-            // approved design — so this subscription is the ONLY place an exact
-            // date or an exact value can be read, and it reports the observation's
-            // real date rather than a position interpolated along the line.
-            chart.subscribeCrosshairMove(param => {
-                const bar = param && param.seriesData && param.seriesData.get(series);
-                const value = bar && typeof bar === 'object' ? bar.value : bar;
-                if (!param || !param.time || value == null) { this.nwHoverLabel = ''; return; }
-                this.nwHoverLabel = `${this.formatObsDate(this._timeToKey(param.time))} · ${this.formatIndianShort(value)}`;
-            });
-
-            if (this._nwResizeBound) window.removeEventListener('resize', this._nwResizeBound);
-            this._nwResizeBound = () => {
-                if (window._rfmNwChart && el.clientWidth) {
-                    window._rfmNwChart.applyOptions({ width: el.clientWidth });
-                }
-            };
-            window.addEventListener('resize', this._nwResizeBound);
-        },
-
-        /* Read once, in one place, so the reuse path and the rebuild path cannot
-           drift apart on colour. Lightweight Charts parses colour strings itself
-           and understands neither color-mix() nor a bare hex with alpha — the
-           area fill was once declared as color-mix() and therefore silently never
-           drew, which is why the chart read as a squiggle rather than as the
-           shape of the money. --brass is #BFA05C on dark and #7E6524 on light, so
-           this is also what makes a theme switch correct rather than stale. */
-        _nwChartColors() {
-            const stroke = this._token('--brass', '#BFA05C');
-            const alpha = (hex, a) => {
-                const m = /^#?([0-9a-f]{6})$/i.exec(String(hex).trim());
-                if (!m) return `rgba(191,160,92,${a})`;
-                const n = parseInt(m[1], 16);
-                return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},${a})`;
-            };
-            return {
-                stroke,
-                ink: this._token('--ink-faint', '#74857D'),
-                fill: alpha(stroke, 0.28),
-                clear: alpha(stroke, 0),
-            };
-        },
-
-        /* A single observation is a point, not a fabricated flat line. The plugin
-           is kept and re-set rather than re-created, or a series that goes from
-           one point to many keeps a marker that no longer means anything. */
-        _markSingleObservation(points, stroke, single) {
-            const held = window._rfmNw;
-            if (!held || !held.series) return;
-            // size is not decoration. Lightweight Charts scales a marker to the
-            // bar spacing, and with ONE observation the bar spacing is the whole
-            // chart — the dot rendered as a 40px blob floating in the middle of
-            // an empty panel.
-            const marks = single
-                ? [{ time: points[0].time, position: 'inBar', color: stroke, shape: 'circle', size: 0.4 }]
-                : [];
-            if (held.markers) { held.markers.setMarkers(marks); return; }
-            if (marks.length) held.markers = window.LW.createSeriesMarkers(held.series, marks);
-        },
-
-        /* Lightweight Charts hands back whatever shape it decided to store the
-           time as — the original string, or a {year,month,day} — so the readout
-           normalises rather than assuming one of them. */
-        _timeToKey(t) {
-            if (typeof t === 'string') return t.slice(0, 10);
-            if (t && typeof t === 'object' && t.year) {
-                return `${t.year}-${String(t.month).padStart(2, '0')}-${String(t.day).padStart(2, '0')}`;
-            }
-            if (typeof t === 'number') return this.localDateKey(new Date(t * 1000));
-            return '';
-        },
-
-        _destroyNwChart() {
-            if (window._rfmNwChart) {
-                try { window._rfmNwChart.remove(); } catch (e) {}
-            }
-            window._rfmNwChart = null;
-            window._rfmNw = null;
-            this.nwHoverLabel = '';
+            this.nwDrawKey += 1;
         },
 
         async initCapacitor() {
@@ -1032,7 +935,7 @@ document.addEventListener('alpine:init', () => {
             // Match status bar to our dark background color
             try { 
                 await StatusBar.setStyle({ style: Style.Dark });
-                await StatusBar.setBackgroundColor({ color: '#0a0a0a' });
+                await StatusBar.setBackgroundColor({ color: '#09090B' });
             } catch (e) {}
 
             // Phase 12: Register Android notification channels (required on Android 8+ / API 26+)
@@ -1156,30 +1059,33 @@ document.addEventListener('alpine:init', () => {
             if (!bar || this._ptrBound) return;
             this._ptrBound = true;
 
-            const label = bar.querySelector('.ptr__label');
             let startX = 0, startY = 0, pulled = 0, tracking = false, axis = '', frame = 0;
-            const spin = bar.querySelector('.ptr__spin');
+            const arc = bar.querySelector('.ptr__arc');
+            const ring = bar.querySelector('circle');
 
             const paint = () => {
                 frame = 0;
                 const t = Math.min(pulled, this.PTR_MAX);
-                bar.style.transform = `translateY(${t}px)`;
-                bar.style.opacity = String(Math.min(1, t / 40));
-                bar.dataset.armed = pulled >= this.PTR_TRIGGER ? '1' : '0';
-                if (spin) spin.style.transform = `rotate(${Math.min(300, t / this.PTR_TRIGGER * 250)}deg) scale(${pulled >= this.PTR_TRIGGER ? 1.12 : 1})`;
-                if (label) label.textContent = pulled >= this.PTR_TRIGGER ? 'Release to sync' : 'Pull to sync';
+                const k = Math.min(1, pulled / this.PTR_TRIGGER);
+                bar.style.transform = `translateY(${t}px) scale(${0.6 + 0.4 * k})`;
+                bar.style.opacity = String(Math.min(1, t / 32));
+                bar.dataset.armed = k >= 1 ? '1' : '0';
+                if (ring) ring.style.strokeDasharray = `${Math.round(k * 78)} 100`;
+                if (arc) arc.style.transform = `rotate(${-90 + t * 1.6}deg)`;
             };
             const schedule = () => { if (!frame) frame = requestAnimationFrame(paint); };
             const reset = () => {
                 pulled = 0; tracking = false;
                 if (frame) { cancelAnimationFrame(frame); frame = 0; }
-                bar.style.transition = 'transform .34s var(--ease), opacity .22s linear';
-                bar.style.transform = 'translateY(0)';
+                bar.style.transition = 'transform .3s var(--ease), opacity .2s linear';
+                bar.style.transform = 'translateY(0) scale(.4)';
                 bar.style.opacity = '0';
                 bar.dataset.armed = '0';
-                if (spin) spin.style.transform = '';
-                if (label) label.textContent = 'Pull to sync';
-                setTimeout(() => { bar.style.transition = ''; }, 360);
+                setTimeout(() => {
+                    bar.style.transition = '';
+                    if (ring) ring.style.strokeDasharray = '';
+                    if (arc) arc.style.transform = '';
+                }, 320);
             };
 
             document.addEventListener('touchstart', (e) => {
@@ -1221,17 +1127,60 @@ document.addEventListener('alpine:init', () => {
                 tracking = false;
                 if (!commit) { reset(); return; }
                 bar.style.transition = 'transform .22s var(--ease)';
-                bar.style.transform = `translateY(${this.PTR_TRIGGER}px)`;
+                bar.style.transform = `translateY(${Math.round(this.PTR_TRIGGER * 0.8)}px) scale(1)`;
                 bar.style.opacity = '1';
-                if (spin) spin.style.transform = '';
-                if (label) label.textContent = 'Syncing prices\u2026';
+                if (arc) arc.style.transform = '';
                 this.triggerPullRefresh().then(message => {
-                    if (label) label.textContent = message;
-                    setTimeout(reset, 1100);
+                    reset();
+                    this.showSnack(message);
                 });
             };
             document.addEventListener('touchend', release, { passive: true });
             document.addEventListener('touchcancel', () => { if (tracking) reset(); }, { passive: true });
+        },
+
+        /* The WebView shrinks when the keyboard opens (Capacitor pads the view
+           by the IME inset), and nothing scrolled the focused field back into
+           view: in a sheet it ended up behind the sticky footer, so you could
+           not see what you were typing. A drop of more than 150px from the
+           tallest height seen marks the keyboard; the tallest resets when the
+           width changes, so rotation does not read as a keyboard. */
+        initKeyboardAvoidance() {
+            const root = document.documentElement;
+            let tallest = window.innerHeight, width = window.innerWidth;
+            const typing = el => !!el && !!el.matches && el.matches('input:not([type=checkbox]):not([type=radio]):not([type=range]), textarea, select, [contenteditable="true"]');
+            const reveal = () => {
+                const el = document.activeElement;
+                if (!typing(el) || root.dataset.kb !== '1') return;
+                const box = el.closest('.field') || el;
+                // A search field's results open beneath it, so it rides to the
+                // top of the space left; any other field only needs to be seen.
+                const search = [...box.querySelectorAll('.material-symbols-outlined')].some(i => i.textContent.trim() === 'search');
+                box.scrollIntoView({ block: search ? 'start' : 'nearest', behavior: 'instant' });
+            };
+            const measure = () => {
+                if (window.innerWidth !== width) { width = window.innerWidth; tallest = window.innerHeight; }
+                tallest = Math.max(tallest, window.innerHeight);
+                const open = tallest - window.innerHeight > 150 && typing(document.activeElement);
+                if (open) root.dataset.kb = '1'; else delete root.dataset.kb;
+                if (open) requestAnimationFrame(() => requestAnimationFrame(reveal));
+            };
+            window.addEventListener('resize', measure, { passive: true });
+            document.addEventListener('focusin', () => setTimeout(measure, 320));
+            document.addEventListener('focusout', () => setTimeout(measure, 60));
+            // Results appearing under a search field, or a wrapping line, can push
+            // the caret down while you type; keep it in view as you go.
+            document.addEventListener('input', () => requestAnimationFrame(reveal));
+        },
+
+        // A hairline under the pinned top bar once content scrolls beneath it.
+        initScrollFlag() {
+            const root = document.documentElement;
+            let on = false;
+            window.addEventListener('scroll', () => {
+                const now = window.scrollY > 4;
+                if (now !== on) { on = now; if (on) root.dataset.scrolled = '1'; else delete root.dataset.scrolled; }
+            }, { passive: true });
         },
 
         /* One sync for everything, whatever page you pulled on. The old
@@ -1246,8 +1195,8 @@ document.addEventListener('alpine:init', () => {
             try {
                 await this.fetchAllPrices();
                 const { updated = 0, failed = 0, total = 0 } = this.navFetchProgress || {};
-                if (this.navFetchState === 'error') result = 'Sync failed · check connection';
-                else if (failed > 0) result = `${updated} updated · ${failed} need attention`;
+                if (this.navFetchState === 'error') result = 'Sync failed. Check the connection';
+                else if (failed > 0) result = `${updated} updated, ${failed} kept their last price`;
                 else if (updated > 0) result = `${updated} prices updated`;
                 else if (!total) result = 'Add a holding to sync';
                 else result = 'No prices changed';
@@ -1257,7 +1206,7 @@ document.addEventListener('alpine:init', () => {
                 this.saveData();
             } catch (err) {
                 console.warn('Pull-to-refresh execution error:', err);
-                result = 'Sync failed · try again';
+                result = 'Sync failed. Try again';
             } finally {
                 document.body.classList.remove('is-syncing');
                 this.pullToRefresh.isRefreshing = false;
@@ -1275,10 +1224,13 @@ document.addEventListener('alpine:init', () => {
                 try {
                     const p = JSON.parse(saved);
                     this.investments = (p.investments || []).map(inv => this.migrateHolding(inv));
+                    this.bankTransactions = Array.isArray(p.bankTransactions) ? p.bankTransactions : [];
+                    this.bankImportAccount = typeof p.bankImportAccount === 'string' ? p.bankImportAccount : '';
                     this.goals       = p.goals       || [];
                     this.sips        = p.sips        || [];
-                    if (p.profile) this.profile = { ...this.profile, ...p.profile };
+                    if (p.profile) this.profile = this.migrateProfile({ ...this.profile, ...p.profile, version: p.profile.version || 1 });
                     this.lastNavFetchTime = p.lastNavFetchTime || null;
+                    this.cpi = p.cpi && Number.isFinite(Number(p.cpi.rate)) ? p.cpi : null;
 
                     if (p.pension) {
                         this.pension = { ...this.pension, ...p.pension };
@@ -1303,6 +1255,8 @@ document.addEventListener('alpine:init', () => {
                             ...taxRest,
                             otherIncome:    taxRest.otherIncome    ?? (taxOther    || 0),
                             deduction80C:   taxRest.deduction80C   ?? (taxDeduction || 0),
+                            sales: Array.isArray(taxRest.sales) ? taxRest.sales : [],
+                            gainsSource: taxRest.gainsSource === 'sales' ? 'sales' : 'manual',
                         };
                     }
                 } catch (e) {
@@ -1344,6 +1298,15 @@ document.addEventListener('alpine:init', () => {
                 out.rate = stranded;
             }
             delete out.interestRate;
+            // Statement imports kept the invested total in `amount` and set no buy
+            // price. With units present that cost was ignored everywhere. Carry it
+            // into the average price it implies; a US row never takes this path,
+            // because its `amount` is a rupee value, not a dollar cost.
+            const isUsd = out.currency === 'USD' || ['Stock (US)', 'ETF (US)'].includes(out.type);
+            const units = Number(out.units) || 0, amount = Number(out.amount) || 0;
+            if (units > 0 && !(Number(out.buyPrice) > 0) && amount > 0 && !isUsd) {
+                out.buyPrice = amount / units;
+            }
             return out;
         },
 
@@ -1361,8 +1324,10 @@ document.addEventListener('alpine:init', () => {
 
         saveData({ rescheduleAlerts = false } = {}) {
             localStorage.setItem('rfm_v1', JSON.stringify({
-                version:     '3.0',
+                version:     '4.0',
                 investments: this.investments,
+                bankTransactions: this.bankTransactions,
+                bankImportAccount: this.bankImportAccount,
                 pension:     this.pension,
                 cashflow:    this.cashflow,
                 networth:    this.networth,
@@ -1371,10 +1336,12 @@ document.addEventListener('alpine:init', () => {
                 goals:       this.goals,
                 sips:        this.sips,
                 profile:     this.profile,
+                cpi:         this.cpi,
                 lastNavFetchTime: this.lastNavFetchTime
             }));
+            document.dispatchEvent(new Event('corpus:data-saved'));
             // Notification work is native and expensive. Only reschedule if user explicitly opted in
-            if (rescheduleAlerts && localStorage.getItem('corpus_alerts_enabled') === 'true') {
+            if (rescheduleAlerts && localStorage.getItem('corpus_alerts_enabled') !== 'false') {
                 clearTimeout(this._alertDebounce);
                 this._alertDebounce = setTimeout(() => {
                     this.scheduleMaturityAlerts().catch(e => console.warn('[Phase 12] Reschedule alerts failed:', e));
@@ -1386,9 +1353,20 @@ document.addEventListener('alpine:init', () => {
         //  COMPUTED PROPERTIES — CASH FLOW (Dynamic Multi-Stream Engine)
         // ════════════════════════════════════════════════════════════
 
+        /* The Pension page's amount, counted as income unless an income row
+           already is the pension. It was dropped entirely whenever any income row
+           existed (and two always do), while the AI reading added it. */
+        get pensionIncome() {
+            const amt = Number(this.pension?.monthlyAmount) || 0;
+            if (!(amt > 0)) return 0;
+            const rows = Array.isArray(this.cashflow.incomes) ? this.cashflow.incomes : [];
+            const already = rows.some(r => Number(r.amount) > 0 && (/pension/i.test(r.name || '') || String(r.category || '').toLowerCase() === 'pension'));
+            return already ? 0 : amt;
+        },
+
         get totalIncome() {
             if (this.cashflow.incomes && Array.isArray(this.cashflow.incomes) && this.cashflow.incomes.length > 0) {
-                return this.cashflow.incomes.reduce((sum, inc) => sum + (Number(inc.amount) || 0), 0);
+                return this.cashflow.incomes.reduce((sum, inc) => sum + (Number(inc.amount) || 0), 0) + this.pensionIncome;
             }
             return Number(this.pension?.monthlyAmount || 0)
                  + Number(this.cashflow.project || 0)
@@ -1525,31 +1503,73 @@ document.addEventListener('alpine:init', () => {
             if (units > 0) {
                 const currentPrice = Number(inv.currentPrice) || Number(inv.nav) || Number(inv.buyPrice) || 0;
                 const val = units * currentPrice * rate;
-                return isNaN(val) ? 0 : val;
+                // No price at all (a statement row without a NAV): its recorded
+                // value, not ₹0, until the first sync prices it.
+                if (currentPrice > 0) return isNaN(val) ? 0 : val;
             }
-            // For non-unit assets (FDs, EPF, bonds): use currentValue or amount in INR
-            const fallback = Number(inv.currentValue) || Number(inv.amount) || 0;
-            const val = fallback * (isUsd ? rate : 1);
+            // For non-unit assets (FDs, EPF, bonds): currentValue or amount. Both are
+            // stored in rupees already, so no FX here; converting them again valued a
+            // unitless US position at ~96x its worth.
+            const val = Number(inv.currentValue) || Number(inv.amount) || 0;
             return isNaN(val) ? 0 : val;
         },
 
+        metalQuoteStatus(inv) {
+            if (inv?.type !== 'Physical Metal') return '';
+            if (inv.metalValuationMode === 'manual') return `Your valuation · ${inv.metalQuoteAt ? this.shortDate(inv.metalQuoteAt) : 'date not recorded'}`;
+            const age = Date.now() - Date.parse(inv.metalQuoteAt || '');
+            if (!Number.isFinite(age)) return 'Benchmark pending; purchase cost shown temporarily';
+            return `${age > 48 * 3600000 || this.fxIsStale ? 'Stale benchmark' : 'Indicative spot benchmark'} · ${this.shortDate(inv.metalQuoteAt)}`;
+        },
+
+        /* What was paid, and ONLY what was paid. A unit holding without a buy
+           price has an unknown cost, returned as 0 and reported by hasKnownCost.
+           The old fallback to `nav` took the current NAV as the cost, so every
+           imported fund read "+0.00%", while the AI reading's own copy of this
+           maths counted the same fund as ₹0 invested and its whole value as gain. */
         getInvInvestedCost(inv) {
             if (!inv) return 0;
             const units = Number(inv.units) || 0;
             const isUsd = inv.currency === 'USD' || ['Stock (US)', 'ETF (US)'].includes(inv.type);
-            const rate = isUsd ? this.fxUsdInr : 1;
             if (units > 0) {
-                const buyPrice = Number(inv.buyPrice) || Number(inv.nav) || 0;
-                const val = units * buyPrice * rate;
+                const val = units * (Number(inv.buyPrice) || 0) * (isUsd ? this.fxUsdInr : 1);
                 return isNaN(val) ? 0 : val;
             }
-            const val = (Number(inv.amount) || 0) * (isUsd ? rate : 1);
+            const val = Number(inv.amount) || 0;
             return isNaN(val) ? 0 : val;
         },
 
+        hasKnownCost(inv) {
+            return this.getInvInvestedCost(inv) > 0;
+        },
+
+        // Stocks, ETFs, funds and gold rise and fall with a market. Deposits, EPF,
+        // PPF, schemes and bonds are balances: what they hold is not a "gain".
+        isMarketLinked(inv) {
+            return ['equity', 'mf', 'gold', 'metals'].includes(this._chipOf(inv));
+        },
+
         getInvPnL(inv) {
+            if (!this.hasKnownCost(inv)) return 0;
             const pnl = this.getInvCurrentValue(inv) - this.getInvInvestedCost(inv);
             return isNaN(pnl) ? 0 : pnl;
+        },
+
+        /* Invested, now and gain across market-linked holdings with a known
+           cost, the one set of figures the Overview, Holdings and the AI reading
+           all quote. Holdings left out are named rather than silently absorbed. */
+        get marketBook() {
+            let invested = 0, value = 0;
+            const unknown = [];
+            let balances = 0;
+            for (const i of this.investments || []) {
+                if (!this.isMarketLinked(i)) { balances += this.getInvCurrentValue(i); continue; }
+                if (!this.hasKnownCost(i)) { unknown.push(i.name || i.ticker || 'Unnamed'); continue; }
+                invested += this.getInvInvestedCost(i);
+                value += this.getInvCurrentValue(i);
+            }
+            const gain = value - invested;
+            return { invested, value, gain, gainPct: invested > 0 ? (gain / invested) * 100 : null, unknown, balances };
         },
 
         getInvPnLPct(inv) {
@@ -1814,39 +1834,15 @@ document.addEventListener('alpine:init', () => {
         },
 
         // ── Portfolio Analysis (Deliverable 2) ──────────────────────
-        get assetAllocation() {
-            const groups = {};
-            this.investments.forEach(inv => {
-                const t = inv.type || 'Other';
-                groups[t] = (groups[t] || 0) + Number(inv.amount);
-            });
-            return groups;
-        },
-
-        get ratingDistribution() {
-            const groups = {};
-            this.investments.forEach(inv => {
-                const r = inv.rating || 'Not Rated';
-                groups[r] = (groups[r] || 0) + Number(inv.amount);
-            });
-            return groups;
-        },
-
-        get weightedAvgReturn() {
-            const total = this.investments.reduce((s, i) => s + Number(i.amount), 0);
-            if (total === 0) return '0.00';
-            const wSum = this.investments.reduce(
-                (s, i) => s + Number(i.amount) * Number(i.rate), 0);
-            return (wSum / total).toFixed(2);
-        },
-
+        // Weighed on today's value. `amount` was read here, which is a cost for
+        // some rows and a stale value for others, and NaN for a row without one.
         get concentrationWarnings() {
-            const total = this.investments.reduce((s, i) => s + Number(i.amount), 0);
-            if (total === 0) return [];
+            const total = this.investments.reduce((s, i) => s + this.getInvCurrentValue(i), 0);
+            if (!(total > 0)) return [];
             const byIssuer = {};
             this.investments.forEach(inv => {
                 const key = inv.issuer || inv.name;
-                byIssuer[key] = (byIssuer[key] || 0) + Number(inv.amount);
+                byIssuer[key] = (byIssuer[key] || 0) + this.getInvCurrentValue(inv);
             });
             return Object.entries(byIssuer)
                 .filter(([, amt]) => (amt / total) > 0.5)
@@ -1854,18 +1850,6 @@ document.addEventListener('alpine:init', () => {
                     name,
                     pct: ((amt / total) * 100).toFixed(0)
                 }));
-        },
-
-        get totalInvested() {
-            // ── Single-source-of-truth: units×avgBuyPrice×FX, fallback amount ──
-            const rate = this.fxUsdInr;
-            return (this.investments || []).reduce((sum, inv) => {
-                if (inv.units > 0 && inv.buyPrice > 0) {
-                    const cost = inv.units * inv.buyPrice;
-                    return sum + (inv.currency === 'USD' ? cost * rate : cost);
-                }
-                return sum + (Number(inv.amount) || 0);
-            }, 0);
         },
 
         // ════════════════════════════════════════════════════════════
@@ -1894,6 +1878,7 @@ document.addEventListener('alpine:init', () => {
             // equity holding turned the ENTIRE tax screen — gross income, both
             // regimes, the saving — into NaN. Anyone holding a single share saw it.
             return (this.investments || []).reduce((sum, inv) => {
+                if (inv.type === 'Recurring Deposit') return sum; // projected, not verified interest
                 const payout = inv.payout || inv.payoutFrequency || '';
                 if (/cumulative|maturity/i.test(payout)) return sum;   // paid at the end, not yearly
                 const principal = Number(inv.amount);
@@ -1908,7 +1893,96 @@ document.addEventListener('alpine:init', () => {
             return this.annualPension
                  + this.annualInterestIncome
                  + Number(this.tax.salaryIncome || 0)
-                 + Number(this.tax.otherIncome);
+                 + Number(this.tax.otherIncome)
+                 + (this.tax.gainsSource === 'sales' ? this.saleTaxSummary.slabGain : 0);
+        },
+
+        get currentTaxFy() { return window.CorpusTaxLedger?.financialYear(this.localDateKey()) || ''; },
+        get saleTaxSummary() { return window.CorpusTaxLedger?.summarize(this.tax.sales || [], this.currentTaxFy) || { amounts: {}, review: [], sales: [], specialTax: 0, slabGain: 0 }; },
+        get saleYears() {
+            const years = [...new Set((this.tax.sales || []).map(s => s.fy).filter(Boolean))].sort().reverse();
+            return years.map(fy => window.CorpusTaxLedger.summarize(this.tax.sales, fy));
+        },
+        get unrealizedTaxPreview() {
+            const unsold = (this.investments || []).filter(i => this.isMarketLinked(i));
+            const known = unsold.filter(i => this.hasKnownCost(i));
+            return { movement: known.reduce((n, i) => n + this.getInvCurrentValue(i) - this.getInvInvestedCost(i), 0),
+                unknown: unsold.filter(i => !this.hasKnownCost(i)).map(i => i.name) };
+        },
+        get legacyGainsPending() { return Number(this.tax.realizedEquityLTCG) !== 0 || Number(this.tax.realizedEquitySTCG) !== 0; },
+
+        openSale(inv) {
+            this.saleHolding = inv;
+            this.saleForm = { date: this.localDateKey(), quantity: '', proceeds: '', fees: 0,
+                sttEligible: false, fundTaxClass: inv.fundTaxClass || '', bondListing: '', proceedsDestination: 'cash' };
+            this.saleError = '';
+        },
+
+        openAcquisition(inv) {
+            this.acquisitionHolding = inv;
+            this.acquisitionForm = { date: '', quantity: '', cost: '' };
+            this.acquisitionError = '';
+        },
+
+        recordAcquisition() {
+            const inv = this.acquisitionHolding;
+            const f = this.acquisitionForm;
+            const qty = Number(f.quantity), cost = Number(f.cost);
+            const purchase = new Date(`${f.date}T00:00:00Z`);
+            const validDate = /^\d{4}-\d{2}-\d{2}$/.test(f.date || '')
+                && Number.isFinite(purchase.getTime()) && purchase.toISOString().slice(0, 10) === f.date;
+            const accounted = (inv?.taxLots || []).reduce((n, lot) => n + (Number(lot.quantityRemaining) || 0), 0);
+            if (!inv || !validDate || f.date > this.localDateKey() || !(qty > 0) || !(cost > 0)
+                || accounted + qty > Number(inv.units) + 1e-5) {
+                this.acquisitionError = 'Enter a real purchase date, units and cost for units still held. The total cannot exceed the holding.';
+                return;
+            }
+            inv.taxLots = [...(inv.taxLots || []), { id: this.newId('buy'), date: f.date, quantity: qty,
+                quantityRemaining: qty, cost }];
+            if (Math.abs(accounted + qty - Number(inv.units)) <= 1e-5) inv.taxBasisNeedsReconciliation = false;
+            this.investments = [...this.investments];
+            this.acquisitionHolding = null;
+            this.acquisitionError = '';
+            this.saveData();
+        },
+
+        recordSale() {
+            const inv = this.saleHolding;
+            if (!inv) return;
+            try {
+                const { lots, sale } = window.CorpusTaxLedger.allocateSale(inv, this.saleForm);
+                sale.id = this.newId('sale');
+                const remaining = Math.round((Number(inv.units) - sale.quantity) * 1e6) / 1e6;
+                inv.taxLots = lots;
+                if (sale.basisUnknown) inv.taxBasisNeedsReconciliation = true;
+                inv.units = Math.max(0, remaining);
+                const remainingCost = lots.reduce((n, lot) => n + (Number(lot.cost) || 0) * (Number(lot.quantityRemaining) || 0) / (Number(lot.quantity) || 1), 0);
+                inv.buyPrice = inv.units > 0 ? remainingCost / inv.units : 0;
+                // Unknown historical cost must not turn the remaining holding
+                // into a fictitious zero-cost winner in the P&L preview.
+                inv.amount = sale.basisUnknown ? 0 : remainingCost;
+                inv.currentValue = 0;
+                inv.currentValue = this.getInvCurrentValue(inv);
+                if (this.saleForm.proceedsDestination === 'cash') {
+                    this.networth.cash = Math.round(((Number(this.networth.cash) || 0) + sale.proceeds - sale.fees) * 100) / 100;
+                }
+                this.tax.sales = [...(this.tax.sales || []), sale];
+                if (!this.legacyGainsPending) this.tax.gainsSource = 'sales';
+                this.investments = [...this.investments];
+                this.saleHolding = null;
+                this.saleError = '';
+                this.saveData();
+                this.queueNwSnapshot('recorded-sale');
+            } catch (error) { this.saleError = error.message || 'Could not record this sale.'; }
+        },
+
+        reconcileLegacyGains() {
+            if (!confirm('Use dated sales instead of the old manually entered gains? The old figures remain in the backup for reference. Check that every sale has been recorded first.')) return;
+            this.tax.legacyManualGains = { ltcg: Number(this.tax.realizedEquityLTCG) || 0, stcg: Number(this.tax.realizedEquitySTCG) || 0, reconciledAt: new Date().toISOString() };
+            this.tax.realizedEquityLTCG = 0;
+            this.tax.realizedEquitySTCG = 0;
+            this.tax.gainsSource = 'sales';
+            this.saveData();
         },
 
         /* The only income the standard deduction may be set against. Everything else in
@@ -1938,7 +2012,7 @@ document.addEventListener('alpine:init', () => {
         // which is all these getters now do. Unrealized movement is still shown, honestly
         // labelled as P&L, on every holding row.
         get equityLTCG() {
-            const totalGains = Math.max(0, Number(this.tax.realizedEquityLTCG) || 0);
+            const totalGains = Math.max(0, this.tax.gainsSource === 'sales' ? Number(this.saleTaxSummary.amounts['112A']) || 0 : Number(this.tax.realizedEquityLTCG) || 0);
             const exemptionLimit = 125000;
             const exemptionUsed = Math.min(totalGains, exemptionLimit);
             const taxableGains = Math.max(0, totalGains - exemptionLimit);
@@ -1947,7 +2021,7 @@ document.addEventListener('alpine:init', () => {
         },
 
         get equitySTCG() {
-            const totalGains = Math.max(0, Number(this.tax.realizedEquitySTCG) || 0);
+            const totalGains = Math.max(0, this.tax.gainsSource === 'sales' ? Number(this.saleTaxSummary.amounts['111A']) || 0 : Number(this.tax.realizedEquitySTCG) || 0);
             const tax = Math.round(totalGains * 0.20 * 1.04); // 20% + 4% cess
             return { totalGains, tax };
         },
@@ -1956,6 +2030,7 @@ document.addEventListener('alpine:init', () => {
             if (this.tax.capitalGainsOverride !== null && this.tax.capitalGainsOverride !== undefined && this.tax.capitalGainsOverride !== '') {
                 return Number(this.tax.capitalGainsOverride);
             }
+            if (this.tax.gainsSource === 'sales') return this.saleTaxSummary.specialTax;
             return (this.equityLTCG?.tax || 0) + (this.equitySTCG?.tax || 0);
         },
 
@@ -2060,36 +2135,28 @@ document.addEventListener('alpine:init', () => {
         },
 
         // ── NEW REGIME CALCULATION ───────────────────────────────────
-        // New Regime (FY 2024-25): Standard deduction ₹75K. No other deductions.
-        // Slabs: 0-3L: 0%, 3-7L: 5%, 7-10L: 10%, 10-12L: 15%, 12-15L: 20%, >15L: 30%
-        // Rebate u/s 87A: If income ≤ ₹7L, full rebate (no tax)
+        // New Regime (FY 2025-26 onward, Budget 2025): Standard deduction ₹75K. No other deductions.
+        // Slabs: 0-4L: 0%, 4-8L: 5%, 8-12L: 10%, 12-16L: 15%, 16-20L: 20%, 20-24L: 25%, >24L: 30%
+        // Rebate u/s 87A: taxable income ≤ ₹12L pays no slab tax, with marginal relief just above.
+        // Was still on the FY 2024-25 table (₹7L rebate, 3/7/10/12/15L slabs), which billed
+        // someone at ₹10L taxable ~₹52,000 they do not owe.
         get newRegimeTax() {
             const gross = this.grossAnnualIncome;
             const stdDeduction = Math.min(75000, this.salaryAndPensionIncome); // Sec 16(ia), new regime
             const taxableIncome = Math.max(0, gross - stdDeduction);
 
-            let tax = 0;
-            if (taxableIncome <= 300000) {
-                tax = 0;
-            } else if (taxableIncome <= 700000) {
-                tax = (taxableIncome - 300000) * 0.05;
-            } else if (taxableIncome <= 1000000) {
-                tax = 20000 + (taxableIncome - 700000) * 0.10;
-            } else if (taxableIncome <= 1200000) {
-                tax = 50000 + (taxableIncome - 1000000) * 0.15;
-            } else if (taxableIncome <= 1500000) {
-                tax = 80000 + (taxableIncome - 1200000) * 0.20;
-            } else {
-                tax = 140000 + (taxableIncome - 1500000) * 0.30;
+            const SLABS = [[400000, 0], [800000, 0.05], [1200000, 0.10], [1600000, 0.15],
+                           [2000000, 0.20], [2400000, 0.25], [Infinity, 0.30]];
+            let tax = 0, floor = 0;
+            for (const [ceil, rate] of SLABS) {
+                if (taxableIncome <= floor) break;
+                tax += (Math.min(taxableIncome, ceil) - floor) * rate;
+                floor = ceil;
             }
 
-            // Rebate: If taxable income ≤ ₹7L, no tax
-            if (taxableIncome <= 700000) tax = 0;
-
-            // Marginal relief if taxable is slightly above ₹7L
-            if (taxableIncome > 700000 && tax > (taxableIncome - 700000)) {
-                tax = taxableIncome - 700000;
-            }
+            const REBATE_LIMIT = 1200000;
+            if (taxableIncome <= REBATE_LIMIT) tax = 0;
+            else if (tax > taxableIncome - REBATE_LIMIT) tax = taxableIncome - REBATE_LIMIT;
 
             // Surcharge
             let surcharge = 0;
@@ -2132,42 +2199,12 @@ document.addEventListener('alpine:init', () => {
             setTimeout(() => window.RFMMotion && window.RFMMotion.startTour(true), 450);
         },
 
-        // Defaults to 'dark', not 'system': the deep green IS the product's
-        // identity, and a first launch that resolves to the light theme because
-        // the phone is in day mode shows a new user the wrong app.
-        theme: (function () {
-            try { return localStorage.getItem('rfm_theme') || 'dark'; } catch (e) { return 'dark'; }
-        })(),
-
-        // Cycles light -> dark. 'system' resolves to whatever the OS currently
-        // says, so the first tap always moves to the opposite of what is on screen
-        // rather than appearing to do nothing.
-        toggleTheme() {
-            const showingDark = this.theme === 'dark'
-                || (this.theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
-            this.theme = showingDark ? 'light' : 'dark';
-            document.documentElement.setAttribute('data-theme', this.theme);
-            try { localStorage.setItem('rfm_theme', this.theme); } catch (e) {}
-            if (window.RFMMotion) window.RFMMotion.Haptics.commit();
-            this.syncNativeChrome();
-            // The chart's colours are read from tokens at draw time, so without
-            // this the line kept the previous theme's brass until something else
-            // happened to redraw it. Reuse makes this an applyOptions, not a
-            // teardown.
-            this.$nextTick(() => this.renderNwChart());
-        },
-
-        // Status-bar icons must invert with the theme. Style.Dark means DARK
-        // BACKGROUND -> light icons, so a light theme needs Style.Light — the
-        // inverse of what the name suggests.
+        // Dark only for now, so the status bar always carries light icons on the dark ground.
         syncNativeChrome() {
             try {
                 const P = window.AppPlugins;
                 if (!P || !P.Capacitor || !P.Capacitor.isNativePlatform()) return;
-                const dark = document.documentElement.getAttribute('data-theme') === 'dark'
-                    || (!document.documentElement.getAttribute('data-theme')
-                        && window.matchMedia('(prefers-color-scheme: dark)').matches);
-                P.StatusBar.setStyle({ style: dark ? P.Style.Dark : P.Style.Light });
+                P.StatusBar.setStyle({ style: P.Style.Dark });
             } catch (e) {}
         },
 
@@ -2176,10 +2213,10 @@ document.addEventListener('alpine:init', () => {
            id still resolves — it simply belongs to a surface now, so existing
            `activePage = 'x'` writes keep working and deep links stay valid. */
         SURFACES: [
-            { id: 'home',      label: 'Overview',  icon: 'account_balance',          root: 'home',        views: ['home'] },
-            { id: 'portfolio', label: 'Holdings',  icon: 'donut_small',              root: 'investments', views: ['investments','holding','maturity','import'] },
-            { id: 'planning',  label: 'Planning',  icon: 'calendar_month',           root: 'cashflow',    views: ['cashflow','income','pension','emergency','goals','networth','tax'] },
-            { id: 'insights',  label: 'Insights',  icon: 'auto_awesome',             root: 'regen',       views: ['regen'] },
+            { id: 'home',      label: 'Overview',  icon: 'grid_view',  root: 'home',        views: ['home', 'settings', 'notifications'] },
+            { id: 'portfolio', label: 'Holdings',  icon: 'folder',     root: 'investments', views: ['investments','holding','maturity','import'] },
+            { id: 'planning',  label: 'Planning',  icon: 'pie_chart',  root: 'cashflow',    views: ['cashflow','income','pension','emergency','goals','networth','tax'] },
+            { id: 'insights',  label: 'Insights',  icon: 'insights',   root: 'regen',       views: ['regen'] },
         ],
 
         get surface() {
@@ -2193,8 +2230,8 @@ document.addEventListener('alpine:init', () => {
                 home: 'Dashboard', investments: 'Holdings', holding: 'Holding detail',
                 maturity: 'Maturities', import: 'Import', cashflow: 'Planning',
                 income: 'Cashflow', pension: 'Pension', emergency: 'Emergency fund',
-                goals: 'Goals', networth: 'Assets & debts', tax: 'Tax',
-                regen: 'Insights',
+                goals: 'Goals', networth: 'Assets and debts', tax: 'Tax',
+                regen: 'Insights', settings: 'Settings', notifications: 'Notifications',
             };
             return labels[this.activePage] || 'Corpus';
         },
@@ -2216,7 +2253,7 @@ document.addEventListener('alpine:init', () => {
             const newest = priced.map(i => new Date(i.lastNavUpdate || i.priceAsOf).getTime())
                                  .sort((a, b) => b - a)[0];
             const t = new Date(newest).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' });
-            return { stale: false, label: close ? `Synced ${t} · ${close} at last close` : `Synced ${t}` };
+            return { stale: false, label: close ? `Synced ${t}, ${close} at last close` : `Synced ${t}` };
         },
 
         /* Things that genuinely need a decision. Deliberately capped and
@@ -2261,7 +2298,9 @@ document.addEventListener('alpine:init', () => {
             const rows = this.HOLDING_CLASSES.map(d => {
                 const items = (this.investments || []).filter(i => this._classOf(i) === d.key);
                 const value = items.reduce((a, i) => a + this.getInvCurrentValue(i), 0);
-                const cost = items.reduce((a, i) => a + this.getInvInvestedCost(i), 0);
+                const known = items.filter(i => this.hasKnownCost(i));
+                const cost = known.reduce((a, i) => a + this.getInvInvestedCost(i), 0);
+                const knownValue = known.reduce((a, i) => a + this.getInvCurrentValue(i), 0);
                 // Name the row after what is in it when everything in it agrees.
                 // A debt side that is nothing but an EPF account is EPF, not
                 // "Deposits"; a mixed one genuinely IS "Deposits", and calling
@@ -2276,7 +2315,7 @@ document.addEventListener('alpine:init', () => {
                     filter: d.key === 'us' ? 'equity' : d.key,
                     page: 'investments',
                     value,
-                    pnlPct: cost > 0 ? ((value - cost) / cost) * 100 : null,
+                    pnlPct: cost > 0 ? ((knownValue - cost) / cost) * 100 : null,
                 };
             });
 
@@ -2298,16 +2337,6 @@ document.addEventListener('alpine:init', () => {
                 const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
                 return v || fallback;
             } catch (e) { return fallback; }
-        },
-
-        get holdingFilters() {
-            // _filterOf, not _classOf: there is no separate US chip, because
-            // the list bands by market instead. Labels come from the class of
-            // the same name, so equity reads "Stocks" and covers both.
-            const present = new Set((this.investments || []).map(i => this._filterOf(i)));
-            return [{ key: 'all', label: 'All' },
-                    ...this.HOLDING_CLASSES.filter(d => present.has(d.key))
-                                           .map(d => ({ key: d.key, label: d.short }))];
         },
 
         /* The Planning hub.
@@ -2379,6 +2408,10 @@ document.addEventListener('alpine:init', () => {
         _classOf(inv) {
             const t = inv.type || '';
             if (inv.currency === 'USD' || t.includes('(US)')) return 'us';
+            // Gold is Holdings' call (_chipOf), so a gold ETF sits under Gold on
+            // every screen and in the AI reading, not Gold here and Stocks there.
+            if (this._chipOf(inv) === 'gold') return 'gold';
+            if (this._chipOf(inv) === 'metals') return 'metals';
             if (t.includes('Stock') || t.includes('ETF')) return 'equity';
             if (t === 'Mutual Fund') return 'mf';
             if (t === 'Gold') return 'gold';
@@ -2403,17 +2436,6 @@ document.addEventListener('alpine:init', () => {
             return ((inv && inv.currency) === 'USD' || t.includes('(US)')) ? 'US' : 'IND';
         },
 
-        /* Which CHIP a holding belongs under. Deliberately coarser than
-           _classOf: Indian and US equities are separate lines on the dashboard,
-           because knowing the split is the point there — but on the Holdings
-           page they are one list of stocks, banded by market. Two chips meant
-           "Stocks" showed half your equities and the other half hid behind a
-           chip most people never scrolled to. */
-        _filterOf(inv) {
-            const c = this._classOf(inv);
-            return c === 'us' ? 'equity' : c;
-        },
-
         /* What KIND of thing this is, in the words a row should use. _classOf
            answers "which bucket"; this answers "which instrument", and on a
            bucket holding only one instrument the second is strictly more
@@ -2431,7 +2453,7 @@ document.addEventListener('alpine:init', () => {
             const m = this._marketBand(inv);
             if (t.includes('Stock')) return `Stocks (${m})`;
             if (t.includes('ETF'))   return `ETFs (${m})`;
-            if (t === 'Mutual Fund') return 'Mutual Funds';
+            if (t === 'Mutual Fund') return 'Mutual funds';
             if (t === 'Bank FD')     return 'Fixed deposits';
             if (t === 'Bond')        return 'Bonds';
             if (t === 'Gold')        return 'Gold';
@@ -2441,46 +2463,35 @@ document.addEventListener('alpine:init', () => {
 
         HOLDING_CLASSES: [
             { key: 'equity',   label: 'Stocks and ETFs',             short: 'Stocks' },
-            { key: 'mf',       label: 'Mutual funds',                short: 'Mutual Funds' },
+            { key: 'mf',       label: 'Mutual funds',                short: 'Mutual funds' },
             { key: 'debt',     label: 'Deposits, bonds and schemes', short: 'Deposits' },
             { key: 'us',       label: 'US equities',                 short: 'Stocks (US)' },
             { key: 'gold',     label: 'Gold',                        short: 'Gold' },
+            { key: 'metals',   label: 'Other metals',                short: 'Metals' },
             { key: 'property', label: 'Property',                    short: 'Property' },
         ],
 
-        get visibleHoldings() {
-            const all = this.investments || [];
-            return this.invFilter === 'all' ? all : all.filter(i => this._filterOf(i) === this.invFilter);
+        // The debit day as it falls in a given month. A SIP set for the 31st debits on
+        // the 30th in September and the 28th or 29th in February; treating every month as
+        // 31 days long meant it was never "due" in those months at all.
+        _sipDayIn(sip, year, month) {
+            const want = Number(sip.dayOfMonth) || 5;
+            return Math.min(want, new Date(year, month + 1, 0).getDate());
         },
 
-        /* The Holdings list, banded by market. Stocks and ETFs carry a brass
-           "IND" / "US" heading; everything else has no market to name and sits
-           in one unheaded group above them, so a deposit is not filed under a
-           country it does not trade in.
-
-           Home market first. The two are listed here in the order they are
-           read, not in the order they were asked for. */
-        get holdingGroups() {
-            const plain = [];
-            const banded = { IND: [], US: [] };
-            for (const inv of this.visibleHoldings) {
-                const m = this._marketBand(inv);
-                if (m) banded[m].push(inv);
-                else plain.push(inv);
-            }
-            const out = [];
-            if (plain.length) out.push({ key: 'plain', heading: '', items: plain });
-            for (const m of ['IND', 'US']) {
-                if (banded[m].length) out.push({ key: m, heading: m, items: banded[m] });
-            }
-            return out;
+        // Whole days from today to the next debit, honouring each month's real length.
+        _sipDaysToNext(sip) {
+            const now = new Date();
+            const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            let y = now.getFullYear(), m = now.getMonth();
+            let next = new Date(y, m, this._sipDayIn(sip, y, m));
+            if (next < today) { m += 1; if (m > 11) { m = 0; y += 1; } next = new Date(y, m, this._sipDayIn(sip, y, m)); }
+            return Math.round((next - today) / 86400000);
         },
 
         sipDaysUntil(sip) {
-            const today = new Date().getDate();
-            const debit = Number(sip.dayOfMonth);
-            if (!debit) return null;
-            return debit >= today ? debit - today : (31 - today) + debit;
+            if (!Number(sip.dayOfMonth)) return null;
+            return this._sipDaysToNext(sip);
         },
 
         get isDetailView() {
@@ -2501,7 +2512,7 @@ document.addEventListener('alpine:init', () => {
 
         isUnitPriced(type) {
             const t = type || '';
-            return t.includes('Stock') || t.includes('ETF') || t === 'Mutual Fund' || t === 'Gold';
+            return t.includes('Stock') || t.includes('ETF') || t === 'Mutual Fund' || t === 'Gold' || t === 'Physical Metal';
         },
         needsTicker(type) {
             const t = type || '';
@@ -2555,8 +2566,9 @@ document.addEventListener('alpine:init', () => {
             // '1M' is not always offered — a fund has no 1D, and clamping to a
             // range the instrument does not have would leave the selector with
             // nothing active.
-            this.detailRange = ranges && ranges.includes('1M') ? '1M' : (ranges ? ranges[0] : null);
+            this.detailRange = this._chipOf(inv) === 'equity' ? '6M' : '1Y';
             this.activePage = 'holding';
+            if (ranges) this.loadDetailData(inv);
         },
 
         /* Label-and-value pairs for the detail view, varying by instrument.
@@ -2645,28 +2657,15 @@ document.addEventListener('alpine:init', () => {
 
         resetNewInvForm(context = null) {
             const ctx = context || this.addHoldingContext || 'all';
-            let defaultType = 'Stock (IND)';
-            if (ctx === 'mf') defaultType = 'Mutual Fund';
-            else if (ctx === 'debt') defaultType = 'Bank FD';
-            else if (ctx === 'gold') defaultType = 'Gold';
-            else if (ctx === 'equity') defaultType = 'Stock (IND)';
-
+            const kind = { equity: 'st', mf: 'mf', debt: 'fd', deposits: 'fd', schemes: 'sc', gold: 'go', bonds: 'bd' }[ctx] || 'st';
             this.newInv = {
-                name: '',
-                type: defaultType,
-                issuer: '',
-                amount: '',
-                rate: '',
-                payout: 'Monthly',
-                rating: '',
-                maturityDate: '',
-                ticker: '',
-                units: '',
-                buyPrice: '',
-                currentPrice: '',
-                schemeCode: '',
-                currency: defaultType.includes('US') ? 'USD' : 'INR'
+                name: '', type: 'Stock', issuer: '', amount: '', rate: '', payout: 'Monthly', rating: '',
+                maturityDate: '', startDate: '', ticker: '', units: '', buyPrice: '', currentPrice: '',
+                schemeCode: '', annualDeposit: '', monthlyDeposit: '', epfKind: 'PPF', schemeId: '', currency: 'INR', purchaseDate: '',
+                metal: 'gold', metalUnit: 'g', purity: 100, metalValuationMode: 'benchmark', manualPrice: ''
             };
+            this.addKind = '';
+            this.setAddKind(kind, true);
 
             // Clear search query & results so draft state never bleeds into other openings
             clearTimeout(this.symbolSearch?._timer);
@@ -2959,6 +2958,14 @@ document.addEventListener('alpine:init', () => {
            Sun Life" is not shadowed by a shorter entry. */
         AMC_TICKERS: [
             ['aditya birla sun life', 'ABSLAMC'],
+            ['bajaj finserv',         'BAJAJFINSV'],
+            ['franklin',              'BEN', 'us'],
+            ['invesco',               'IVZ', 'us'],
+            ['sundaram',              'SUNDARMFIN'],
+            ['bandhan',               'BANDHANBNK'],
+            ['union',                 'UNIONBANK'],
+            ['hsbc',                  'HSBC', 'us'],
+            ['lic ',                  'LICI'],
             ['icici prudential',      'ICICIBANK'],
             ['motilal oswal',         'MOTILALOFS'],
             ['kotak mahindra',        'KOTAKBANK'],
@@ -2975,8 +2982,8 @@ document.addEventListener('alpine:init', () => {
         _amcTicker(schemeName) {
             const n = (schemeName || '').trim().toLowerCase();
             if (!n) return null;
-            for (const [prefix, ticker] of this.AMC_TICKERS) {
-                if (n.startsWith(prefix)) return ticker;
+            for (const [prefix, ticker, host] of this.AMC_TICKERS) {
+                if (n.startsWith(prefix)) return { ticker, host: host || 'nse' };
             }
             return null;
         },
@@ -2994,7 +3001,8 @@ document.addEventListener('alpine:init', () => {
 
             if (type === 'Mutual Fund') {
                 const amc = this._amcTicker(entity.name || entity.schemeName);
-                return amc ? this.logoHost('nse') + amc + '.svg' : null;
+                if (!amc) return null;
+                return this.logoHost(amc.host) + amc.ticker + (amc.host === 'us' ? '.png' : '.svg');
             }
             if (!sym || !/^[A-Z0-9.&-]{1,20}$/.test(sym)) return null;
             if (type.includes('(US)')) return this.logoHost('us') + encodeURIComponent(sym) + '.png';
@@ -3026,6 +3034,12 @@ document.addEventListener('alpine:init', () => {
                 || ((this.cashflow || {}).incomes  || []).some(i => nz(i.amount))
                 || ((this.cashflow || {}).expenses || []).some(e => nz(e.amount))
                 || nz((this.emergency || {}).efCurrent);
+        },
+
+        get hasAnalyzablePosition() {
+            return (this.investments || []).some(inv => this.getInvCurrentValue(inv) > 0)
+                || ['bank', 'cash', 'property', 'otherAsset'].some(key => Number(this.networth?.[key]) > 0)
+                || Number(this.emergency?.efCurrent) > 0;
         },
 
         get optimalRegime() {
@@ -3238,99 +3252,12 @@ document.addEventListener('alpine:init', () => {
             try {
                 const d = new Date(dateStr);
                 if (isNaN(d.getTime())) return dateStr;
-                return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+                return `${d.getDate()} ${this.MONTHS[d.getMonth()]} ${d.getFullYear()}`;
             } catch (e) {
                 return dateStr;
             }
         },
 
-        get notificationsList() {
-            const list = [];
-            const today = new Date();
-
-            // 1. Maturing Investments (within 90 days)
-            (this.investments || []).forEach(inv => {
-                if (inv.maturityDate) {
-                    const mDate = new Date(inv.maturityDate);
-                    const diffDays = Math.ceil((mDate - today) / (1000 * 60 * 60 * 24));
-                    if (diffDays >= 0 && diffDays <= 90) {
-                        list.push({
-                            id: 'mat_' + inv.id,
-                            type: 'warning',
-                            icon: 'calendar_clock',
-                            title: `${inv.name} Maturing Soon`,
-                            detail: `Matures in ${diffDays} days (${this.formatDate(inv.maturityDate)}) — Value: ${this.formatCurrency(this.getInvCurrentValue(inv))}`,
-                            actionPage: 'investments'
-                        });
-                    } else if (diffDays < 0) {
-                        list.push({
-                            id: 'mat_exp_' + inv.id,
-                            type: 'alert',
-                            icon: 'history',
-                            title: `${inv.name} Has Matured`,
-                            detail: `Matured on ${this.formatDate(inv.maturityDate)}. Consider reinvesting.`,
-                            actionPage: 'investments'
-                        });
-                    }
-                }
-            });
-
-            // 2. Concentration Risk Warnings
-            (this.concentrationWarnings || []).forEach((w, idx) => {
-                list.push({
-                    id: 'conc_' + idx,
-                    type: 'alert',
-                    icon: 'warning',
-                    title: 'High Concentration Risk',
-                    detail: `${w.name} accounts for ${w.pct}% of your total portfolio. Consider diversifying.`,
-                    actionPage: 'investments'
-                });
-            });
-
-            // 3. Upcoming SIP Debits (Next 7 days)
-            const currentDay = today.getDate();
-            (this.activeSips || []).forEach(sip => {
-                const debitDay = Number(sip.dayOfMonth) || 5;
-                let daysUntil = debitDay - currentDay;
-                if (daysUntil < 0) daysUntil += 30;
-                if (daysUntil <= 7) {
-                    list.push({
-                        id: 'sip_' + sip.id,
-                        type: 'info',
-                        icon: 'event_repeat',
-                        title: `SIP Debit Approaching: ${sip.name}`,
-                        detail: `₹${sip.monthlyAmount} will be debited on the ${debitDay}th of the month.`,
-                        actionPage: 'investments'
-                    });
-                }
-            });
-
-            // 4. Emergency Fund Gap Alert
-            if (this.efGap > 0) {
-                list.push({
-                    id: 'ef_gap',
-                    type: 'info',
-                    icon: 'shield_locked',
-                    title: 'Emergency Fund Below Target',
-                    detail: `Gap of ${this.formatCurrency(this.efGap)} to reach ${this.emergency.efMonths} months safety buffer.`,
-                    actionPage: 'home'
-                });
-            }
-
-            // Default System Welcome Notification if list is empty
-            if (list.length === 0) {
-                list.push({
-                    id: 'welcome',
-                    type: 'success',
-                    icon: 'check_circle',
-                    title: 'All Systems Optimal',
-                    detail: 'No urgent portfolio actions or upcoming maturity alerts at this time.',
-                    actionPage: 'home'
-                });
-            }
-
-            return list;
-        },
 
         get healthStrengths() {
             const s = [];
@@ -3526,12 +3453,22 @@ document.addEventListener('alpine:init', () => {
         livePriceMsg: '',
 
         addInvestment() {
+            if (this.addKind === 'epf') {
+                this.newInv.name = this.newInv.epfKind === 'EPF' ? 'Employees\u2019 Provident Fund (EPF)' : 'Public Provident Fund (PPF)';
+                this.newInv.payout = 'Cumulative / On Maturity';
+            }
             if (!this.newInv.name) return;
-            const isEquity = ['Stock', 'Stock (IND)', 'Stock (US)', 'Equity', 'Mutual Fund', 'ETF', 'ETF (IND)', 'ETF (US)'].includes(this.newInv.type);
+            if (this.newInv.type === 'Physical Metal' && (!(Number(this.newInv.units) > 0)
+                || !(Number(this.newInv.buyPrice) > 0) || !(Number(this.newInv.purity) > 0)
+                || Number(this.newInv.purity) > 100 || !['g', 'kg'].includes(this.newInv.metalUnit)
+                || (this.newInv.metalValuationMode === 'manual' && !(Number(this.newInv.manualPrice) > 0)))) return;
+            const isEquity = ['Stock', 'Stock (IND)', 'Stock (US)', 'Equity', 'Mutual Fund', 'ETF', 'ETF (IND)', 'ETF (US)', 'Physical Metal'].includes(this.newInv.type);
             const isUS     = ['Stock (US)', 'ETF (US)'].includes(this.newInv.type);
             const units    = Number(this.newInv.units) || 0;
             const buyPrice = Number(this.newInv.buyPrice) || 0;
-            const currentPrice = Number(this.newInv.currentPrice) || buyPrice || 0;
+            const currentPrice = this.newInv.type === 'Physical Metal' && this.newInv.metalValuationMode === 'manual'
+                ? Number(this.newInv.manualPrice) || buyPrice || 0
+                : Number(this.newInv.currentPrice) || buyPrice || 0;
             
             let amount = Number(this.newInv.amount) || 0;
             if (isEquity && units > 0 && (currentPrice > 0 || buyPrice > 0)) {
@@ -3539,8 +3476,9 @@ document.addEventListener('alpine:init', () => {
                 amount = units * (currentPrice || buyPrice) * usdRate;
             }
 
+            const { epfKind, schemeId, ...form } = this.newInv;
             const createdInv = {
-                ...this.newInv,
+                ...form,
                 id:           this.newId('inv'),
                 amount:       amount,
                 units:        units,
@@ -3549,8 +3487,35 @@ document.addEventListener('alpine:init', () => {
                 currentValue: amount,
                 rate:         this.isRateBearing(this.newInv.type) ? (Number(this.newInv.rate) || 0) : 0
             };
+            if (createdInv.type === 'Physical Metal') {
+                createdInv.metalPriceSource = this.newInv.metalValuationMode === 'manual' ? 'user-entered valuation' : 'purchase cost pending benchmark';
+                createdInv.metalQuoteAt = this.newInv.metalValuationMode === 'manual' ? this.localDateKey() : null;
+            }
+
+            // Only an explicit real acquisition date creates an eligible lot.
+            // Imported rows without a date keep unknown history.
+            if (/^\d{4}-\d{2}-\d{2}$/.test(form.purchaseDate || '') && units > 0 && buyPrice > 0 && !isUS) {
+                createdInv.taxLots = [{ id: this.newId('buy'), date: form.purchaseDate, quantity: units,
+                    quantityRemaining: units, cost: Math.round(units * buyPrice * 100) / 100 }];
+            }
 
             this.investments.push(createdInv);
+
+            if (createdInv.type === 'Physical Metal' && createdInv.metalValuationMode === 'benchmark' && ['gold', 'silver'].includes(createdInv.metal)) {
+                this.fetchSinglePrice(createdInv).catch(() => {});
+            }
+
+            if (this.addKind === 'rd' && Number(this.newInv.monthlyDeposit) > 0) {
+                const schedule = (this.sips || []).find(s => s.type === 'RD' && !s.linkedInvestmentId
+                    && s.name.trim().toLowerCase() === createdInv.name.trim().toLowerCase()) || {
+                        id: this.newId('sip'), name: createdInv.name, type: 'RD',
+                        monthlyAmount: Number(this.newInv.monthlyDeposit), dayOfMonth: new Date().getDate(),
+                        status: 'Active', lastExecutedMonth: this.currentMonthKey, confirmedInstalments: []
+                    };
+                schedule.linkedInvestmentId = createdInv.id;
+                createdInv.linkedSipId = schedule.id;
+                if (!(this.sips || []).includes(schedule)) this.sips.push(schedule);
+            }
 
             // Trigger single price fetch asynchronously without blocking UI
             if (createdInv.ticker || createdInv.schemeCode) {
@@ -3569,6 +3534,8 @@ document.addEventListener('alpine:init', () => {
         deleteInvestment(id) {
             if (confirm('Are you sure you want to delete this investment?')) {
                 this.investments = this.investments.filter(i => i.id !== id);
+                this._relinkSips();
+                this.saveData();
             }
         },
 
@@ -3584,25 +3551,36 @@ document.addEventListener('alpine:init', () => {
                 const isUS     = ['Stock (US)', 'ETF (US)'].includes(this.editForm.type);
                 const units    = Number(this.editForm.units) || 0;
                 const buyPrice = Number(this.editForm.buyPrice) || 0;
-                const currentPrice = Number(this.editForm.currentPrice) || buyPrice || 0;
-                
-                let amount = Number(this.editForm.amount) || 0;
-                if (isEquity && units > 0 && (currentPrice > 0 || buyPrice > 0)) {
-                    const usdRate = isUS ? this.fxUsdInr : 1;
-                    amount = units * (currentPrice || buyPrice) * usdRate;
-                }
+                // Blank means "use the market price", as the field's hint says: the
+                // last synced price, not the average paid.
+                const prev = this.investments[idx];
+                const currentPrice = Number(this.editForm.currentPrice) || Number(prev.currentPrice) || Number(prev.nav) || buyPrice || 0;
 
-                this.editForm.amount       = amount;
                 this.editForm.units        = units;
                 this.editForm.buyPrice     = buyPrice;
-                this.editForm.currentPrice = currentPrice || buyPrice;
-                this.editForm.currentValue = amount;
+                this.editForm.currentPrice = currentPrice;
+                if (isEquity && units > 0 && currentPrice > 0) {
+                    this.editForm.currentValue = units * currentPrice * (isUS ? this.fxUsdInr : 1);
+                } else if (this.editForm.type === 'Recurring Deposit') {
+                    this.editForm.currentValue = Number(this.editForm.currentValue) || Number(this.editForm.amount) || 0;
+                    this.editForm.balanceVerifiedAt = this.localDateKey();
+                } else if (!(units > 0)) {
+                    this.editForm.currentValue = Number(this.editForm.amount) || 0;
+                }
                 this.editForm.rate         = this.isRateBearing(this.editForm.type) ? (Number(this.editForm.rate) || 0) : 0;
+                if (this.editForm.type === 'Physical Metal') {
+                    this.editForm.currentValue = Math.round(units * currentPrice * 100) / 100;
+                    if (this.editForm.metalValuationMode === 'manual') {
+                        this.editForm.metalPriceSource = 'user-entered valuation';
+                        this.editForm.metalQuoteAt = this.localDateKey();
+                    }
+                }
 
                 this.investments[idx] = { ...this.editForm };
                 this.investments = [...this.investments];
 
-                if (this.editForm.ticker || this.editForm.schemeCode) {
+                if (this.editForm.ticker || this.editForm.schemeCode
+                    || (this.editForm.type === 'Physical Metal' && this.editForm.metalValuationMode === 'benchmark')) {
                     this.fetchSinglePrice(this.investments[idx]);
                 }
             }
@@ -3627,7 +3605,8 @@ document.addEventListener('alpine:init', () => {
         openAddLot(inv) {
             if (!inv) return;
             this.addingLot = inv;
-            this.lotForm = { amount: '', timing: 'market' };
+            this.lotForm = { amount: '', timing: inv.type === 'Physical Metal' ? 'manual' : 'market',
+                units: '', date: this.localDateKey() };
             this.lotError = '';
             if (window.RFMMotion?.Haptics) window.RFMMotion.Haptics.tap();
         },
@@ -3660,6 +3639,15 @@ document.addEventListener('alpine:init', () => {
             const qty = Number(inv.units) || 0;
             const avg = Number(inv.buyPrice) || 0;
 
+            if (inv.type === 'Physical Metal') {
+                const units = Number(this.lotForm.units);
+                if (!(units > 0) || !/^\d{4}-\d{2}-\d{2}$/.test(this.lotForm.date || '') || this.lotForm.date > this.localDateKey()) return null;
+                const price = amount / units;
+                const newQty = qty + units;
+                return { pending: false, amount, price, units, qty, avg, newQty,
+                    newAvg: ((qty * avg) + amount) / newQty, priceAsOf: this.lotForm.date };
+            }
+
             if (this.lotForm.timing === 'offhours') {
                 return { pending: true, amount, qty, avg };
             }
@@ -3678,7 +3666,7 @@ document.addEventListener('alpine:init', () => {
         /* Folds a settled purchase into the position. Idempotent by lot id:
            a sync that runs twice, or overlaps itself, must not buy the same
            units twice. */
-        _applyLot(inv, amount, price, lotId) {
+        _applyLot(inv, amount, price, lotId, purchaseDate = null) {
             if (!inv || !(amount > 0) || !(price > 0)) return false;
             inv.settledLots = Array.isArray(inv.settledLots) ? inv.settledLots : [];
             if (lotId && inv.settledLots.includes(lotId)) return false;
@@ -3689,11 +3677,16 @@ document.addEventListener('alpine:init', () => {
             const newQty = qty + units;
 
             inv.units = newQty;
-            inv.buyPrice = newQty > 0 ? ((qty * avg) + amount) / newQty : price;
+            // Units already held at an unknown average keep the average unknown:
+            // averaging them in at 0 would call the whole holding's value profit.
+            if (qty === 0 || avg > 0) inv.buyPrice = newQty > 0 ? ((qty * avg) + amount) / newQty : price;
             const live = Number(inv.currentPrice) || price;
             inv.currentValue = Math.round(newQty * live * (this.lotCurrency(inv) === 'USD' ? this.fxUsdInr : 1) * 100) / 100;
-            inv.amount = inv.currentValue;
             if (lotId) inv.settledLots.push(lotId);
+            if (purchaseDate && /^\d{4}-\d{2}-\d{2}$/.test(purchaseDate) && this.lotCurrency(inv) === 'INR') {
+                inv.taxLots = [...(inv.taxLots || []), { id: lotId || this.newId('buy'), date: purchaseDate,
+                    quantity: units, quantityRemaining: units, cost: amount }];
+            }
             return true;
         },
 
@@ -3717,7 +3710,8 @@ document.addEventListener('alpine:init', () => {
                     placedAt: new Date().toISOString(),
                     basis: 'open',
                 });
-            } else if (!this._applyLot(row, p.amount, p.price, null)) {
+            } else if (!this._applyLot(row, p.amount, p.price, null,
+                row.type === 'Physical Metal' ? this.lotForm.date : this.localDateKey())) {
                 this.lotError = 'Could not work out a price for that.';
                 return;
             }
@@ -3786,7 +3780,7 @@ document.addEventListener('alpine:init', () => {
                                                  && Number.isFinite(opens[n]) && opens[n] > 0);
                 if (i < 0) { keep.push(lot); continue; }   // the session has not opened yet
 
-                if (this._applyLot(inv, lot.amount, opens[i], lot.id)) settled++;
+                if (this._applyLot(inv, lot.amount, opens[i], lot.id, this.localDateKey(new Date(times[i] * 1000)))) settled++;
             }
 
             inv.pendingLots = keep;
@@ -3816,7 +3810,7 @@ document.addEventListener('alpine:init', () => {
             const lots = (inv && inv.pendingLots) || [];
             if (!lots.length) return '';
             const stuck = lots.filter(l => l.unresolved).length;
-            if (stuck) return `${stuck} purchase${stuck > 1 ? 's' : ''} could not be priced — add ${stuck > 1 ? 'them' : 'it'} by hand`;
+            if (stuck) return `${stuck} purchase${stuck > 1 ? 's' : ''} could not be priced. Add ${stuck > 1 ? 'them' : 'it'} by hand`;
             return `${lots.length} purchase${lots.length > 1 ? 's' : ''} waiting for the next market open`;
         },
 
@@ -3937,25 +3931,98 @@ document.addEventListener('alpine:init', () => {
         handleImportFile(event) {
             this.isSelectingFile = false;
             const file = event.target.files?.[0];
-            if (file && file.type === 'application/pdf') {
+            if (file && (/\.(pdf|csv)$/i.test(file.name) || ['application/pdf', 'text/csv'].includes(file.type))) {
                 this.importFile = file;
                 this.importError = '';
+                this.importPwError = false;
                 this.importResults = null;
+                this.bankImport = null;
                 this.importStats = null;
                 this.importState = 'idle';
+                this.readImportMeta(file);
+            } else if (file) {
+                this.importError = 'Choose a PDF portfolio statement or a bank CSV export.';
             }
+            if (event.target) event.target.value = '';
+        },
+
+        // What the file is, before any password is asked for (M13): its size, and
+        // whether it is encrypted. An encrypted PDF declares /Encrypt in its
+        // trailer, which sits in the last few kilobytes of the file.
+        importMeta: null,
+        importPwError: false,
+        importShowPw: false,
+
+        async readImportMeta(file) {
+            const kb = Math.max(1, Math.round(file.size / 1024));
+            const size = kb >= 1024 ? `${(kb / 1024).toFixed(1)} MB` : `${kb} KB`;
+            if (/\.csv$/i.test(file.name)) { this.importMeta = { size, encrypted: false }; return; }
+            this.importMeta = { size, encrypted: null };
+            try {
+                const tail = await file.slice(Math.max(0, file.size - 65536)).text();
+                const head = /\/Encrypt\b/.test(tail) ? true : /\/Encrypt\b/.test(await file.slice(0, 65536).text());
+                if (this.importFile === file) this.importMeta = { size, encrypted: head };
+            } catch (e) {}
+        },
+
+        get importMode() {
+            if (this.bankImport?.entries?.length) return 'ibank';
+            if (this.statementDiff?.active && (this.statementDiff.matched || []).length) return 'imrv';
+            if (this.importResults?.investments?.length) return 'ihf';
+            return this.importPwError ? 'iw' : 'im';
+        },
+
+        get importGroups() {
+            const list = this.importResults?.investments || [];
+            const label = t => /mutual/i.test(t || '') ? 'Mutual funds' : /stock|equity|etf/i.test(t || '') ? 'Stocks'
+                             : /bond/i.test(t || '') ? 'Bonds' : /gold/i.test(t || '') ? 'Gold' : 'Other holdings';
+            const groups = [];
+            list.forEach((r, i) => {
+                const g = label(r.type);
+                let hit = groups.find(x => x.label === g);
+                if (!hit) { hit = { label: g, rows: [] }; groups.push(hit); }
+                hit.rows.push({ r, i });
+            });
+            return groups;
+        },
+
+        get importAllOn() {
+            const n = (this.importResults?.investments || []).length;
+            return n > 0 && this.countSelectedImports() === n;
+        },
+
+        importRowLine(r) {
+            const u = Number(r.units) || 0;
+            if (!u) return r.type || '';
+            const shares = /stock|equity/i.test(r.type || '') && !/etf/i.test(r.type || '');
+            return shares ? `${u.toLocaleString('en-IN')} share${u === 1 ? '' : 's'}`
+                          : `${u.toLocaleString('en-IN', { minimumFractionDigits: 3, maximumFractionDigits: 3 })} units`;
+        },
+
+        importRowValue(r) {
+            return this.formatCurrency(Number(r.currentValue) || (Number(r.units) * (Number(r.nav) || Number(r.currentPrice) || 0)) || Number(r.amount) || 0);
+        },
+
+        get importSource() {
+            const d = this.statementDiff || {};
+            const broker = d.broker || (this.importResults?.type || '').replace('_', ' ') || 'your';
+            const when = d.asOfDate ? `, as of ${this.formatDate(d.asOfDate)}` : '';
+            return { broker, when };
         },
 
         handleImportDrop(event) {
             const file = event.dataTransfer.files[0];
-            if (file && file.type === 'application/pdf') {
+            if (file && /\.(pdf|csv)$/i.test(file.name)) {
                 this.importFile = file;
                 this.importError = '';
+                this.importPwError = false;
                 this.importResults = null;
+                this.bankImport = null;
                 this.importStats = null;
                 this.importState = 'idle';
+                this.readImportMeta(file);
             } else {
-                this.importError = 'Please drop a PDF file.';
+                this.importError = 'Please drop a PDF or CSV file.';
             }
         },
 
@@ -3964,11 +4031,22 @@ document.addEventListener('alpine:init', () => {
 
             this.importState = 'loading';
             this.importError = '';
+            this.importPwError = false;
             this.importResults = null;
+            this.bankImport = null;
             this.importStats = null;
             this.statementDiff.active = false;
 
             try {
+                if (/\.csv$/i.test(this.importFile.name)) {
+                    if (this.importFile.size > 2_000_000) throw new Error('This CSV is too large. Export a shorter date range.');
+                    const result = window.CorpusBank.parseCsv(await this.importFile.text(), this.bankImportAccount);
+                    this.bankImport = result;
+                    this.bankImportSelections = {};
+                    result.entries.forEach((_, i) => { this.bankImportSelections[i] = true; });
+                    this.importState = 'bank_review';
+                    return;
+                }
                 const text = await this.extractPdfText(this.importFile, this.importPassword);
 
                 if (!text || text.trim().length < 50) {
@@ -3979,6 +4057,12 @@ document.addEventListener('alpine:init', () => {
 
                 // Phase 5 regex-based parser
                 const result = window.RFMParser.parseStatement(text);
+
+                if (result.type === 'BANK_STATEMENT') {
+                    this.importError = 'Bank PDF transaction layouts vary. Export a CSV transaction statement from your bank and import that instead; no balance was added as a deposit.';
+                    this.importState = 'error';
+                    return;
+                }
 
                 if (result.type === 'UNKNOWN' || result.investments.length === 0) {
                     // Statement import is intentionally deterministic. The managed
@@ -4006,12 +4090,59 @@ document.addEventListener('alpine:init', () => {
             } catch (err) {
                 console.error('Parse error:', err);
                 if (err.name === 'PasswordException' || (err.message && err.message.includes('password'))) {
-                    this.importError = 'Incorrect password. CAS files are usually encrypted with your PAN number (e.g., ABCDE1234F).';
+                    this.importPwError = true;
+                    this.importError = 'That password did not open the file. It is usually your PAN in capitals, for example ABCDE1234F.';
                 } else {
-                    this.importError = 'Failed to parse PDF: ' + (err.message || 'Unknown error');
+                    this.importError = 'Could not read this statement: ' + (err.message || 'Unknown error');
                 }
                 this.importState = 'error';
             }
+        },
+
+        get bankMonthRows() {
+            const month = this.localDateKey(new Date()).slice(0, 7);
+            return (this.bankTransactions || []).filter(t => t.date?.startsWith(month));
+        },
+        get bankMonthSpend() {
+            return this.bankMonthRows.filter(t => t.direction === 'debit' && t.category === 'spend')
+                .reduce((total, t) => total + t.amount, 0);
+        },
+        get bankMonthReviewCount() {
+            return this.bankMonthRows.filter(t => t.direction === 'debit' && t.category === 'review').length;
+        },
+        get bankActivityDays() {
+            const groups = [];
+            for (const transaction of this.bankMonthRows) {
+                let group = groups.find(g => g.date === transaction.date);
+                if (!group) { group = { date: transaction.date, rows: [], spent: 0 }; groups.push(group); }
+                group.rows.push(transaction);
+                if (transaction.direction === 'debit' && transaction.category === 'spend') group.spent += transaction.amount;
+            }
+            return groups.sort((a, b) => b.date.localeCompare(a.date));
+        },
+        setBankCategory(id, category) {
+            if (!['spend', 'transfer', 'review'].includes(category)) return;
+            const row = this.bankTransactions.find(t => t.id === id);
+            if (!row || row.direction !== 'debit') return;
+            row.category = category;
+            this.bankTransactions = [...this.bankTransactions];
+            this.saveData();
+        },
+        saveBankImport() {
+            const chosen = (this.bankImport?.entries || []).filter((_, i) => this.bankImportSelections[i] !== false);
+            if (!chosen.length) return;
+            const result = window.CorpusBank.merge(this.bankTransactions, chosen);
+            if (result.entries.length > 3000) {
+                this.importError = 'Corpus can sync up to 3,000 imported bank transactions for now. Export a shorter period; nothing was saved.';
+                return;
+            }
+            this.bankTransactions = result.entries;
+            this.bankImport = null;
+            this.importFile = null;
+            this.importState = 'done';
+            this.saveData();
+            this.showSnack(`${result.added} transactions added · ${result.duplicates} already recorded`);
+            this.activePage = 'income';
         },
 
         async getPdfWorkerUrl() {
@@ -4081,20 +4212,7 @@ document.addEventListener('alpine:init', () => {
         },
 
         findDuplicate(newItem) {
-            // 1. Match by ISIN (strongest signal)
-            if (newItem.isin) {
-                const match = this.investments.find(inv => inv.isin === newItem.isin);
-                if (match) return match;
-            }
-            // 2. Fuzzy match by name + type
-            const newName = (newItem.name || '').toLowerCase().trim();
-            if (newName.length > 3) {
-                return this.investments.find(inv => {
-                    const existName = (inv.name || '').toLowerCase().trim();
-                    return existName === newName && inv.type === newItem.type;
-                });
-            }
-            return null;
+            return this._findStatementMatch(newItem);
         },
 
         // ════════════════════════════════════════════════════════════
@@ -4124,16 +4242,6 @@ document.addEventListener('alpine:init', () => {
                 }
             });
 
-            // Normalization helper for fuzzy name matching
-            const simplify = (str) => {
-                return (str || '')
-                    .toLowerCase()
-                    .replace(/\b(direct|regular|plan|growth|dividend|idcw|fund|mutual|equity|index|cap|ltd|limited|shares?|amc)\b/gi, '')
-                    .replace(/[^a-z0-9]/g, ' ')
-                    .replace(/\s+/g, ' ')
-                    .trim();
-            };
-
             const matched = [];
             const newItems = [];
             const matchedExistingIds = new Set();
@@ -4141,37 +4249,15 @@ document.addEventListener('alpine:init', () => {
             const incomingHoldings = statementResult.investments || [];
 
             incomingHoldings.forEach(inc => {
-                const incSimp = simplify(inc.name);
-                const incFolio = (inc.folioNumber || '').trim();
-                const incIsin = (inc.isin || '').trim();
-
-                let match = null;
-
-                // 1. Folio match (highest accuracy for MF)
-                if (incFolio && incFolio.length > 4) {
-                    match = appCategoryHoldings.find(ex => (ex.folioNumber || '').trim() === incFolio);
-                }
-
-                // 2. ISIN match (highest accuracy for Stocks)
-                if (!match && incIsin) {
-                    match = appCategoryHoldings.find(ex => (ex.isin || '').trim() === incIsin);
-                }
-
-                // 3. Fuzzy name match
-                if (!match && incSimp.length > 3) {
-                    match = appCategoryHoldings.find(ex => {
-                        const exSimp = simplify(ex.name);
-                        if (!exSimp) return false;
-                        return exSimp === incSimp || exSimp.includes(incSimp) || incSimp.includes(exSimp);
-                    });
-                }
+                const match = this._findStatementMatch(inc, matchedExistingIds, appCategoryHoldings);
 
                 if (match) {
                     matchedExistingIds.add(match.id);
                     const oldUnits = Number(match.units) || 0;
                     const newUnits = Number(inc.units) || 0;
                     const oldCost = Number(match.amount) || 0;
-                    const newCost = Number(inc.amount) || oldCost;
+                    // Only a statement that states what was paid changes the cost.
+                    const newCost = Number(inc.amount) > 0 ? Number(inc.amount) : oldCost;
                     const oldVal = Number(match.currentValue) || (oldUnits * (Number(match.currentPrice) || Number(match.nav) || 0)) || oldCost;
                     const newVal = Number(inc.currentValue) || (newUnits * (Number(inc.nav) || Number(inc.currentPrice) || 0)) || newCost;
                     const oldNav = Number(match.currentPrice) || Number(match.nav) || 0;
@@ -4204,7 +4290,7 @@ document.addEventListener('alpine:init', () => {
                         issuer: inc.issuer || '',
                         folioNumber: inc.folioNumber || '',
                         units: Number(inc.units) || 0,
-                        amount: Number(inc.amount) || Number(inc.currentValue) || 0,
+                        amount: Number(inc.amount) || 0,
                         currentValue: Number(inc.currentValue) || (Number(inc.units) * Number(inc.nav)) || 0,
                         nav: Number(inc.nav) || Number(inc.currentPrice) || 0,
                         incomingHolding: inc
@@ -4214,7 +4300,7 @@ document.addEventListener('alpine:init', () => {
 
             // Omitted holdings in app for this category
             const omitted = appCategoryHoldings
-                .filter(ex => !matchedExistingIds.has(ex.id))
+                .filter(ex => !matchedExistingIds.has(ex.id) && !this._isUsdHolding(ex))
                 .map(ex => ({
                     id: ex.id,
                     name: ex.name,
@@ -4265,10 +4351,13 @@ document.addEventListener('alpine:init', () => {
                 const idx = this.investments.findIndex(i => i.id === m.existingId);
                 if (idx !== -1) {
                     const inc = m.incomingHolding;
+                    const stated = Number(inc.amount) > 0 ? Number(inc.amount) : 0;
                     this.investments[idx] = {
                         ...this.investments[idx],
                         units:        m.newUnits,
-                        amount:       m.newInvested || this.investments[idx].amount,
+                        amount:       stated || this.investments[idx].amount,
+                        buyPrice:     stated && m.newUnits ? stated / m.newUnits : this.investments[idx].buyPrice,
+                        isin:         inc.isin || this.investments[idx].isin,
                         nav:          m.newNav || this.investments[idx].nav,
                         currentPrice: m.newNav || this.investments[idx].currentPrice,
                         currentValue: m.newValue,
@@ -4283,7 +4372,7 @@ document.addEventListener('alpine:init', () => {
 
             // 2. Add new items
             this.statementDiff.newItems.forEach(n => {
-                this.investments.push(n.incomingHolding);
+                this.investments.push({ ...this.migrateHolding(n.incomingHolding), id: this.newId('inv') });
                 addedCount++;
             });
 
@@ -4317,15 +4406,19 @@ document.addEventListener('alpine:init', () => {
                 if (cat === 'Mutual Fund') {
                     return !(inv.type === 'Mutual Fund' || (inv.type || '').toLowerCase().includes('mutual'));
                 } else {
-                    return !(['Stock', 'Stock (IND)', 'Stock (US)', 'ETF', 'ETF (IND)', 'ETF (US)'].includes(inv.type) ||
+                    // An Indian demat statement never lists US shares; replacing the
+                    // "stock" category must not delete them.
+                    if (this._isUsdHolding(inv)) return true;
+                    return !(['Stock', 'Stock (IND)', 'ETF', 'ETF (IND)'].includes(inv.type) ||
                              (inv.type || '').toLowerCase().includes('stock'));
                 }
             });
 
             // Add all incoming holdings
             (this.importResults?.investments || []).forEach(inc => {
-                this.investments.push(inc);
+                this.investments.push({ ...this.migrateHolding(inc), id: this.newId('inv') });
             });
+            this._relinkSips();
 
             this.investments = [...this.investments];
             this.saveData({ rescheduleAlerts: true });
@@ -4371,6 +4464,8 @@ document.addEventListener('alpine:init', () => {
             this.statementDiff.active = false;
             this.importState = 'idle';
             this.importFile = null;
+            this.importMeta = null;
+            this.importPwError = false;
             this.importResults = null;
         },
 
@@ -4401,6 +4496,7 @@ document.addEventListener('alpine:init', () => {
             let imported = 0;
             let duplicates = 0;
             let skipped = 0;
+            const usedIds = new Set();
 
             this.importResults.investments.forEach((inv, idx) => {
                 // Skip unselected
@@ -4409,7 +4505,8 @@ document.addEventListener('alpine:init', () => {
                     return;
                 }
 
-                const existing = this.findDuplicate(inv);
+                const existing = this._findStatementMatch(inv, usedIds);
+                if (existing) usedIds.add(existing.id);
 
                 if (existing) {
                     if (this.importDuplicateMode === 'skip') {
@@ -4421,9 +4518,11 @@ document.addEventListener('alpine:init', () => {
                     if (existIdx !== -1) {
                         this.investments[existIdx] = {
                             ...this.investments[existIdx],
-                            amount:       inv.amount,
+                            amount:       Number(inv.amount) > 0 ? inv.amount : this.investments[existIdx].amount,
                             units:        inv.units,
-                            nav:          inv.nav,
+                            buyPrice:     inv.buyPrice || this.investments[existIdx].buyPrice,
+                            nav:          inv.nav || this.investments[existIdx].nav,
+                            currentPrice: inv.nav || this.investments[existIdx].currentPrice,
                             currentValue: inv.currentValue,
                             isin:         inv.isin || this.investments[existIdx].isin,
                             importSource: inv.importSource,
@@ -4434,7 +4533,7 @@ document.addEventListener('alpine:init', () => {
                     }
                 } else {
                     // New entry
-                    this.investments.push(inv);
+                    this.investments.push({ ...this.migrateHolding(inv), id: this.newId('inv') });
                     imported++;
                 }
             });
@@ -4542,7 +4641,9 @@ document.addEventListener('alpine:init', () => {
                 if (wantIncome  && !has(INCOME, n))  return false;
                 return true;
             });
-            if (!pool.length) pool = rows;
+            if (!pool.length) {
+                return { code: null, message: `No AMFI scheme matches "${name}" with that plan and option. Rename the holding to match its scheme exactly.` };
+            }
 
             const norm = t => String(t || '').toLowerCase()
                 .replace(/[^a-z0-9]+/g, ' ')
@@ -4613,6 +4714,32 @@ document.addEventListener('alpine:init', () => {
         // Fetch one instrument. A mutual fund must use an explicitly chosen AMFI scheme.
         async fetchSinglePrice(inv) {
             if (!inv) return null;
+
+            if (inv.type === 'Physical Metal') {
+                if (inv.metalValuationMode === 'manual' || !['gold', 'silver'].includes(inv.metal)) return null;
+                if (this.fxIsStale) await this.fetchUsdInrRate();
+                if (this.fxIsStale) throw new Error('A verified USD/INR rate is required for the metal benchmark');
+                const symbol = inv.metal === 'gold' ? 'XAU' : 'XAG';
+                const quote = await this.httpGetJson(`https://api.gold-api.com/price/${symbol}`, 7000);
+                const usdPerOunce = Number(quote.price);
+                const at = Date.parse(quote.updatedAt || '');
+                if (!(usdPerOunce > 0) || !Number.isFinite(at) || at > Date.now() + 300000 || Date.now() - at > 7 * 86400000)
+                    throw new Error('Metal benchmark is unavailable or stale');
+                const gramsPerUnit = inv.metalUnit === 'kg' ? 1000 : 1;
+                const purity = Number(inv.purity);
+                if (!(purity > 0 && purity <= 100)) throw new Error('Metal purity needs checking');
+                // Gold API quotes USD per troy ounce. This is only an indicative
+                // spot benchmark; local retail spread and workmanship are omitted.
+                const inrPerUnit = usdPerOunce / 31.1034768 * this.fxUsdInr * gramsPerUnit * purity / 100;
+                inv.currentPrice = Math.round(inrPerUnit * 100) / 100;
+                inv.currentValue = Math.round(Number(inv.units || 0) * inrPerUnit * 100) / 100;
+                inv.metalQuoteAt = quote.updatedAt;
+                inv.metalPriceSource = 'Gold API spot · USD/INR conversion';
+                inv.metalFxAt = this.usdInrAsOf || null;
+                this.investments = [...this.investments];
+                this.queueNwSnapshot('metal-quote');
+                return inv.currentPrice;
+            }
 
             if (inv.type === 'Mutual Fund' || inv.schemeCode) {
                 // A fund with no scheme code used to dead-end here: "needs an AMFI scheme
@@ -4766,15 +4893,15 @@ document.addEventListener('alpine:init', () => {
             // made a correct number look broken.
             if (inv.priceIsClose) {
                 if (inv.priceSource === 'AMFI') {
-                    return { state: 'close', label: `NAV ${this.formatDate(quoteAt)} · end of day` };
+                    return { state: 'close', label: `NAV of ${this.formatDate(quoteAt)}, end of day` };
                 }
-                return { state: 'close', label: `last close · ${this.formatDate(quoteAt)}` };
+                return { state: 'close', label: `Last close, ${this.formatDate(quoteAt)}` };
             }
             // Six hours, not twenty-four: an Indian close at 15:30 is still the
             // last close at 21:00 the same evening, and a quote minutes old
             // during the session is genuinely live.
             if (Date.now() - new Date(quoteAt).getTime() > 6 * 60 * 60 * 1000) {
-                return { state: 'close', label: `last close · ${this.formatDate(quoteAt)}` };
+                return { state: 'close', label: `Last close, ${this.formatDate(quoteAt)}` };
             }
             return { state: 'live', label: `${inv.priceSource || 'live'}` };
         },
@@ -4783,7 +4910,8 @@ document.addEventListener('alpine:init', () => {
         async fetchAllPrices() {
             if (this.navFetchState === 'fetching') return;
 
-            const holdings = (this.investments || []).filter(inv => inv.schemeCode || inv.ticker || inv.type === 'Mutual Fund');
+            const holdings = (this.investments || []).filter(inv => inv.schemeCode || inv.ticker || inv.type === 'Mutual Fund'
+                || (inv.type === 'Physical Metal' && inv.metalValuationMode === 'benchmark' && ['gold', 'silver'].includes(inv.metal)));
             if (!holdings.length) {
                 this.navFetchState = 'done';
                 this.navFetchProgress = { completed: 0, total: 0, updated: 0, failed: 0 };
@@ -4873,7 +5001,7 @@ document.addEventListener('alpine:init', () => {
 
         async scheduleMaturityAlerts() {
             // Only run on native Android/iOS when explicitly opted in
-            if (localStorage.getItem('corpus_alerts_enabled') !== 'true') {
+            if (localStorage.getItem('corpus_alerts_enabled') === 'false') {
                 this.alertsState = 'disabled';
                 return;
             }
@@ -4911,53 +5039,50 @@ document.addEventListener('alpine:init', () => {
                 const alerts = [];
                 const now = new Date();
 
-                // 3. Maturity Alerts — fire 7 days before each investment's maturityDate
+                // 3. Maturity reminders: 30 days before, 7 days before, and on the day, at 9 am.
+                const at9 = (d, offset) => { const t = new Date(d); t.setDate(t.getDate() - offset); t.setHours(9, 0, 0, 0); return t; };
                 (this.investments || []).forEach((inv, i) => {
                     if (!inv.maturityDate) return;
-                    const matDate = new Date(inv.maturityDate);
-                    const alertAt = new Date(matDate);
-                    alertAt.setDate(alertAt.getDate() - 7);
-                    alertAt.setHours(9, 0, 0, 0); // 9:00 AM
-
-                    if (alertAt > now) {
+                    const mat = new Date(inv.maturityDate);
+                    const value = this.formatCurrency(this.getInvCurrentValue(inv) || inv.amount);
+                    [[30, 12000, 'Matures in 30 days'], [7, 10000, 'Matures in 7 days'], [0, 11000, 'Matures today']].forEach(([days, base, title]) => {
+                        const when = at9(mat, days);
+                        if (when <= now) return;
                         alerts.push({
-                            id:    10000 + i,
-                            title: '📅 Maturity Alert — RFM',
-                            body:  `${inv.name} of ${this.formatCurrency(inv.amount)} matures in 7 days (${this.formatDate(inv.maturityDate)}). Plan reinvestment now.`,
-                            schedule: { at: alertAt },
-                            sound:    'default',
-                            smallIcon: 'ic_stat_notification',
-                            channelId: 'rfm_maturity'
+                            id: base + i,
+                            title: `${inv.name}: ${title.toLowerCase()}`,
+                            body: days
+                                ? `${value} pays out on ${this.formatDate(inv.maturityDate)}. Decide where it goes, or it may renew at the rate on that day.`
+                                : `${value} pays out today. Tell ${inv.issuer || 'the bank'} where it should go.`,
+                            schedule: { at: when }, sound: 'default', smallIcon: 'ic_stat_notification', channelId: 'rfm_maturity',
                         });
-                    }
-
-                    // Also schedule a same-day reminder at 9 AM on maturity date
-                    const sameDayAlert = new Date(matDate);
-                    sameDayAlert.setHours(9, 0, 0, 0);
-                    if (sameDayAlert > now) {
-                        alerts.push({
-                            id:    11000 + i,
-                            title: '🔔 Maturity Today — RFM',
-                            body:  `${inv.name} (${this.formatCurrency(inv.amount)}) matures TODAY. Contact ${inv.issuer || 'your bank'} to reinvest.`,
-                            schedule: { at: sameDayAlert },
-                            sound:    'default',
-                            smallIcon: 'ic_stat_notification',
-                            channelId: 'rfm_maturity'
-                        });
-                    }
+                    });
                 });
+
+                // 3b. PPF: a yearly nudge before 31 March, when a PPF account exists (M7).
+                if ((this.investments || []).some(inv => /\bppf\b|public provident/i.test(inv.name || ''))) {
+                    const y = now.getMonth() > 2 || (now.getMonth() === 2 && now.getDate() > 20) ? now.getFullYear() + 1 : now.getFullYear();
+                    alerts.push({
+                        id: 13000, title: 'PPF deposit due before 31 Mar',
+                        body: 'Deposit at least ₹500 this financial year to keep the account active.',
+                        schedule: { at: new Date(y, 2, 20, 9, 0, 0, 0) }, sound: 'default', smallIcon: 'ic_stat_notification', channelId: 'rfm_maturity',
+                    });
+                }
 
                 // 4. SIP Reminders — upcoming 1 debit reminder per active SIP
                 (this.activeSips || []).forEach((sip, i) => {
                     const debitDay = Number(sip.dayOfMonth) || 5;
-                    const reminderAt = new Date(now.getFullYear(), now.getMonth(), debitDay - 1, 9, 0, 0, 0);
+                    const dayIn = (y, m) => this._sipDayIn(sip, y, m);
+                    let reminderAt = new Date(now.getFullYear(), now.getMonth(), dayIn(now.getFullYear(), now.getMonth()) - 1, 9, 0, 0, 0);
                     if (reminderAt <= now) {
-                        reminderAt.setMonth(reminderAt.getMonth() + 1);
+                        const ny = now.getMonth() === 11 ? now.getFullYear() + 1 : now.getFullYear();
+                        const nm = (now.getMonth() + 1) % 12;
+                        reminderAt = new Date(ny, nm, dayIn(ny, nm) - 1, 9, 0, 0, 0);
                     }
                     alerts.push({
                         id:    20000 + (i * 100),
-                        title: '💰 SIP Reminder — RFM',
-                        body:  `${this.formatCurrency(sip.monthlyAmount)} for "${sip.name}" debits tomorrow (${debitDay}th). Ensure sufficient balance.`,
+                        title: `${sip.name} debits tomorrow`,
+                        body:  `${this.formatCurrency(sip.monthlyAmount)} on the ${this.ordinal(debitDay)}. Keep the balance in your account.`,
                         schedule: { at: reminderAt },
                         sound:    'default',
                         smallIcon: 'ic_stat_notification',
@@ -5002,82 +5127,218 @@ document.addEventListener('alpine:init', () => {
         PROFILE_RETRY_MS: 7 * 24 * 60 * 60 * 1000,
 
         get shouldAskProfile() {
-            if (this.profile.completedAt) return false;
+            // A person who answered the first, one-answer version is asked once
+            // more, on the new per-asset screens only, already filled in.
+            if (this.profile.completedAt) {
+                if (this.profile.version === 2) return false;
+                const later = Date.parse(this.profile.catchUpSkippedAt || '');
+                return !Number.isFinite(later) || Date.now() - later >= this.PROFILE_RETRY_MS;
+            }
             const skipped = Date.parse(this.profile.skippedAt || '');
             return !Number.isFinite(skipped) || Date.now() - skipped >= this.PROFILE_RETRY_MS;
         },
 
-        PROFILE_OPTIONS: {
-            goal: [
-                { v: 'grow',       t: 'Grow over the long term',  d: 'Higher returns, and I can ride out the dips' },
-                { v: 'balanced',   t: 'Balanced growth',          d: 'Some growth, some safety' },
-                { v: 'safe',       t: 'Keep it safe',             d: 'Protecting what I have matters most' },
-                { v: 'income',     t: 'Pay me a regular income',  d: 'Monthly or quarterly payouts' },
-                { v: 'retirement', t: 'Build towards retirement', d: 'Growing a corpus for later' },
-                { v: 'retired',    t: 'I\u2019m retired',         d: 'Steady income and safety of capital' },
-            ],
-            risk: [
-                { v: 'low',    t: 'Sell to stop the loss', d: 'I would rather not see it fall further' },
-                { v: 'medium', t: 'Wait it out',           d: 'Markets recover; I would hold' },
-                { v: 'high',   t: 'Buy more',              d: 'A fall is a chance to buy cheaper' },
-            ],
-            payout: [
-                { v: 'monthly',   t: 'Monthly' }, { v: 'quarterly', t: 'Quarterly' },
-                { v: 'yearly',    t: 'Yearly' },  { v: 'none',      t: 'No, let it grow' },
-            ],
-            horizon: [
-                { v: 'lt3', t: 'Under 3 years' }, { v: '3to7', t: '3 to 7 years' },
-                { v: '7to15', t: '7 to 15 years' }, { v: 'gt15', t: 'More than 15 years' },
-            ],
-            interests: [
-                { v: 'stocks', t: 'Stocks' }, { v: 'mf', t: 'Mutual funds' },
-                { v: 'gold', t: 'Gold & silver' }, { v: 'schemes', t: 'Government schemes', d: 'PPF, SCSS, post office' },
-                { v: 'fdbonds', t: 'FDs & bonds' }, { v: 'us', t: 'US markets' },
-            ],
+        /* ── The questions ──────────────────────────────────────────────
+           A book is not one person with one appetite. US shares can be money
+           you would buy more of in a crash and trim within five years, while a
+           fund is for retirement and a deposit is the emergency buffer. So
+           everything about how money is treated is asked PER ASSET CLASS, and
+           every answer, per class and overall, can be several at once. */
+        PROFILE_CLASSES: [
+            { k: 'in_stocks', t: 'Indian stocks', icon: 'candlestick_chart', market: true },
+            { k: 'us_stocks', t: 'US stocks',     icon: 'public',            market: true },
+            { k: 'mf',        t: 'Mutual funds',  icon: 'pie_chart',         market: true },
+            { k: 'gold',      t: 'Gold',          icon: 'toll',              market: true },
+            { k: 'metals',    t: 'Other metals',  icon: 'toll',              market: true },
+            { k: 'fd_bonds',  t: 'FDs and bonds', icon: 'savings' },
+            { k: 'schemes',   t: 'Government schemes', d: 'PPF, EPF, SCSS, post office', icon: 'account_balance' },
+            { k: 'property',  t: 'Property',      icon: 'home' },
+        ],
+
+        PROFILE_ASK: {
+            purpose: { title: 'What is each one for?', lead: 'Tick everything that applies. One asset can serve more than one goal.', market: false,
+                opts: [{ v: 'grow', t: 'Grow wealth' }, { v: 'retirement', t: 'Retirement' }, { v: 'income', t: 'Regular income' },
+                       { v: 'safe', t: 'Keep it safe' }, { v: 'emergency', t: 'Emergency money' }, { v: 'purchase', t: 'A big purchase' },
+                       { v: 'children', t: 'Children’s future' }] },
+            fall: { title: 'If it fell 20% in a month, what would you do?', lead: 'Per asset. Waiting and buying more can both be true.', market: true,
+                opts: [{ v: 'sell', t: 'Sell some' }, { v: 'wait', t: 'Wait it out' }, { v: 'buy', t: 'Buy more' }] },
+            horizon: { title: 'When might you need it?', lead: 'Per asset. Tick every timing that applies, like trimming along the way and a date for the rest.', market: false,
+                opts: [{ v: 'trim', t: 'Trim along the way' }, { v: 'lt3', t: 'Within 3 yrs' }, { v: '3to7', t: '3 to 7 yrs' },
+                       { v: '7to15', t: '7 to 15 yrs' }, { v: 'gt15', t: '15+ yrs' }] },
+            payout: { title: 'Should any of it pay you?', lead: 'Per asset. Tick more than one if part of it pays out and part grows.', market: false,
+                opts: [{ v: 'monthly', t: 'Monthly' }, { v: 'quarterly', t: 'Quarterly' }, { v: 'yearly', t: 'Yearly' }, { v: 'none', t: 'No, let it grow' }] },
+            knows: { title: 'How well do you know each?', lead: 'Corpus explains more where you are newer.', market: false,
+                opts: [{ v: 'new', t: 'New to it' }, { v: 'some', t: 'A few years' }, { v: 'long', t: 'Many years' }, { v: 'simple', t: 'Explain it simply' }] },
         },
 
-        // Payouts are asked only of someone whose goal implies them.
+        PROFILE_LISTS: {
+            income: [
+                { v: 'salary', t: 'Salary', icon: 'work' }, { v: 'business', t: 'Business or freelance', icon: 'storefront' },
+                { v: 'rent', t: 'Rent', icon: 'real_estate_agent' }, { v: 'pension', t: 'Pension', icon: 'elderly' },
+                { v: 'dividends', t: 'Interest and dividends', icon: 'payments' }, { v: 'none', t: 'Not earning yet', icon: 'school', only: true },
+            ],
+            dependents: [
+                { v: 'partner', t: 'Partner', icon: 'favorite' }, { v: 'children', t: 'Children', icon: 'child_care' },
+                { v: 'parents', t: 'Parents', icon: 'elderly_woman' }, { v: 'none', t: 'No one', icon: 'person', only: true },
+            ],
+            cover: [
+                { v: 'emergency', t: 'Emergency fund', icon: 'savings' }, { v: 'health', t: 'Health insurance', icon: 'health_and_safety' },
+                { v: 'term', t: 'Term life cover', icon: 'shield' }, { v: 'none', t: 'None yet', icon: 'block', only: true },
+            ],
+            plans: [
+                { v: 'home', t: 'Home', icon: 'house' }, { v: 'education', t: 'Education', icon: 'school' },
+                { v: 'wedding', t: 'Wedding', icon: 'celebration' }, { v: 'car', t: 'Car', icon: 'directions_car' },
+                { v: 'travel', t: 'Travel', icon: 'flight' }, { v: 'nothing', t: 'Nothing planned', icon: 'check_circle', only: true },
+            ],
+        },
+        PLAN_WHEN: [{ v: '1', t: 'In a year' }, { v: '2to3', t: '2 to 3 yrs' }, { v: '4to5', t: '4 to 5 yrs' }, { v: '5plus', t: '5+ yrs' }],
+
+        // The profile class a holding belongs to, so answers meet the book.
+        _profileClassOf(inv) {
+            if (this._isUsdHolding(inv)) return 'us_stocks';
+            const c = this._chipOf(inv);
+            return c === 'equity' ? 'in_stocks' : c === 'mf' ? 'mf' : c === 'gold' ? 'gold' : c === 'metals' ? 'metals'
+                 : c === 'schemes' ? 'schemes' : c === 'other' ? 'property' : 'fd_bonds';
+        },
+
+        // v1 held one goal, one risk, one horizon and a list of interests; carry
+        // each onto every class as the starting answer rather than lose it.
+        migrateProfile(p) {
+            if (!p || p.version === 2 || !p.completedAt) return p;
+            const held = new Set((this.investments || []).map(i => this._profileClassOf(i)));
+            const fromInterest = { stocks: 'in_stocks', us: 'us_stocks', mf: 'mf', gold: 'gold', schemes: 'schemes', fdbonds: 'fd_bonds' };
+            (p.interests || []).forEach(i => fromInterest[i] && held.add(fromInterest[i]));
+            const holdings = this.PROFILE_CLASSES.map(c => c.k).filter(k => held.has(k));
+            const goalTo = { grow: ['grow'], balanced: ['grow', 'safe'], safe: ['safe'], income: ['income'],
+                             retirement: ['retirement'], retired: ['income', 'safe'] }[p.goal] || [];
+            const fallTo = { low: ['sell'], medium: ['wait'], high: ['buy'] }[p.risk] || [];
+            const each = (list, onlyMarket) => Object.fromEntries(holdings
+                .filter(k => !onlyMarket || this.PROFILE_CLASSES.find(c => c.k === k).market)
+                .map(k => [k, [...list]]).filter(([, v]) => v.length));
+            return {
+                name: p.name || '', age: p.age || null, holdings,
+                purpose: each(goalTo), fall: each(fallTo, true),
+                horizon: each(p.horizon ? [p.horizon] : []), payout: each(p.payout ? [p.payout] : []), knows: {},
+                income: [], dependents: [], cover: [], plans: {},
+                completedAt: p.completedAt, skippedAt: null, catchUpSkippedAt: p.catchUpSkippedAt || null, version: 1,
+            };
+        },
+
         get onboardingSteps() {
             const d = this.onboarding.draft || {};
-            const steps = ['name', 'age', 'goal', 'risk'];
-            if (['income', 'retired', 'safe'].includes(d.goal)) steps.push('payout');
-            steps.push('horizon', 'interests');
+            const steps = ['name', 'age', 'holdings', 'purpose'];
+            if (this.onboardingClasses('fall').length) steps.push('fall');
+            steps.push('horizon', 'payout', 'income', 'family', 'plans', 'knows');
             return steps;
         },
         get onboardingStep() { return this.onboardingSteps[this.onboarding.step] || 'name'; },
 
+        // Which approved question screen draws this step: the two text answers
+        // keep theirs, and every multi-answer step uses the multi-select screen.
+        get onboardingScreen() {
+            return { name: 'q1', age: 'q2' }[this.onboardingStep] || 'q7';
+        },
+
+        // The classes a per-class question asks about: the ones ticked, and for
+        // "a 20% fall" only those whose price moves.
+        onboardingClasses(field) {
+            const held = (this.onboarding.draft && this.onboarding.draft.holdings) || [];
+            const onlyMarket = field && this.PROFILE_ASK[field] && this.PROFILE_ASK[field].market;
+            return this.PROFILE_CLASSES.filter(c => held.includes(c.k) && (!onlyMarket || c.market));
+        },
+
         get onboardingCanNext() {
             const d = this.onboarding.draft || {};
-            switch (this.onboardingStep) {
+            const step = this.onboardingStep;
+            switch (step) {
                 case 'name': return String(d.name || '').trim().length > 0;
                 case 'age': { const a = Number(d.age); return Number.isFinite(a) && a >= 12 && a <= 110; }
-                case 'interests': return (d.interests || []).length > 0;
-                default: return !!d[this.onboardingStep];
+                case 'holdings': return (d.holdings || []).length > 0;
+                case 'income': return (d.income || []).length > 0;
+                case 'family': return (d.dependents || []).length > 0 && (d.cover || []).length > 0;
+                case 'plans': {
+                    const keys = Object.keys(d.plans || {});
+                    return keys.length > 0 && keys.every(k => k === 'nothing' || (d.plans[k] || []).length > 0);
+                }
+                default:
+                    if (this.PROFILE_ASK[step]) return this.onboardingClasses(step).every(c => ((d[step] || {})[c.k] || []).length > 0);
+                    return true;
             }
         },
 
-        openOnboarding(editing = false) {
+        openOnboarding(editing = false, catchUp = false) {
+            const p = this.profile || {};
+            const copy = o => JSON.parse(JSON.stringify(o || {}));
+            let holdings = [...(p.holdings || [])];
+            // First time: tick what the book already holds.
+            if (!holdings.length) {
+                const held = new Set((this.investments || []).map(i => this._profileClassOf(i)));
+                holdings = this.PROFILE_CLASSES.map(c => c.k).filter(k => held.has(k));
+            }
             this.onboarding.draft = {
-                name: this.profile.name || '', age: this.profile.age || '', goal: this.profile.goal,
-                risk: this.profile.risk, payout: this.profile.payout, horizon: this.profile.horizon,
-                interests: [...(this.profile.interests || [])],
+                name: p.name || '', age: p.age || '', holdings,
+                purpose: copy(p.purpose), fall: copy(p.fall), horizon: copy(p.horizon), payout: copy(p.payout), knows: copy(p.knows),
+                income: [...(p.income || [])], dependents: [...(p.dependents || [])], cover: [...(p.cover || [])], plans: copy(p.plans),
             };
-            this.onboarding.step = 0;
-            this.onboarding.editing = editing;
+            this.onboarding.catchUp = catchUp;
+            this.onboarding.editing = editing || catchUp;
+            this.onboarding.step = catchUp ? Math.max(0, this.onboardingSteps.indexOf('purpose')) : 0;
             this.onboarding.open = true;
         },
 
-        onboardingPick(key, value) {
-            this.onboarding.draft[key] = value;
-            if (window.RFMMotion?.Haptics && this.haptics) window.RFMMotion.Haptics.tap();
-            // A single choice moves on by itself; typing and multi-select wait for Next.
-            if (['goal', 'risk', 'payout', 'horizon'].includes(key)) setTimeout(() => this.onboardingNext(), 220);
+        _tapped() { if (window.RFMMotion?.Haptics && this.haptics) window.RFMMotion.Haptics.tap(); },
+
+        // One toggle for every multi-answer list. An "only" answer ("No one",
+        // "None yet") stands alone: picking it clears the rest, and picking
+        // anything else clears it.
+        onboardingToggle(field, v, only = []) {
+            const list = this.onboarding.draft[field] = [...(this.onboarding.draft[field] || [])];
+            const i = list.indexOf(v);
+            if (i >= 0) list.splice(i, 1);
+            else if (only.includes(v)) list.splice(0, list.length, v);
+            else { list.push(v); only.forEach(o => { const j = list.indexOf(o); if (j >= 0) list.splice(j, 1); }); }
+            this.onboarding.draft[field] = list;
+            this._tapped();
         },
 
-        onboardingToggleInterest(v) {
-            const list = this.onboarding.draft.interests;
+        onboardingOnly(field) {
+            return (this.PROFILE_LISTS[field] || []).filter(o => o.only).map(o => o.v);
+        },
+
+        onboardingToggleClass(field, cls, v) {
+            const all = { ...(this.onboarding.draft[field] || {}) };
+            const list = [...(all[cls] || [])];
             const i = list.indexOf(v);
             if (i >= 0) list.splice(i, 1); else list.push(v);
+            // A growth-only answer cannot coexist with a requested payout.
+            all[cls] = field === 'payout'
+                ? (v === 'none' && i < 0 ? ['none'] : list.filter(x => x !== 'none'))
+                : list;
+            this.onboarding.draft[field] = all;
+            this._tapped();
+        },
+
+        onboardingHas(field, cls, v) {
+            return (((this.onboarding.draft || {})[field] || {})[cls] || []).includes(v);
+        },
+
+        onboardingTogglePlan(k) {
+            const plans = { ...(this.onboarding.draft.plans || {}) };
+            if (plans[k]) delete plans[k];
+            else if (k === 'nothing') { Object.keys(plans).forEach(x => delete plans[x]); plans.nothing = []; }
+            else { delete plans.nothing; plans[k] = []; }
+            this.onboarding.draft.plans = plans;
+            this._tapped();
+        },
+
+        onboardingTogglePlanWhen(k, w) {
+            const plans = { ...(this.onboarding.draft.plans || {}) };
+            const list = [...(plans[k] || [])];
+            const i = list.indexOf(w);
+            if (i >= 0) list.splice(i, 1); else list.push(w);
+            plans[k] = list;
+            this.onboarding.draft.plans = plans;
+            this._tapped();
         },
 
         onboardingNext() {
@@ -5087,30 +5348,41 @@ document.addEventListener('alpine:init', () => {
         },
 
         onboardingBack() {
-            if (this.onboarding.step > 0) this.onboarding.step--;
+            const first = this.onboarding.catchUp ? this.onboardingSteps.indexOf('purpose') : 0;
+            if (this.onboarding.step > first) this.onboarding.step--;
         },
 
         finishOnboarding() {
             const d = this.onboarding.draft;
             const age = Math.round(Number(d.age));
+            const held = new Set(d.holdings);
+            // Answers for a class that was later unticked are dropped.
+            const keep = (obj, field) => Object.fromEntries(Object.entries(obj || {})
+                .filter(([k, v]) => held.has(k) && v.length && this.onboardingClasses(field).some(c => c.k === k)));
             this.profile = {
+                version: 2,
                 name: String(d.name || '').trim().slice(0, 40), age,
-                goal: d.goal, risk: d.risk,
-                payout: this.onboardingSteps.includes('payout') ? d.payout : null,
-                horizon: d.horizon, interests: [...d.interests],
-                completedAt: new Date().toISOString(), skippedAt: null,
+                holdings: this.PROFILE_CLASSES.map(c => c.k).filter(k => held.has(k)),
+                purpose: keep(d.purpose, 'purpose'), fall: keep(d.fall, 'fall'), horizon: keep(d.horizon, 'horizon'),
+                payout: keep(d.payout, 'payout'), knows: keep(d.knows, 'knows'),
+                income: [...d.income], dependents: [...d.dependents], cover: [...d.cover],
+                plans: JSON.parse(JSON.stringify(d.plans || {})),
+                completedAt: new Date().toISOString(), skippedAt: null, catchUpSkippedAt: null,
             };
             // Age decides the tax slabs and 80TTB; the person just told us it.
             this.tax.seniorCitizen = age >= 60;
             this.onboarding.open = false;
+            this.onboarding.catchUp = false;
             if (window.RFMMotion?.Haptics && this.haptics) window.RFMMotion.Haptics.success();
             // A new profile is a new brief — the cached one was written for someone else.
             this.maybeRunDaily(true);
         },
 
         skipOnboarding() {
-            if (!this.onboarding.editing) this.profile.skippedAt = new Date().toISOString();
+            if (this.onboarding.catchUp) this.profile.catchUpSkippedAt = new Date().toISOString();
+            else if (!this.onboarding.editing) this.profile.skippedAt = new Date().toISOString();
             this.onboarding.open = false;
+            this.onboarding.catchUp = false;
         },
 
         get profileGreetingName() {
@@ -5151,7 +5423,7 @@ document.addEventListener('alpine:init', () => {
         // `icon:` keys, so scripts/icon-names.mjs sees these glyphs and the
         // font subset carries them — a missing glyph renders as its NAME.
         DAILY_KINDS: {
-            news: { icon: 'newspaper' }, rate: { icon: 'percent' }, price: { icon: 'monitoring' },
+            news: { icon: 'newspaper' }, rate: { icon: 'account_balance' }, price: { icon: 'savings' },
             action: { icon: 'task_alt' }, reminder: { icon: 'event' },
         },
         dailyKindIcon(kind) {
@@ -5352,6 +5624,7 @@ document.addEventListener('alpine:init', () => {
 
                 if (confirm(`${summary}\n\nThis replaces your current data and cannot be undone.`)) {
                     for (const k of names) localStorage.setItem(k, restoring[k]);
+                    document.dispatchEvent(new Event('corpus:data-saved'));
                     this.loadData();
                     this.loadNwHistory?.();
                     this.loadCachedFxRate();
@@ -5369,6 +5642,125 @@ document.addEventListener('alpine:init', () => {
         // ════════════════════════════════════════════════════════════
         //  ACTIONS — SIP & RECURRING (Phase 9: Intelligent Auto-Compounding Engine)
         // ════════════════════════════════════════════════════════════
+        /* The same fund, however it was named. A statement writes "Quant Small
+           Cap Fund Direct Plan Growth"; AMFI's list says "Quant Small Cap Fund -
+           Direct Plan - Growth"; another says "Midcap" for "Mid Cap". A plain
+           substring test missed all of these, so a SIP added from the AMFI search
+           created a second, empty copy of a fund already held. */
+        _fundKey(name) {
+            const s = String(name || '').toLowerCase().replace(/&/g, ' and ')
+                .replace(/\b(mid|small|large|multi|flexi|micro)[\s-]+cap\b/g, '$1cap')
+                .replace(/[^a-z0-9]+/g, ' ');
+            const drop = new Set(['fund', 'plan', 'option', 'scheme', 'the', 'of', 'mutual', 'mf',
+                                  'ltd', 'limited', 'inc', 'corp', 'corporation', 'co', 'company']);
+            const words = s.split(' ').filter(w => w && !drop.has(w));
+            return words.length >= 2 ? [...new Set(words)].sort().join(' ') : '';
+        },
+
+        _matchHolding({ schemeCode, ticker, name, isin }) {
+            const all = this.investments || [];
+            const code = String(schemeCode || '').trim();
+            if (code) { const h = all.find(i => String(i.schemeCode || '') === code); if (h) return h; }
+            if (isin) { const h = all.find(i => i.isin && i.isin === isin); if (h) return h; }
+            const t = String(ticker || '').trim().toUpperCase();
+            if (t) { const h = all.find(i => (i.ticker || '').toUpperCase() === t); if (h) return h; }
+            return name ? all.find(i => this._sameFund(i.name, name)) || null : null;
+        },
+
+        /* Two names for one fund. Equal keys match; so do keys whose core words
+           agree when only one side names its plan (Direct/Regular) or option
+           (Growth/IDCW). When both name them and they differ, they are different
+           schemes with different NAVs and never match. */
+        _sameFund(a, b) {
+            const ka = this._fundKey(a), kb = this._fundKey(b);
+            if (!ka || !kb) return false;
+            if (ka === kb) return true;
+            const OPT = new Set(['growth', 'idcw', 'dividend', 'payout', 'reinvestment', 'reinvest', 'bonus']);
+            const PLAN = new Set(['direct', 'regular']);
+            const split = k => { const w = k.split(' ');
+                return { core: w.filter(x => !OPT.has(x) && !PLAN.has(x)).join(' '),
+                         opt: w.filter(x => OPT.has(x)).join(' '), plan: w.filter(x => PLAN.has(x)).join(' ') }; };
+            const x = split(ka), y = split(kb);
+            if (!x.core || x.core !== y.core) return false;
+            if (x.plan && y.plan && x.plan !== y.plan) return false;
+            if (x.opt && y.opt && x.opt !== y.opt) return false;
+            return true;
+        },
+
+        _isUsdHolding(i) {
+            return !!i && (i.currency === 'USD' || ['Stock (US)', 'ETF (US)'].includes(i.type));
+        },
+
+        /* The holding an incoming statement row is. ISIN first, then folio AND
+           fund name together (one folio holds several schemes), then the fund
+           name within the statement's category. A dollar holding is never a
+           match for an Indian statement row, and a holding already matched by an
+           earlier row is not matched again. */
+        _findStatementMatch(inc, used = new Set(), categoryPool = null) {
+            const pool = (this.investments || []).filter(i => !this._isUsdHolding(i) && !used.has(i.id));
+            const isin = String(inc.isin || '').trim();
+            if (isin) { const h = pool.find(i => String(i.isin || '').trim() === isin); if (h) return h; }
+            const folio = String(inc.folioNumber || '').trim();
+            if (folio.length > 4) {
+                const h = pool.find(i => String(i.folioNumber || '').trim() === folio && this._sameFund(i.name, inc.name));
+                if (h) return h;
+            }
+            const names = (categoryPool || pool).filter(i => !this._isUsdHolding(i) && !used.has(i.id));
+            return names.find(i => this._sameFund(i.name, inc.name)) || null;
+        },
+
+        // SIPs whose holding is gone are re-pointed at the same fund if it is
+        // still held, and otherwise unlinked, never left pointing at nothing.
+        _relinkSips() {
+            const ids = new Set((this.investments || []).map(i => i.id));
+            let changed = false;
+            for (const sip of this.sips || []) {
+                if (!sip.linkedInvestmentId || ids.has(sip.linkedInvestmentId)) continue;
+                const h = this._matchHolding({ schemeCode: sip.schemeCode, ticker: sip.ticker, name: sip.name });
+                sip.linkedInvestmentId = h ? h.id : null;
+                changed = true;
+            }
+            if (changed) this.sips = [...this.sips];
+        },
+
+        // Which holding a SIP adds to, said on the SIP's own row.
+        sipLink(sip) {
+            const h = this._linkedHolding(sip);
+            if (!h) return { ok: false, text: 'Not linked to a holding' };
+            if (sip.type === 'RD') return { ok: true, text: `Linked RD · ${this.formatCurrency(Number(h.amount) || 0)} confirmed principal` };
+            const units = Number(h.units) || 0;
+            return units > 0
+                ? { ok: true, text: `Adds to your ${units.toLocaleString('en-IN', { maximumFractionDigits: 3 })} units` }
+                : { ok: true, text: 'Adds to a new holding, no units yet' };
+        },
+
+        /* One-off repair for SIPs made before the matcher above: a SIP pointing
+           at an empty copy of a fund you already hold is moved onto the real one,
+           and the empty copy is removed. Only a copy with no units, no cost and
+           no other SIP on it is ever removed. */
+        _repairSipLinks() {
+            let changed = false;
+            for (const sip of this.sips || []) {
+                if (sip.type !== 'SIP') continue;
+                const linked = (this.investments || []).find(i => i.id === sip.linkedInvestmentId);
+                if (linked && (Number(linked.units) || 0) > 0) continue;
+                const others = (this.investments || []).filter(i => i !== linked && (Number(i.units) || 0) > 0);
+                const code = String(sip.schemeCode || (linked && linked.schemeCode) || '');
+                const key = this._fundKey(sip.name);
+                const real = others.find(i => code && String(i.schemeCode || '') === code)
+                          || (key ? others.find(i => this._fundKey(i.name) === key) : null);
+                if (!real) continue;
+                sip.linkedInvestmentId = real.id;
+                if (code && !real.schemeCode) real.schemeCode = code;
+                changed = true;
+                if (linked && !(Number(linked.amount) > 0) && !(this.sips || []).some(s => s !== sip && s.linkedInvestmentId === linked.id)) {
+                    this.investments = this.investments.filter(i => i !== linked);
+                }
+            }
+            if (changed) { this.sips = [...this.sips]; this.saveData(); }
+            return changed;
+        },
+
         async addSip() {
             if (!this.newSip.name || !this.newSip.monthlyAmount) return;
 
@@ -5377,16 +5769,25 @@ document.addEventListener('alpine:init', () => {
             const ticker = (this.newSip.ticker || '').trim();
 
             // 1. Intelligent Holding Resolution: Check if this MF/Stock is already registered in investments
-            let existingHolding = (this.investments || []).find(inv => {
-                if (schemeCode && inv.schemeCode === schemeCode) return true;
-                if (ticker && (inv.ticker || '').toUpperCase() === ticker.toUpperCase()) return true;
-                const invName = (inv.name || '').toLowerCase();
-                const searchName = name.toLowerCase();
-                return invName === searchName || invName.includes(searchName) || searchName.includes(invName);
-            });
+            let existingHolding = this.newSip.type === 'RD'
+                ? (this.investments || []).find(i => i.type === 'Recurring Deposit' && i.id === this.newSip.linkedInvestmentId)
+                  || (this.investments || []).find(i => i.type === 'Recurring Deposit' && i.name.trim().toLowerCase() === name.toLowerCase())
+                : this._matchHolding({ schemeCode, ticker, name });
+            // A fund you already hold without its AMFI code gains it here, so its
+            // NAV syncs from now on.
+            if (existingHolding && schemeCode && !existingHolding.schemeCode) existingHolding.schemeCode = schemeCode;
 
             // 2. If not found in investments, automatically register a new Mutual Fund / Stock holding!
-            if (!existingHolding) {
+            // A recurring deposit, a PPF contribution or an EMI is not a share or a
+            // fund. Making a 0-share "Stock (IND)" for it put a fake stock in the
+            // book whose instalments could never be recorded. Only a fund chosen
+            // from the AMFI list (it carries a scheme code) gets a holding made.
+            if (!existingHolding && this.newSip.type !== 'RD' && !(this.newSip.type === 'SIP' && schemeCode)) {
+                const kind = inv => window.CorpusSchemes ? window.CorpusSchemes.match(inv) : null;
+                const sc = kind({ name });
+                existingHolding = sc ? (this.investments || []).find(i => kind(i) === sc) || null : null;
+            }
+            if (!existingHolding && this.newSip.type === 'SIP' && schemeCode) {
                 // Market cannot be inferred from a ticker alone — NSE and US symbols are both
                 // plain letters. This used to consult a hardcoded list of four specific US
                 // tickers, which was dead (newSip.ticker is never written by any form) and
@@ -5413,19 +5814,32 @@ document.addEventListener('alpine:init', () => {
                 this.fetchSinglePrice(existingHolding);
             }
 
+            if (!existingHolding && this.newSip.type === 'RD') {
+                existingHolding = {
+                    id: this.newId('inv'), name, type: 'Recurring Deposit', amount: 0,
+                    currentValue: 0, rate: 0, payout: 'Cumulative / On Maturity', confirmedInstalments: []
+                };
+                this.investments.push(existingHolding);
+            }
+
             const createdSip = {
                 ...this.newSip,
                 id:                 this.newId('sip'),
                 monthlyAmount:      Number(this.newSip.monthlyAmount),
                 dayOfMonth:         Number(this.newSip.dayOfMonth) || 5,
-                linkedInvestmentId: existingHolding.id,
-                schemeCode:         schemeCode || existingHolding.schemeCode || '',
-                ticker:             ticker || existingHolding.ticker || '',
+                linkedInvestmentId: existingHolding ? existingHolding.id : null,
+                schemeCode:         schemeCode || (existingHolding && existingHolding.schemeCode) || '',
+                ticker:             ticker || (existingHolding && existingHolding.ticker) || '',
                 // Starts settled for the current month. Creating a plan on the 20th is not
                 // evidence that this month's instalment was paid, and the old code bought a
                 // month of units the instant the form was submitted.
                 lastExecutedMonth:  this.currentMonthKey
             };
+
+            if (this.newSip.type === 'RD' && existingHolding) {
+                createdSip.confirmedInstalments = [];
+                existingHolding.linkedSipId = createdSip.id;
+            }
 
             this.sips.push(createdSip);
 
@@ -5463,26 +5877,46 @@ document.addEventListener('alpine:init', () => {
             const today = new Date().getDate();
             const monthKey = this.currentMonthKey;
             return (this.activeSips || []).filter(sip =>
-                today >= (Number(sip.dayOfMonth) || 5) && sip.lastExecutedMonth !== monthKey
+                today >= this._sipDayIn(sip, new Date().getFullYear(), new Date().getMonth()) && sip.lastExecutedMonth !== monthKey
             );
         },
 
         _linkedHolding(sip) {
-            return (this.investments || []).find(inv =>
-                inv.id === sip.linkedInvestmentId ||
-                (sip.schemeCode && inv.schemeCode === sip.schemeCode) ||
-                (inv.name || '').toLowerCase() === (sip.name || '').toLowerCase()
-            ) || null;
+            return (this.investments || []).find(inv => inv.id === sip.linkedInvestmentId)
+                || this._matchHolding({ schemeCode: sip.schemeCode, ticker: sip.ticker, name: sip.name });
         },
 
         /* The user confirms the money left their account. Only then do units appear — and
            only at a price that actually came from a provider. Without one there is nothing
            honest to write, so it says so and stops rather than guessing. */
         async confirmSipDebit(sip) {
+            if (sip.lastExecutedMonth === this.currentMonthKey) return false;
             const holding = this._linkedHolding(sip);
             if (!holding) {
                 this.sipDebitError = `${sip.name} is not linked to a holding yet. Open it and pick one first.`;
                 return false;
+            }
+
+            if (sip.type === 'RD') {
+                if (holding.type !== 'Recurring Deposit') {
+                    this.sipDebitError = 'Link this schedule to an RD holding first.';
+                    return false;
+                }
+                const amount = Number(sip.monthlyAmount);
+                if (!(amount > 0)) return false;
+                const entry = { id: this.newId('rd'), date: this.localDateKey(), amount };
+                holding.confirmedInstalments = [...(holding.confirmedInstalments || []), entry];
+                holding.amount = Math.round(((Number(holding.amount) || 0) + amount) * 100) / 100;
+                holding.currentValue = Math.round(((Number(holding.currentValue) || 0) + amount) * 100) / 100;
+                sip.confirmedInstalments = [...(sip.confirmedInstalments || []), entry];
+                sip.lastExecutedMonth = this.currentMonthKey;
+                sip.lastRecordedMonth = this.currentMonthKey;
+                this.sipDebitError = '';
+                this.investments = [...this.investments];
+                this.sips = [...this.sips];
+                this.saveData();
+                this.queueNwSnapshot('rd-instalment');
+                return true;
             }
 
             let price = Number(holding.currentPrice) || Number(holding.buyPrice) || 0;
@@ -5505,15 +5939,22 @@ document.addEventListener('alpine:init', () => {
             const priceInInr = price * (isUsd ? this.fxUsdInr : 1);
             const addedUnits = debitAmount / priceInInr;
 
-            const totalUnits = (Number(holding.units) || 0) + addedUnits;
-            const totalCost  = (Number(holding.amount) || 0) + debitAmount;
+            const priorUnits = Number(holding.units) || 0;
+            // What the existing units cost, from the one valuation the app uses.
+            // `amount` was read here before, and after an edit it holds the
+            // current value, which would have averaged in a price never paid.
+            const priorKnown = priorUnits === 0 || this.hasKnownCost(holding);
+            const totalUnits = priorUnits + addedUnits;
+            const totalCost  = (priorUnits > 0 ? this.getInvInvestedCost(holding) : 0) + debitAmount;
 
             holding.units        = Math.round(totalUnits * 1000) / 1000;
             holding.amount       = Math.round(totalCost * 100) / 100;
-            holding.buyPrice     = Math.round((totalCost / totalUnits / (isUsd ? this.fxUsdInr : 1)) * 100) / 100;
+            if (priorKnown) holding.buyPrice = Math.round((totalCost / totalUnits / (isUsd ? this.fxUsdInr : 1)) * 10000) / 10000;
             holding.currentValue = Math.round(totalUnits * priceInInr * 100) / 100;
 
             sip.lastExecutedMonth = this.currentMonthKey;
+            // Only a confirmed debit counts as "recorded"; a skip or a new plan does not.
+            sip.lastRecordedMonth = this.currentMonthKey;
             this.sipDebitError = '';
             this.investments = [...this.investments];
             this.saveData();
@@ -5525,7 +5966,9 @@ document.addEventListener('alpine:init', () => {
         /* The instalment did not happen — a bounced mandate, or a plan paused at the AMC.
            Settles the month without touching the holding. */
         skipSipDebit(sip) {
+            if (sip.lastExecutedMonth === this.currentMonthKey) return;
             sip.lastExecutedMonth = this.currentMonthKey;
+            sip.skippedInstalments = [...(sip.skippedInstalments || []), { month: this.currentMonthKey, date: this.localDateKey() }];
             this.sipDebitError = '';
             this.sips = [...this.sips];
             this.saveData();
@@ -5600,6 +6043,16 @@ document.addEventListener('alpine:init', () => {
             }
         },
 
+        openSipHoldingPicker() {
+            const f = this.editSipForm;
+            const pool = (this.investments || []).filter(i => ['equity', 'mf', 'gold'].includes(this._chipOf(i)));
+            this.openPicker({
+                title: 'Adds to', value: f.linkedInvestmentId || '', search: pool.length > 8, searchHint: 'Search holdings',
+                options: pool.map(i => ({ value: i.id, label: i.name, meta: this.holdingLine(i) })),
+                onPick: v => { f.linkedInvestmentId = v; const h = pool.find(i => i.id === v); if (h && h.schemeCode) f.schemeCode = h.schemeCode; },
+            });
+        },
+
         openEditSipModal(sip) {
             this.editSipForm = { ...sip };
             this.editingSip  = sip;
@@ -5633,10 +6086,1297 @@ document.addEventListener('alpine:init', () => {
         },
 
         getSipDaysUntilDebit(sip) {
-            const today = new Date().getDate();
-            const debit = Number(sip.dayOfMonth);
-            const diff  = debit >= today ? debit - today : (31 - today) + debit;
-            return diff === 0 ? 'Today!' : `in ${diff} day${diff !== 1 ? 's' : ''}`;
+            const diff = this._sipDaysToNext(sip);
+            return diff === 0 ? 'today' : `in ${diff} day${diff !== 1 ? 's' : ''}`;
+        },
+
+        /* ════════════════════════════════════════════════════════════
+           CORPUS 3.0 — what the approved screens read.
+           Presentation only: every figure below is derived from the stores and
+           getters above, so a screen can never disagree with the logic.
+           ════════════════════════════════════════════════════════════ */
+
+        // Compact rupees the way the designs write them: ₹1.54 Cr, ₹52.4 L.
+        inrShort(v) {
+            const n = Number(v) || 0, a = Math.abs(n), s = n < 0 ? '−' : '';
+            const trim = x => String(+x);
+            if (a >= 1e7) return `${s}₹${trim((a / 1e7).toFixed(2))} Cr`;
+            if (a >= 1e5) return `${s}₹${trim((a / 1e5).toFixed(1))} L`;
+            return s + this.formatCurrency(a);
+        },
+
+        // Chrome's en-IN writes September as "Sept"; the designs, and everyone, write "Sep".
+        MONTHS: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+
+        shortDate(d) {
+            const t = d instanceof Date ? d : new Date(String(d).length === 10 ? `${d}T00:00:00` : d);
+            return Number.isNaN(t.getTime()) ? '' : `${t.getDate()} ${this.MONTHS[t.getMonth()]}`;
+        },
+
+        get avatarInitials() {
+            const parts = String(this.profile?.name || '').trim().split(/\s+/).filter(Boolean);
+            if (!parts.length) return '';
+            return (parts[0][0] + (parts[1] ? parts[1][0] : '')).toUpperCase();
+        },
+
+        get firstName() {
+            return String(this.profile?.name || '').trim().split(/\s+/)[0] || '';
+        },
+
+        // Which Overview the approved set draws: the new user's, the first day's, or the full one.
+        get overviewMode() {
+            if (!this.hasAnyPortfolioData) return 'nu';
+            return (this.nwHistory || []).length < 2 ? 'ofd' : 'ov';
+        },
+
+        // "Synced 2:14 pm" today; "Synced 16 Sep" when the newest price is older.
+        get syncedLabel() {
+            if (this.pullToRefresh.isRefreshing) return 'Syncing\u2026';
+            const priced = (this.investments || []).map(i => i.lastNavUpdate || i.priceAsOf).filter(Boolean)
+                .map(t => new Date(t)).filter(d => !Number.isNaN(d.getTime())).sort((a, b) => b - a);
+            if (!priced.length) return (this.investments || []).length ? 'Not synced yet' : '';
+            const d = priced[0];
+            const today = new Date().toDateString() === d.toDateString();
+            return today ? `Synced ${d.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' }).toLowerCase()}`
+                         : `Synced ${this.shortDate(d)}`;
+        },
+
+        // The hero tag: the change over the last month, beside the words "this month".
+        get nwMonthChange() {
+            const all = this.nwHistory || [];
+            if (all.length < 2) return null;
+            const now = new Date();
+            const from = this.localDateKey(new Date(now.getFullYear(), now.getMonth() - 1, now.getDate()));
+            const inWin = all.filter(p => p.date >= from);
+            const pts = inWin.length >= 2 ? inWin : all.slice(-2);
+            const a = Number(pts[0].value), b = Number(pts[pts.length - 1].value);
+            if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
+            const d = b - a, pct = a > 0 ? (d / a) * 100 : null;
+            const pctPart = pct !== null && Math.abs(pct) < 1000 ? ` (${pct >= 0 ? '+' : '−'}${Math.abs(pct).toFixed(2)}%)` : '';
+            return { up: d >= 0, label: `${d >= 0 ? '↑' : '↓'} ${this.formatCurrency(Math.abs(d))}${pctPart}` };
+        },
+
+        RANGE_WORDS: { '1W': 'a week', '1M': 'a month', '3M': '3 months', '6M': '6 months', '1Y': 'a year', 'ALL': 'all time' },
+
+        // "Up ₹8.6 L over 6 months, from ₹1.45 Cr on 24 Mar."
+        get nwSummary() {
+            const c = this.nwRangeChange, pts = this.nwChartData;
+            if (!c || pts.length < 2) return null;
+            const over = this.nwChartRange === 'ALL' ? 'since records began' : `over ${this.RANGE_WORDS[this.nwChartRange]}`;
+            return { word: c.up ? 'Up' : 'Down', amount: this.inrShort(Math.abs(c.delta)),
+                     rest: ` ${over}, from ${this.inrShort(pts[0].value)} on ${this.shortDate(pts[0].date)}.` };
+        },
+
+        /* The chart, drawn as the design draws it: an SVG line and fill in a
+           350×170 box. The line is monotone, so it never dips below a real low
+           or overshoots a real high between two observations. */
+        NW_BOX: { w: 350, h: 170, x0: 0, x1: 346, top: 44, bottom: 150 },
+        nwHoverIdx: -1,
+        nwDrawKey: 0,
+
+        get nwSvg() {
+            const pts = this.nwChartSeries.map(p => ({ date: p.date, v: Number(p.value) })).filter(p => Number.isFinite(p.v));
+            if (pts.length < 2) return null;
+            const B = this.NW_BOX;
+            const lo = Math.min(...pts.map(p => p.v)), hi = Math.max(...pts.map(p => p.v));
+            const span = hi - lo || Math.abs(hi) || 1;
+            const t0 = new Date(`${pts[0].date}T00:00:00`).getTime();
+            const t1 = new Date(`${pts[pts.length - 1].date}T00:00:00`).getTime();
+            const xy = pts.map((p, i) => {
+                const t = new Date(`${p.date}T00:00:00`).getTime();
+                const fx = t1 > t0 ? (t - t0) / (t1 - t0) : i / (pts.length - 1);
+                return [B.x0 + fx * (B.x1 - B.x0), B.bottom - ((p.v - lo) / span) * (B.bottom - B.top)];
+            });
+            const f = n => Math.round(n * 10) / 10;
+            // Fritsch–Carlson tangents.
+            const n = xy.length, d = [], m = [];
+            for (let i = 0; i < n - 1; i++) d.push((xy[i + 1][1] - xy[i][1]) / ((xy[i + 1][0] - xy[i][0]) || 1));
+            m[0] = d[0]; m[n - 1] = d[n - 2];
+            for (let i = 1; i < n - 1; i++) m[i] = d[i - 1] * d[i] <= 0 ? 0 : (d[i - 1] + d[i]) / 2;
+            let line = `M${f(xy[0][0])},${f(xy[0][1])}`;
+            for (let i = 0; i < n - 1; i++) {
+                const [xa, ya] = xy[i], [xb, yb] = xy[i + 1], h = (xb - xa) / 3;
+                line += ` C${f(xa + h)},${f(ya + m[i] * h)} ${f(xb - h)},${f(yb - m[i + 1] * h)} ${f(xb)},${f(yb)}`;
+            }
+            const [ex, ey] = xy[n - 1];
+            return {
+                line, area: `${line} L${f(ex)},${B.h} L${f(xy[0][0])},${B.h} Z`,
+                pts: xy.map(([x, y], i) => ({ x: (x / B.w) * 100, y: (y / B.h) * 100, date: pts[i].date, v: pts[i].v })),
+                end: { x: (ex / B.w) * 100, y: (ey / B.h) * 100 },
+                tag: this.inrShort(pts[n - 1].v),
+            };
+        },
+
+        // Up to four month names spread under the line (M14).
+        get nwXLabels() {
+            const pts = this.nwChartSeries;
+            if (pts.length < 2) return [];
+            const long = this.nwChartRange === '1W' || this.nwChartRange === '1M';
+            const fmt = k => {
+                const d = new Date(`${k}T00:00:00`);
+                return long ? this.shortDate(d) : this.MONTHS[d.getMonth()];
+            };
+            const out = [];
+            for (let i = 0; i < 4; i++) {
+                const p = pts[Math.round((i / 3) * (pts.length - 1))];
+                const label = fmt(p.date);
+                if (!out.includes(label)) out.push(label);
+            }
+            return out;
+        },
+
+        nwScrub(ev) {
+            const s = this.nwSvg;
+            if (!s) return;
+            const r = ev.currentTarget.getBoundingClientRect();
+            const x = (((ev.touches ? ev.touches[0].clientX : ev.clientX) - r.left) / r.width) * 100;
+            let best = 0;
+            s.pts.forEach((p, i) => { if (Math.abs(p.x - x) < Math.abs(s.pts[best].x - x)) best = i; });
+            this.nwHoverIdx = best;
+            const p = s.pts[best];
+            this.nwHoverLabel = `${this.formatObsDate(p.date)}, ${this.formatIndianShort(p.v)}`;
+        },
+
+        nwScrubEnd() { this.nwHoverIdx = -1; this.nwHoverLabel = ''; },
+
+        setNwRange(r) {
+            this.nwChartRange = r;
+            this.nwScrubEnd();
+            this.nwDrawKey += 1;
+            if (window.RFMMotion?.Haptics) window.RFMMotion.Haptics.tap();
+        },
+
+        // Designed tile colours, keyed by allocation bucket.
+        ALLOC_COLORS: { equity: '#5577CC', mf: '#14A391', debt: '#3A9FCC', us: '#CF6A86', gold: '#B08A22', metals: '#B4A189',
+                        property: '#9068E0', cash: '#7F97C2', realty: '#9068E0' },
+
+        allocPct(k) {
+            const p = Number(k.pct) || 0;
+            return p > 0 && p < 1 ? '<1%' : `${Math.round(p)}%`;
+        },
+
+        openAllocation(k) {
+            const chip = { equity: 'equity', us: 'equity', mf: 'mf', gold: 'gold', metals: 'metals' }[k.key] || 'all';
+            this.invFilter = chip;
+            this.activePage = k.page || 'investments';
+        },
+
+        /* Coming up, as the design lists it: one icon, one line, one amount and
+           date, and at most one action. Money that moves on its own and things
+           that need a decision share the card, in date order. */
+        get comingUp() {
+            const out = [];
+            for (const inv of (this.maturingInvestments || [])) {
+                const days = Math.ceil((new Date(inv.maturityDate) - Date.now()) / 864e5);
+                if (days < 0 || days > 120) continue;
+                out.push({ id: 'm' + inv.id, icon: 'event', sort: days,
+                           title: days === 0 ? `${inv.name} matures today` : `${inv.name} matures in ${days} day${days === 1 ? '' : 's'}`,
+                           amount: this.formatCurrency(this.getInvCurrentValue(inv)), when: `on ${this.shortDate(inv.maturityDate)}`,
+                           action: 'Plan it', go: () => { this.activePage = 'maturity'; } });
+            }
+            for (const sip of this.dueSipDebits) {
+                out.push({ id: 'due' + sip.id, icon: 'task_alt', sort: -1,
+                           title: `${sip.name} was due on the ${this.ordinal(sip.dayOfMonth)}`,
+                           amount: this.formatCurrency(sip.monthlyAmount), when: 'confirm it went through',
+                           action: 'Confirm', go: () => { this.activePage = 'income'; } });
+            }
+            for (const sip of (this.activeSips || [])) {
+                const days = this.sipDaysUntil(sip);
+                if (days === null || days > 30 || this.dueSipDebits.some(d => d.id === sip.id)) continue;
+                out.push({ id: 's' + sip.id, icon: 'autorenew', sort: days,
+                           title: days === 0 ? `${sip.name} debits today` : `${sip.name} debits in ${days} day${days === 1 ? '' : 's'}`,
+                           amount: this.formatCurrency(sip.monthlyAmount), when: `on the ${this.ordinal(sip.dayOfMonth)}`,
+                           action: null });
+            }
+            if (Number(this.efGap) > 0 && Number(this.emergency.efMonthly) > 0) {
+                out.push({ id: 'ef', icon: 'savings', sort: 999, title: 'Emergency fund is short',
+                           amount: this.formatCurrency(this.efGap), when: `below a ${this.emergency.efMonths}-month buffer`,
+                           action: 'Plan it', go: () => { this.activePage = 'emergency'; } });
+            }
+            return out.sort((a, b) => a.sort - b.sort).slice(0, 4);
+        },
+
+        /* ── Holdings, as the approved screen groups them ─────────────── */
+        HOLDING_CHIPS: [
+            { key: 'all', label: 'All' }, { key: 'equity', label: 'Stocks' }, { key: 'mf', label: 'Mutual funds' },
+            { key: 'deposits', label: 'Deposits' }, { key: 'schemes', label: 'Government schemes' },
+            { key: 'gold', label: 'Gold' }, { key: 'metals', label: 'Metals' }, { key: 'bonds', label: 'Bonds' },
+        ],
+
+        _isScheme(inv) {
+            const t = (inv.type || '').toLowerCase(), n = (inv.name || '').toLowerCase();
+            return t.includes('government') || /\b(epf|ppf|nps|scss|ssy|nsc|kvp|post office|senior citizen|sukanya|mis)\b/.test(n);
+        },
+
+        _chipOf(inv) {
+            const t = inv.type || '';
+            if (t === 'Physical Metal') return inv.metal === 'gold' ? 'gold' : 'metals';
+            if (t.includes('Stock') || t.includes('ETF')) return (inv.ticker || '').toUpperCase().includes('GOLD') ? 'gold' : 'equity';
+            if (t === 'Mutual Fund') return 'mf';
+            if (t === 'Gold') return 'gold';
+            if (t === 'Bond') return 'bonds';
+            if (this._isScheme(inv)) return 'schemes';
+            if (t === 'Real Estate') return 'other';
+            return 'deposits';
+        },
+
+        get holdingChips() {
+            const all = this.investments || [];
+            const chips = this.HOLDING_CHIPS.map(c => c.key === 'all' ? { ...c, label: `All (${all.length})` } : c);
+            if (all.some(i => this._chipOf(i) === 'other')) chips.push({ key: 'other', label: 'Other' });
+            return chips;
+        },
+
+        get chipHoldings() {
+            const all = this.investments || [];
+            const f = this.invFilter;
+            if (!f || f === 'all') return all;
+            if (f === 'debt') return all.filter(i => ['deposits', 'schemes', 'bonds'].includes(this._chipOf(i)));
+            return all.filter(i => this._chipOf(i) === f);
+        },
+
+        _sectionOf(inv) {
+            const c = this._chipOf(inv);
+            if (c === 'equity') return this._marketBand(inv) === 'US' ? 'us' : 'ind';
+            if (['deposits', 'schemes', 'bonds'].includes(c)) return 'fixed';
+            return c;
+        },
+
+        get holdingSections() {
+            const order = [
+                { key: 'ind', title: 'Indian stocks', c: '#5577CC' }, { key: 'us', title: 'US stocks', c: '#CF6A86' },
+                { key: 'mf', title: 'Mutual funds', c: '#14A391' }, { key: 'fixed', title: '', c: '#3A9FCC' },
+                { key: 'gold', title: 'Gold', c: '#B08A22' }, { key: 'other', title: 'Property and other', c: '#9068E0' },
+            ];
+            const items = this.chipHoldings;
+            return order.map(s => {
+                const list = items.filter(i => this._sectionOf(i) === s.key);
+                let title = s.title;
+                if (s.key === 'fixed') {
+                    const kinds = new Set(list.map(i => this._chipOf(i)));
+                    const names = [kinds.has('schemes') && 'Government schemes', kinds.has('deposits') && 'deposits', kinds.has('bonds') && 'bonds'].filter(Boolean);
+                    title = names.length === 3 ? 'Deposits, schemes and bonds' : names.join(' and ');
+                    title = title.charAt(0).toUpperCase() + title.slice(1);
+                }
+                return { ...s, title, items: list, count: `${list.length} holding${list.length === 1 ? '' : 's'}` };
+            }).filter(s => s.items.length);
+        },
+
+        get holdingsTotal() {
+            return (this.investments || []).reduce((a, i) => a + this.getInvCurrentValue(i), 0);
+        },
+
+        get holdingsMeta() {
+            const n = (this.investments || []).length;
+            const tail = this.syncedLabel.replace(/^Synced/, 'synced').replace('Not synced yet', 'not synced yet').replace('Syncing', 'syncing');
+            return `${n} holding${n === 1 ? '' : 's'}${tail ? ', ' + tail : ''}`;
+        },
+
+        // The square to the left of a row: a monogram for anything with a ticker, an icon otherwise.
+        holdingWell(inv) {
+            const c = this._chipOf(inv);
+            if (c === 'equity') {
+                const s = String(inv.ticker || inv.name || '?').toUpperCase().replace(/[^A-Z0-9]/g, '');
+                return { text: this._marketBand(inv) === 'US' ? s.slice(0, 2) : s.slice(0, 1) };
+            }
+            const n = (inv.name || '').toLowerCase();
+            const pick = c === 'mf' ? { icon: 'pie_chart' } : c === 'gold' ? { icon: 'toll' } : c === 'bonds' ? { icon: 'receipt_long' }
+                       : c === 'other' ? { icon: 'home' } : c === 'schemes' ? (/post office|mis/.test(n) ? { icon: 'mail' } : { icon: 'account_balance' }) : { icon: 'savings' };
+            return { icon: pick.icon, gold: c === 'gold' };
+        },
+
+        holdingLine(inv) {
+            const c = this._chipOf(inv);
+            const u = Number(inv.units) || 0;
+            const fmtU = (x, d = 3) => Number(x).toLocaleString('en-IN', { maximumFractionDigits: d });
+            if (c === 'equity') return `${inv.ticker || inv.name}, ${fmtU(u, 4)} share${u === 1 ? '' : 's'}`;
+            if (c === 'mf') return `${fmtU(u)} units`;
+            if (c === 'gold') return (inv.type || '').includes('ETF') || inv.ticker ? `${inv.ticker || 'Gold ETF'}, ${fmtU(u)} units` : `${fmtU(u)} g`;
+            const rate = Number(inv.rate) || 0;
+            const pay = (inv.payout || '').toLowerCase();
+            const payout = /month/.test(pay) ? 'pays monthly' : /quarter/.test(pay) ? 'pays quarterly'
+                         : /half/.test(pay) ? 'pays twice a year' : /annual|year/.test(pay) ? 'pays yearly' : '';
+            if (inv.maturityDate && (c === 'deposits' || c === 'bonds' || !payout)) {
+                return `${rate ? rate + '%, ' : ''}matures ${this.formatDate(inv.maturityDate)}`;
+            }
+            return [rate ? `${rate}%` : '', payout].filter(Boolean).join(', ') || inv.issuer || inv.type || '';
+        },
+
+        // US holdings show their dollar value; the rupee figure goes on a second line.
+        holdingValue(inv) {
+            if (this.lotCurrency(inv) === 'USD') {
+                const usd = (Number(inv.units) || 0) * (Number(inv.currentPrice) || Number(inv.buyPrice) || 0);
+                return this.formatNative(inv, usd);
+            }
+            return this.formatCurrency(this.getInvCurrentValue(inv));
+        },
+
+        holdingTag(inv) {
+            if (this.isRateBearing(inv.type) || this.getInvInvestedCost(inv) <= 0) return null;
+            const p = Number(this.getInvPnLPct(inv));
+            if (!Number.isFinite(p)) return null;
+            const a = Math.abs(p);
+            return { up: p >= 0, label: `${p >= 0 ? '↑' : '↓'} ${a >= 10 ? a.toFixed(1) : a.toFixed(2)}%` };
+        },
+
+        holdingNote(inv) {
+            if (!inv.maturityDate) return '';
+            const days = Math.ceil((new Date(inv.maturityDate) - Date.now()) / 864e5);
+            if (days < 0 || days > 60) return '';
+            return days === 0 ? 'Matures today' : `Matures in ${days} day${days === 1 ? '' : 's'}`;
+        },
+
+        // What the filter-empty screen says for each chip.
+        get filterEmpty() {
+            const m = {
+                equity:   { icon: 'candlestick_chart', t: 'No stocks yet', d: 'Indian and US shares and ETFs show here. Tap Add to add one.', a: 'Add a stock', ctx: 'equity' },
+                mf:       { icon: 'pie_chart', t: 'No mutual funds yet', d: 'Any scheme listed with AMFI, valued at its NAV each evening. Tap Add to add one.', a: 'Add a fund', ctx: 'mf' },
+                deposits: { icon: 'savings', t: 'No deposits yet', d: 'Bank and company fixed deposits show here. Tap Add to add one.', a: 'Add a deposit', ctx: 'deposits' },
+                schemes:  { icon: 'account_balance', t: 'No government schemes yet', d: 'SCSS, POMIS, NSC, EPF and PPF show here. Tap Add to add one.', a: 'Add a scheme', ctx: 'schemes' },
+                gold:     { icon: 'toll', t: 'No gold yet', d: 'Gold ETFs, sovereign gold bonds and physical gold show here. Tap Add to add one.', a: 'Add gold', ctx: 'gold' },
+                bonds:    { icon: 'receipt_long', t: 'No bonds yet', d: 'Tax-free, 54EC and company bonds show here. Tap Add to add one.', a: 'Add a bond', ctx: 'bonds' },
+                other:    { icon: 'home', t: 'Nothing else yet', d: 'Property and anything that fits no other group shows here. Tap Add to add one.', a: 'Add a holding', ctx: 'all' },
+            };
+            return m[this.invFilter] || m.other;
+        },
+
+        get holdingsMode() {
+            if (!(this.investments || []).length) return 'hoem';
+            return this.chipHoldings.length ? 'ho' : 'hofe';
+        },
+
+        /* ── Holding detail ───────────────────────────────────────────────
+           One route, five approved layouts: a share or ETF, a fund, a deposit
+           or bond, a government scheme, and gold. */
+        get detailVariant() {
+            const i = this.detailHolding;
+            if (!i) return 'hd-fd';
+            const c = this._chipOf(i);
+            return c === 'equity' ? 'hd-st' : c === 'mf' ? 'hd-mf' : c === 'gold' || c === 'metals' ? 'hd-go' : c === 'schemes' ? 'hd-sc' : 'hd-fd';
+        },
+
+        // Price history, fetched when a quoted holding is opened and kept for the day (M1).
+        detailHist: { id: null, loading: false, error: '', series: [], meta: null, fund: null, analyst: null },
+
+        async loadDetailData(inv) {
+            if (!inv) return;
+            const h = { id: inv.id, loading: true, error: '', series: [], meta: null, fund: null, analyst: null };
+            this.detailHist = h;
+            const day = this.localDateKey(new Date());
+            const key = `corpus_px_${inv.id}`;
+            try {
+                const hit = JSON.parse(localStorage.getItem(key) || 'null');
+                if (hit && hit.day === day && (hit.series || []).length) {
+                    this.detailHist = { ...h, ...hit, id: inv.id, loading: false };
+                    return;
+                }
+            } catch (e) {}
+            const c = this._chipOf(inv);
+            try {
+                if (c === 'mf' && inv.schemeCode) {
+                    const data = await this.fetchMarketJson(`https://api.mfapi.in/mf/${encodeURIComponent(inv.schemeCode)}`, 10000);
+                    const rows = (data?.data || []).map(r => {
+                        const [dd, mm, yy] = String(r.date).split('-');
+                        return { date: `${yy}-${mm}-${dd}`, v: Number(r.nav) };
+                    }).filter(r => Number.isFinite(r.v) && r.v > 0 && r.date.length === 10).reverse();
+                    const fund = window.CorpusResearch ? await window.CorpusResearch.studyFund(this, inv).catch(() => null) : null;
+                    h.series = rows.slice(-1300);
+                    h.fund = { ...(fund || {}), category: data?.meta?.scheme_category || fund?.category || null };
+                    const last = rows[rows.length - 1];
+                    h.meta = last ? { price: last.v, date: last.date, currency: 'INR' } : null;
+                } else if (inv.ticker) {
+                    const clean = String(inv.ticker).trim().toUpperCase().replace(/\.(NS|BO)$/, '');
+                    const sym = this._marketBand(inv) === 'US' ? clean : `${clean}.NS`;
+                    const data = await this.fetchMarketJson(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?interval=1d&range=5y`, 10000);
+                    const res = data?.chart?.result?.[0];
+                    const ts = res?.timestamp || [], cl = res?.indicators?.quote?.[0]?.close || [];
+                    h.series = ts.map((t, i) => ({ date: this.localDateKey(new Date(t * 1000)), v: Number(cl[i]) }))
+                                 .filter(p => Number.isFinite(p.v) && p.v > 0);
+                    const yearAgo = this.localDateKey(new Date(Date.now() - 365 * 864e5));
+                    const yr = h.series.filter(p => p.date >= yearAgo).map(p => p.v);
+                    const m = res?.meta || {};
+                    h.meta = {
+                        price: Number(m.regularMarketPrice) || (h.series.length ? h.series[h.series.length - 1].v : null),
+                        time: m.regularMarketTime ? m.regularMarketTime * 1000 : null,
+                        currency: m.currency || (this.lotCurrency(inv) === 'USD' ? 'USD' : 'INR'),
+                        exchange: m.fullExchangeName || m.exchangeName || null,
+                        high52: Number(m.fiftyTwoWeekHigh) || (yr.length ? Math.max(...yr) : null),
+                        low52: Number(m.fiftyTwoWeekLow) || (yr.length ? Math.min(...yr) : null),
+                    };
+                    if (this._marketBand(inv) === 'US' && window.CorpusResearch) {
+                        h.analyst = await window.CorpusResearch.fundamentals(this, inv).catch(() => null);
+                    }
+                }
+                if (!h.series.length) h.error = 'offline';
+            } catch (e) {
+                h.error = 'offline';
+            }
+            h.loading = false;
+            if (this.detailHist.id !== inv.id) return;
+            this.detailHist = { ...h };
+            if (h.series.length) {
+                try { localStorage.setItem(key, JSON.stringify({ day, series: h.series, meta: h.meta, fund: h.fund, analyst: h.analyst })); } catch (e) {}
+            }
+        },
+
+        DETAIL_RANGES: ['1M', '3M', '6M', '1Y', 'ALL'],
+
+        get detailSeries() {
+            const all = this.detailHist.id === this.detailHoldingId ? this.detailHist.series : [];
+            if (!all.length) return [];
+            const now = new Date();
+            const back = { '1M': 1, '3M': 3, '6M': 6, '1Y': 12 }[this.detailRange];
+            const from = back ? this.localDateKey(new Date(now.getFullYear(), now.getMonth() - back, now.getDate())) : '';
+            const pts = from ? all.filter(p => p.date >= from) : all;
+            if (pts.length <= 90) return pts;
+            const step = pts.length / 90, out = [];
+            for (let i = 0; i < 90; i++) out.push(pts[Math.floor(i * step)]);
+            out.push(pts[pts.length - 1]);
+            return out;
+        },
+
+        // The detail chart: the same monotone line, plus a dashed line at your average cost.
+        get detailSvg() {
+            const pts = this.detailSeries;
+            const inv = this.detailHolding;
+            if (pts.length < 2 || !inv) return null;
+            const avg = Number(inv.buyPrice) || 0;
+            const vals = pts.map(p => p.v).concat(avg > 0 ? [avg] : []);
+            const lo = Math.min(...vals), hi = Math.max(...vals), span = hi - lo || hi || 1;
+            const W = 350, H = 160, top = 14, bottom = 146;
+            const y = v => bottom - ((v - lo) / span) * (bottom - top);
+            const xy = pts.map((p, i) => [(i / (pts.length - 1)) * 346, y(p.v)]);
+            const f = n => Math.round(n * 10) / 10;
+            const n = xy.length, d = [], m = [];
+            for (let i = 0; i < n - 1; i++) d.push((xy[i + 1][1] - xy[i][1]) / ((xy[i + 1][0] - xy[i][0]) || 1));
+            m[0] = d[0]; m[n - 1] = d[n - 2];
+            for (let i = 1; i < n - 1; i++) m[i] = d[i - 1] * d[i] <= 0 ? 0 : (d[i - 1] + d[i]) / 2;
+            let line = `M${f(xy[0][0])},${f(xy[0][1])}`;
+            for (let i = 0; i < n - 1; i++) {
+                const [xa, ya] = xy[i], [xb, yb] = xy[i + 1], h = (xb - xa) / 3;
+                line += ` C${f(xa + h)},${f(ya + m[i] * h)} ${f(xb - h)},${f(yb - m[i + 1] * h)} ${f(xb)},${f(yb)}`;
+            }
+            const [ex, ey] = xy[n - 1];
+            const labels = [];
+            for (let i = 0; i < 4; i++) {
+                const dt = new Date(`${pts[Math.round((i / 3) * (n - 1))].date}T00:00:00`);
+                const l = this.detailRange === '1M' ? this.shortDate(dt) : this.MONTHS[dt.getMonth()];
+                if (!labels.includes(l)) labels.push(l);
+            }
+            return {
+                line, area: `${line} L${f(ex)},${H} L0,${H} Z`, avgY: avg > 0 ? f(y(avg)) : null,
+                end: { x: (ex / W) * 100, y: (ey / H) * 100 }, labels,
+                spoken: `${inv.name} price over ${this.RANGE_WORDS[this.detailRange]}, from ${this.formatNative(inv, pts[0].v)} to ${this.formatNative(inv, pts[n - 1].v)}`
+                        + (avg > 0 ? `, against your average of ${this.formatNative(inv, avg)}` : ''),
+            };
+        },
+
+        setDetailRange(r) { this.detailRange = r; if (window.RFMMotion?.Haptics) window.RFMMotion.Haptics.tap(); },
+
+        // Native-currency position figures for the detail hero and tiles.
+        get detailPos() {
+            const i = this.detailHolding;
+            if (!i) return null;
+            const usd = this.lotCurrency(i) === 'USD';
+            const units = Number(i.units) || 0;
+            const price = Number(i.currentPrice) || Number(i.nav) || Number(i.buyPrice) || 0;
+            const avg = Number(i.buyPrice) || 0;
+            const valueNative = units > 0 ? units * price : this.getInvCurrentValue(i);
+            const costNative = units > 0 ? units * avg : this.getInvInvestedCost(i);
+            const gain = valueNative - costNative;
+            const pct = costNative > 0 ? (gain / costNative) * 100 : null;
+            const nat = v => usd ? this.formatNative(i, v) : this.formatCurrency(v);
+            const mf = this._chipOf(i) === 'mf';
+            return {
+                usd, units, price, avg,
+                value: nat(valueNative), valueInr: this.formatCurrency(this.getInvCurrentValue(i)),
+                invested: this.formatCurrency(this.getInvInvestedCost(i)),
+                avgNative: avg > 0 ? (usd ? this.formatNative(i, avg) : '₹' + avg.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })) : '',
+                avgInr: usd && avg > 0 ? this.formatCurrency(avg * this.fxUsdInr) : '',
+                unitsLabel: units.toLocaleString('en-IN', { maximumFractionDigits: mf ? 3 : 4, minimumFractionDigits: mf ? 3 : 0 }),
+                tag: costNative > 0 ? { up: gain >= 0, label: `${gain >= 0 ? '↑' : '↓'} ${nat(Math.abs(gain))}${pct !== null ? ` (${gain >= 0 ? '+' : '−'}${Math.abs(pct).toFixed(1)}%)` : ''}` } : null,
+                pct,
+            };
+        },
+
+        get detailSub() {
+            const i = this.detailHolding;
+            if (!i) return '';
+            const v = this.detailVariant;
+            if (v === 'hd-st' || (v === 'hd-go' && i.ticker)) {
+                const ex = String(this.detailHist.meta?.exchange || (this._marketBand(i) === 'US' ? 'NASDAQ' : 'NSE'));
+                const name = /nasdaq/i.test(ex) ? 'NASDAQ' : /nyse/i.test(ex) ? 'NYSE' : /bse|bombay/i.test(ex) ? 'BSE'
+                           : this._marketBand(i) === 'US' ? ex : 'NSE';
+                return `${String(i.ticker || '').toUpperCase().replace(/\.(NS|BO)$/, '')} on ${name}`;
+            }
+            if (v === 'hd-mf') {
+                const cat = (this.detailHist.fund?.category || '').replace(/^.*?-\s*/, '').replace(/\s*Fund$/i, '').toLowerCase();
+                return [this.fundPlan.short, cat].filter(Boolean).join(', ');
+            }
+            if (v === 'hd-go') return `${Number(i.units) || 0} g of gold`;
+            const rate = Number(i.rate) || 0;
+            if (v === 'hd-sc') {
+                const issuer = /post office|scss|senior citizen|\bmis\b|nsc|kvp/i.test(`${i.name} ${i.issuer || ''}`) ? 'Post office' : (i.issuer || 'Government');
+                return `${issuer}${rate ? `, ${rate}% a year` : ''}`;
+            }
+            const pay = this.payoutWords(i);
+            return `${rate ? `${rate}% a year` : (i.issuer || i.type || '')}${pay && pay !== 'at maturity' ? `, interest paid ${pay}` : pay ? ', paid at maturity' : ''}`;
+        },
+
+        get fundPlan() {
+            const n = (this.detailHolding?.name || '').toLowerCase();
+            const direct = /direct/.test(n) ? 'Direct' : /regular/.test(n) ? 'Regular' : '';
+            const idcw = /idcw|dividend/.test(n);
+            const kind = idcw ? 'income' : 'growth';
+            const cap = w => w.charAt(0).toUpperCase() + w.slice(1);
+            return { short: direct ? `${direct} ${kind}` : cap(kind), title: direct ? `${direct}, ${kind}` : cap(kind),
+                     note: idcw ? 'Pays out income when the fund declares it.' : 'No payouts. Gains stay invested.' };
+        },
+
+        // "Up 18.3% on your average and 14% below its 52-week high of $412."
+        get detailSummary() {
+            const i = this.detailHolding, p = this.detailPos, m = this.detailHist.meta;
+            if (!i || !p || p.pct === null) return null;
+            const out = { lead: p.pct >= 0 ? 'Up' : 'Down', pct: `${Math.abs(p.pct).toFixed(1)}%`, rest: ' on your average', pct2: '', tail: '' };
+            if (this.detailVariant === 'hd-mf') { out.tail = ' cost.'; return out; }
+            if (m && m.high52 && m.price) {
+                const below = ((m.high52 - m.price) / m.high52) * 100;
+                if (below >= 0.5) {
+                    out.rest += ' and ';
+                    out.pct2 = `${Math.round(below)}%`;
+                    out.tail = ` below its 52-week high${this.detailVariant === 'hd-st' ? ` of ${this.formatNative(i, Math.round(m.high52))}` : ''}.`;
+                } else out.tail = ', at its 52-week high.';
+                return out;
+            }
+            out.tail = '.';
+            return out;
+        },
+
+        get detailMarket() {
+            const i = this.detailHolding, m = this.detailHist.meta;
+            if (!i || !m || !m.price) return null;
+            const t = m.time ? new Date(m.time) : null;
+            const lo = Number(m.low52), hi = Number(m.high52);
+            return {
+                price: this.formatNative(i, m.price),
+                at: t ? `at ${t.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' }).toLowerCase()}${new Date().toDateString() === t.toDateString() ? '' : ` on ${this.shortDate(t)}`}` : '',
+                range: hi > lo ? { pos: Math.max(0, Math.min(100, ((m.price - lo) / (hi - lo)) * 100)),
+                                   lo: `${this.formatNative(i, lo)} low`, hi: `${this.formatNative(i, hi)} high` } : null,
+            };
+        },
+
+        // US listings only: Nasdaq publishes analyst counts and targets, nothing free does for NSE (M2).
+        get detailAnalyst() {
+            const a = this.detailHist.analyst, i = this.detailHolding, m = this.detailHist.meta;
+            if (!a || !i || !(a.buy || a.hold || a.sell) || !a.targetMean) return null;
+            const up = m?.price ? ((a.targetMean - m.price) / m.price) * 100 : null;
+            const view = a.consensus || (a.buy >= (a.hold || 0) + (a.sell || 0) ? 'Buy' : a.sell > a.buy ? 'Sell' : 'Hold');
+            const v = String(view).toLowerCase();
+            return { view: v.charAt(0).toUpperCase() + v.slice(1),
+                     counts: `${a.buy || 0} buy, ${a.hold || 0} hold, ${a.sell || 0} sell`,
+                     target: this.formatNative(i, a.targetMean),
+                     tag: up === null ? null : { up: up >= 0, label: `${up >= 0 ? '↑' : '↓'} ${Math.abs(up).toFixed(1)}%` } };
+        },
+
+        payoutWords(inv) {
+            const p = String(inv?.payout || inv?.payoutFrequency || '').toLowerCase();
+            if (/month/.test(p)) return 'monthly';
+            if (/quarter/.test(p)) return 'quarterly';
+            if (/half/.test(p)) return 'twice a year';
+            if (/cumulative|maturity/.test(p)) return 'at maturity';
+            if (/annual|year/.test(p)) return 'yearly';
+            return '';
+        },
+
+        PAYOUTS_PER_YEAR: { monthly: 12, quarterly: 4, 'twice a year': 2, yearly: 1 },
+
+        // One payout's size: amount × rate ÷ payouts a year (M9).
+        payoutAmount(inv) {
+            const n = this.PAYOUTS_PER_YEAR[this.payoutWords(inv)];
+            const amt = Number(inv?.amount) || 0, rate = Number(inv?.rate) || 0;
+            return n && amt && rate ? Math.round((amt * rate) / 100 / n) : 0;
+        },
+
+        /* Payout dates for anything that pays out (M6). SCSS pays on the first of
+           Apr, Jul, Oct and Jan; anything else pays on its anniversary day,
+           stepped from the start date. With no start date there is no schedule,
+           and the screen says so rather than inventing one. */
+        payoutSchedule(inv) {
+            const n = this.PAYOUTS_PER_YEAR[this.payoutWords(inv)];
+            if (!inv || !n) return [];
+            const today = new Date(); today.setHours(0, 0, 0, 0);
+            const step = 12 / n;
+            const start = inv.startDate ? new Date(inv.startDate) : null;
+            let anchor;
+            if (/scss|senior citizen/i.test(inv.name || '')) anchor = new Date(today.getFullYear() - 1, 0, 1);
+            else if (start && !Number.isNaN(start.getTime())) anchor = new Date(start.getFullYear(), start.getMonth() + step, start.getDate());
+            else return [];
+            const dates = [];
+            for (let guard = 0; guard < 400 && dates.length < 60; guard++) {
+                dates.push(new Date(anchor));
+                anchor = new Date(anchor.getFullYear(), anchor.getMonth() + step, anchor.getDate());
+                if (dates.length > 2 && dates[dates.length - 3] > today) break;
+            }
+            const mat = inv.maturityDate ? new Date(inv.maturityDate) : null;
+            const valid = dates.filter(d => !mat || d <= mat);
+            const nextIdx = valid.findIndex(d => d >= today);
+            if (nextIdx < 0) return [];
+            const from = Math.max(0, nextIdx - 2);
+            return valid.slice(from, from + 4).map((d, k) => {
+                const days = Math.round((d - today) / 864e5);
+                const isNext = from + k === nextIdx;
+                return { key: d.toISOString(), label: this.shortDate(d), done: days < 0, next: isNext,
+                         status: days < 0 ? 'Paid' : isNext ? (days === 0 ? 'Today' : `In ${days} day${days === 1 ? '' : 's'}`) : 'Due' };
+            });
+        },
+
+        get detailScheme() {
+            const i = this.detailHolding;
+            if (!i) return null;
+            const s = window.CorpusSchemes ? window.CorpusSchemes.match(i) : null;
+            const sched = this.payoutSchedule(i);
+            const next = sched.find(q => q.next) || null;
+            const per = this.payoutAmount(i);
+            const n = this.PAYOUTS_PER_YEAR[this.payoutWords(i)] || 0;
+            const yearly = per * n || Math.round((Number(i.amount) || 0) * (Number(i.rate) || 0) / 100);
+            const lockBase = s?.lockIn ? s.lockIn.split(' (')[0] : '';
+            return { scheme: s, sched, next, per, yearly,
+                     lock: lockBase ? `Locked in for ${lockBase}.` : '',
+                     tax: s?.tax ? `${s.tax.split(/;\s*/).map(x => x.charAt(0).toUpperCase() + x.slice(1)).join('. ')}.` : '',
+                     rateNote: s?.rateLocks && lockBase ? `fixed for ${lockBase}` : (s?.rateNote || ''),
+                     extend: s?.lockIn && /extendable by/.test(s.lockIn) ? `can be extended by ${s.lockIn.replace(/^.*extendable by\s*([^)]*)\).*$/, '$1').replace(/(\d)$/, '$1 years')}` : '' };
+        },
+
+        // A deposit's tenure and interest, for the fixed deposit design.
+        get detailDeposit() {
+            const i = this.detailHolding;
+            if (!i) return null;
+            const amt = Number(i.amount) || 0, rate = Number(i.rate) || 0;
+            const words = this.payoutWords(i), per = this.payoutAmount(i);
+            const start = i.startDate ? new Date(i.startDate) : null, end = i.maturityDate ? new Date(i.maturityDate) : null;
+            const years = start && end ? (end - start) / (365.25 * 864e5) : null;
+            const accrued = start ? Math.round(amt * rate / 100 * Math.max(0, (Date.now() - start) / (365.25 * 864e5))) : 0;
+            const earned = i.type === 'Recurring Deposit' ? Math.max(0, this.getInvCurrentValue(i) - amt)
+                : Math.max(0, this.getInvCurrentValue(i) - amt) || accrued;
+            const unit = { monthly: 'month', quarterly: 'quarter', 'twice a year': 'half year', yearly: 'year' }[words];
+            return { p: this.depositProgress, amt, rate, earned,
+                     perLabel: i.type === 'Recurring Deposit' ? 'Projected interest a year (not counted)' : unit ? `Interest each ${unit}` : 'Interest a year',
+                     perValue: per || Math.round(amt * rate / 100),
+                     tenure: years ? (Math.abs(years - Math.round(years)) < 0.1 ? `${Math.round(years)} year${Math.round(years) === 1 ? '' : 's'}` : `${Math.round(years * 12)} months`) : '',
+                     issuer: i.issuer || String(i.name || '').split(/\s+(fixed|fd|bond)\b/i)[0] };
+        },
+
+        /* ── Add holding: seven approved sheets, one per asset type ───────── */
+        ADD_KINDS: [
+            [{ k: 'st', l: 'Stock' }, { k: 'mf', l: 'Mutual fund' }, { k: 'fd', l: 'FD' }, { k: 'rd', l: 'RD' }, { k: 'go', l: 'Gold ETF' }],
+            [{ k: 'pm', l: 'Physical metal' }, { k: 'sc', l: 'Govt scheme' }, { k: 'epf', l: 'EPF/PPF' }, { k: 'bd', l: 'Bond' }],
+        ],
+
+        setAddKind(k, silent = false) {
+            if (this.addKind === k) return;
+            this.addKind = k;
+            const f = this.newInv;
+            const type = { st: 'Stock', mf: 'Mutual Fund', fd: 'Bank FD', rd: 'Recurring Deposit', go: 'ETF (IND)', pm: 'Physical Metal', sc: 'Government Scheme', epf: 'Government Scheme', bd: 'Bond' }[k];
+            f.type = type;
+            if (k === 'pm' && !f.name) f.name = 'Physical gold';
+            f.currency = 'INR';
+            f.ticker = ''; f.schemeCode = '';
+            f.payout = { fd: 'Monthly', rd: 'Cumulative / On Maturity', sc: 'Quarterly', bd: 'Annual', epf: 'Cumulative / On Maturity' }[k] || f.payout;
+            if (k === 'sc') this.pickScheme(f.schemeId || 'scss');
+            if (k === 'epf') this.pickEpf(f.epfKind || 'PPF');
+            if (k !== 'sc' && k !== 'epf' && (f.schemeId || /provident fund/i.test(f.name))) { f.name = ''; f.rate = ''; f.schemeId = ''; }
+            if (this.symbolSearch) { this.symbolSearch.results = []; this.symbolSearch.error = ''; }
+            this.mfSearchResults = [];
+            if (!silent && window.RFMMotion?.Haptics) window.RFMMotion.Haptics.tap();
+        },
+
+        // ── Picker ────────────────────────────────────────────────────
+        // One list chooser for the whole app, in its own design, so no field
+        // ever opens Android's system select dialog or datalist popup.
+        picker: { open: false, title: '', options: [], value: '', search: false, searchHint: '', q: '',
+                  other: false, otherLabel: '', otherHint: '', otherText: '', onPick: null },
+
+        openPicker(cfg) {
+            Object.assign(this.picker, { search: false, searchHint: 'Search', other: false, otherLabel: '', otherHint: '',
+                                         otherText: '', q: '', value: '', ...cfg, open: true });
+            if (window.RFMMotion?.Haptics) window.RFMMotion.Haptics.tap();
+        },
+
+        closePicker() {
+            this.picker.open = false;
+            this.picker.onPick = null;
+        },
+
+        choosePick(v) {
+            if (!v) return;
+            const done = this.picker.onPick;
+            this.closePicker();
+            if (done) done(v);
+        },
+
+        get pickerOptions() {
+            const q = (this.picker.q || '').trim().toLowerCase();
+            const all = this.picker.options || [];
+            return q ? all.filter(o => (o.label + ' ' + (o.meta || '')).toLowerCase().includes(q)) : all;
+        },
+
+        FD_BANKS: ['State Bank of India', 'HDFC Bank', 'ICICI Bank', 'Axis Bank', 'Kotak Mahindra Bank',
+                   'Punjab National Bank', 'Bank of Baroda', 'Canara Bank', 'Union Bank of India',
+                   'IDFC First Bank', 'Bajaj Finance', 'India Post'],
+
+        openBankPicker() {
+            this.openPicker({
+                title: 'Bank', value: this.newInv.issuer || '', search: true, searchHint: 'Search banks',
+                options: this.FD_BANKS.map(b => ({ value: b, label: b })),
+                other: true, otherLabel: 'Another bank or lender', otherHint: 'Name as on the receipt',
+                onPick: v => { this.newInv.issuer = v; this.newInv.name = v + ' Fixed Deposit'; },
+            });
+        },
+
+        openSchemePicker() {
+            this.openPicker({
+                title: 'Scheme', value: this.newInv.schemeId,
+                options: this.schemeChoices.map(s => ({ value: s.id, label: s.name,
+                    meta: [s.rate ? `${s.rate}% a year` : '', s.payout ? `paid ${String(s.payout).split(/\s+[(—-]/)[0].toLowerCase()}` : ''].filter(Boolean).join(', ') })),
+                onPick: v => this.pickScheme(v),
+            });
+        },
+
+        // Schemes the Govt scheme sheet offers; EPF, PPF and gold bonds have sheets of their own.
+        get schemeChoices() {
+            const all = window.CorpusSchemes ? window.CorpusSchemes.SCHEMES : [];
+            return all.filter(x => !['epf', 'ppf', 'sgb', 'posb'].includes(x.id));
+        },
+
+        pickScheme(id) {
+            const sc = this.schemeChoices.find(x => x.id === id) || this.schemeChoices[0];
+            if (!sc) return;
+            const f = this.newInv;
+            f.schemeId = sc.id;
+            f.name = sc.name;
+            f.issuer = /post office|senior citizen|monthly income|kisan|national savings|time deposit|recurring/i.test(sc.name) ? 'India Post' : 'Government of India';
+            if (sc.rate) f.rate = sc.rate;
+            const pay = String(sc.payout || '').toLowerCase();
+            f.payout = /month/.test(pay) ? 'Monthly' : /quarter/.test(pay) ? 'Quarterly' : 'Cumulative / On Maturity';
+        },
+
+        pickEpf(kind) {
+            const f = this.newInv;
+            f.epfKind = kind;
+            const sc = window.CorpusSchemes ? window.CorpusSchemes.SCHEMES.find(x => x.id === (kind === 'EPF' ? 'epf' : 'ppf')) : null;
+            if (sc?.rate) f.rate = sc.rate;
+        },
+
+        get schemeRateNote() {
+            const st = window.CorpusSchemes ? window.CorpusSchemes.status() : null;
+            if (!st) return '';
+            const q = String(st.quarter).replace('\u2013', ' to ').replace(/[\u2013-]/g, ' to ').replace(/July/, 'Jul').replace(/September/, 'Sep');
+            return st.current ? `Current rate for ${q}` : `Rate for ${q}. It may have changed, so check it.`;
+        },
+
+        get epfRateNote() {
+            if (this.newInv.epfKind === 'EPF') return 'EPF rate for FY 2025-26, declared once a year.';
+            const st = window.CorpusSchemes ? window.CorpusSchemes.status() : null;
+            const q = st ? String(st.quarter).replace(/[\u2013-]/g, ' to ').replace(/July/, 'Jul').replace(/September/, 'Sep') : '';
+            return `Current PPF rate${q ? ` for ${q}` : ''}. Interest is added once a year, on 31 Mar.`;
+        },
+
+        // The payout seg on the FD, scheme and bond sheets.
+        payoutOptions(kind) {
+            return kind === 'bd'
+                ? [{ v: 'Annual', l: 'Yearly' }, { v: 'Half-yearly', l: 'Half-yearly' }, { v: 'Cumulative / On Maturity', l: 'At maturity' }]
+                : [{ v: 'Monthly', l: 'Monthly' }, { v: 'Quarterly', l: 'Quarterly' }, { v: 'Cumulative / On Maturity', l: 'At maturity' }];
+        },
+
+        // "You will receive, every quarter ₹20,500" (M9). At maturity, the total instead.
+        get addPayout() {
+            const f = this.newInv, words = this.payoutWords(f);
+            const amt = Number(f.amount) || 0, rate = Number(f.rate) || 0;
+            if (!amt || !rate) return null;
+            if (words === 'at maturity') {
+                const start = f.startDate ? new Date(f.startDate) : new Date(), end = f.maturityDate ? new Date(f.maturityDate) : null;
+                if (!end || end <= start) return null;
+                const years = (end - start) / (365.25 * 864e5);
+                return { label: 'You will receive, at maturity', fig: this.formatCurrency(amt * Math.pow(1 + rate / 100 / 4, 4 * years)) };
+            }
+            const per = this.payoutAmount(f);
+            const unit = { monthly: 'month', quarterly: 'quarter', 'twice a year': 'half year', yearly: 'year' }[words];
+            return per && unit ? { label: `You will receive, every ${unit}`, fig: this.formatCurrency(per) } : null;
+        },
+
+        // "You invested ₹47,200. Worth today ₹49,320"
+        get addSummary() {
+            const f = this.newInv;
+            const units = Number(f.units) || 0, avg = Number(f.buyPrice) || 0;
+            if (!units || !avg) return null;
+            const fx = f.currency === 'USD' ? this.fxUsdInr : 1;
+            const invested = units * avg * fx;
+            const price = Number(f.currentPrice) || 0;
+            return price ? { lead: `You invested ${this.formatCurrency(invested)}. Worth today`, fig: this.formatCurrency(units * price * fx) }
+                         : { lead: 'You invested', fig: this.formatCurrency(invested) };
+        },
+
+        // A price of zero is an error; a blank price means "use the market price".
+        get editPriceInvalid() {
+            const v = this.editForm?.currentPrice;
+            return this.isUnitPriced(this.editForm?.type) && v !== '' && v !== null && v !== undefined && !(Number(v) > 0);
+        },
+
+        get editSub() {
+            const i = this.editForm;
+            if (!i || !i.type) return '';
+            const c = this._chipOf(i);
+            if (c === 'equity') {
+                const us = this._marketBand(i) === 'US';
+                const t = String(i.ticker || '').toUpperCase().replace(/\.(NS|BO)$/, '');
+                const kind = (i.type || '').includes('ETF') ? 'ETF' : 'stock';
+                const where = this.detailHolding && this.detailHolding.id === i.id ? this.detailSub : (t ? `${t} on ${us ? 'a US exchange' : 'NSE'}` : '');
+                return `${where ? where + ', ' : ''}${us ? 'a US' : 'an Indian'} ${kind}.`;
+            }
+            return { mf: 'A mutual fund.', gold: 'Gold.', deposits: 'A fixed deposit.', schemes: 'A government scheme.', bonds: 'A bond.' }[c] || 'Something you own.';
+        },
+
+        /* ── Planning v4.1 ─────────────────────────────────────────────── */
+        get planFlow() {
+            const inc = this.totalIncome, out = this.totalExpense, max = Math.max(inc, out, 1);
+            const gap = inc - out;
+            const src = ((this.cashflow || {}).incomes || []).filter(i => Number(i.amount) > 0)
+                .sort((a, b) => Number(b.amount) - Number(a.amount)).slice(0, 3)
+                .map(i => ({ id: i.id, name: i.name || 'Income', value: this.formatCurrency(i.amount) }));
+            return { inc, out, inPct: (inc / max) * 100, outPct: (out / max) * 100, gap, src,
+                     tag: { up: gap >= 0, label: `${gap >= 0 ? '↑' : '↓'} ${this.formatCurrency(Math.abs(gap))} a month` },
+                     word: gap >= 0 ? 'left over' : 'shortfall' };
+        },
+
+        // "Fully funded, enough for 6 months" (M15).
+        get planBuffer() {
+            const monthly = Number(this.emergency.efMonthly) || 0, have = Number(this.emergency.efCurrent) || 0;
+            if (!monthly) return { state: 'unset', icon: 'info', flag: 'Not sized yet', have, text: 'Set what a month of essentials costs you.' };
+            const months = have / monthly;
+            const m = months >= 10 ? Math.round(months) : Math.round(months * 10) / 10;
+            const full = have >= this.efRequired && this.efRequired > 0;
+            return { state: full ? 'full' : 'short', icon: full ? 'check_circle' : 'warning', flag: full ? 'Fully funded' : 'Short', have,
+                     text: ` set aside, enough for ${m} month${m === 1 ? '' : 's'} of spending.` };
+        },
+
+        // Payouts, maturities and the PPF deposit, in date order (M6, M7).
+        get planComingUp() {
+            const out = [], today = new Date(); today.setHours(0, 0, 0, 0);
+            for (const inv of (this.investments || [])) {
+                const per = this.payoutAmount(inv);
+                if (!per) continue;
+                const next = this.payoutSchedule(inv).find(q => q.next);
+                if (!next) continue;
+                const d = new Date(next.key);
+                if ((d - today) / 864e5 > 60) continue;
+                const short = /scss|senior citizen/i.test(inv.name) ? 'SCSS' : /monthly income|mis|pomis/i.test(inv.name) ? 'Post Office MIS' : inv.name;
+                out.push({ id: 'p' + inv.id, icon: 'payments', title: `${short} payout`, when: next.label, sort: +d, tag: `↑ ${this.formatCurrency(per)}` });
+            }
+            for (const inv of (this.maturingInvestments || [])) {
+                const d = new Date(inv.maturityDate), days = (d - today) / 864e5;
+                if (days < 0 || days > 120) continue;
+                const short = String(inv.name).replace(/\s*Fixed Deposit$/i, ' FD');
+                out.push({ id: 'm' + inv.id, icon: 'savings', title: `${short} matures`, when: this.shortDate(d), sort: +d,
+                           value: this.formatCurrency(this.getInvCurrentValue(inv)), link: true });
+            }
+            if ((this.investments || []).some(i => /ppf|public provident/i.test(i.name || ''))) {
+                const y = today.getMonth() > 2 ? today.getFullYear() + 1 : today.getFullYear();
+                const d = new Date(y, 2, 31);
+                out.push({ id: 'ppf', icon: 'event', title: 'PPF deposit due', when: '31 Mar', sort: +d, note: 'Before year end' });
+            }
+            return out.sort((a, b) => a.sort - b.sort).slice(0, 4);
+        },
+
+        /* ── Income and spending v4 ─────────────────────────────────────── */
+        editingFlow: null,   // the id of the income or expense row open for editing
+
+        FLOW_ICONS: [
+            { re: /scss|senior citizen|scheme|payout/i, icon: 'payments' },
+            { re: /mis|post office|pomis/i, icon: 'mail' },
+            { re: /fd|deposit|interest|bond/i, icon: 'savings' },
+            { re: /pension/i, icon: 'elderly' },
+            { re: /salary|wage|consult|business/i, icon: 'work' },
+            { re: /rent/i, icon: 'real_estate_agent' },
+            { re: /house|home|grocer|food|kitchen/i, icon: 'home' },
+            { re: /help|maid|driver|cook|staff/i, icon: 'person' },
+            { re: /medic|health|doctor|hospital|pharma/i, icon: 'medication' },
+            { re: /electric|water|power|bill|gas|phone|internet/i, icon: 'bolt' },
+            { re: /travel|car|fuel|transport/i, icon: 'directions_car' },
+            { re: /insur/i, icon: 'shield' },
+        ],
+
+        flowIcon(name) {
+            const hit = this.FLOW_ICONS.find(x => x.re.test(name || ''));
+            return hit ? hit.icon : 'more_horiz';
+        },
+
+        get expenseRowsTotal() {
+            return ((this.cashflow || {}).expenses || []).reduce((a, e) => a + (Number(e.amount) || 0), 0);
+        },
+
+        get flowGap() {
+            const gap = this.totalIncome - this.totalExpense;
+            return { up: gap >= 0, label: `${gap >= 0 ? '↑' : '↓'} ${this.formatCurrency(Math.abs(gap))}`,
+                     word: gap >= 0 ? 'left over each month' : 'short each month',
+                     spoken: `${gap >= 0 ? 'Left over' : 'Shortfall of'} ${this.formatIndianSpoken(Math.abs(gap))}` };
+        },
+
+        addFlow(kind) {
+            if (kind === 'income') this.addIncomeStream('', 0); else this.addExpenseItem('', 0);
+            const list = kind === 'income' ? this.cashflow.incomes : this.cashflow.expenses;
+            this.editingFlow = list[list.length - 1].id;
+            this.$nextTick(() => { const el = document.getElementById('flow-name-' + this.editingFlow); if (el) el.focus(); });
+        },
+
+        closeFlow(kind, item) {
+            if (item && !String(item.name || '').trim() && !(Number(item.amount) > 0)) {
+                if (kind === 'income') this.deleteIncomeStream(item.id); else this.deleteExpenseItem(item.id);
+            } else this.saveData();
+            this.editingFlow = null;
+        },
+
+        removeFlow(kind, id) {
+            if (kind === 'income') this.deleteIncomeStream(id); else this.deleteExpenseItem(id);
+            this.editingFlow = null;
+        },
+
+        sipIcon(sip) {
+            return (/ppf|rd|recurring|deposit/i.test(`${sip.type} ${sip.name}`) ? { icon: 'calendar_month' } : { icon: 'pie_chart' }).icon;
+        },
+
+        sipLine(sip) {
+            const d = this.sipDaysUntil(sip);
+            const when = d === null ? '' : d === 0 ? ', today' : d <= 20 ? `, in ${d} day${d === 1 ? '' : 's'}` : '';
+            return `The ${this.ordinal(sip.dayOfMonth)} of every month${when}`;
+        },
+
+        /* ── Goals v4 ───────────────────────────────────────────────────── */
+        GOAL_ICONS: {
+            'Emergency Fund': { icon: 'health_and_safety' }, 'Retirement': { icon: 'elderly' }, 'House': { icon: 'home' },
+            'Education': { icon: 'school' }, 'Travel': { icon: 'flight' }, 'New Car': { icon: 'directions_car' }, 'Other': { icon: 'flag' },
+        },
+
+        goalIcon(g) {
+            const byType = this.GOAL_ICONS[g.type];
+            if (byType && g.type !== 'Other') return byType.icon;
+            const n = (g.name || '').toLowerCase();
+            const hit = [[/school|college|educat|study/, { icon: 'school' }], [/car|bike|scooter/, { icon: 'directions_car' }],
+                         [/trip|travel|yatra|holiday|tour|flight/, { icon: 'flight' }], [/house|home|flat|repair|renovat/, { icon: 'home' }],
+                         [/wedding|marriage/, { icon: 'favorite' }], [/medical|health|surgery/, { icon: 'health_and_safety' }]]
+                        .find(([re]) => re.test(n));
+            return hit ? hit[1].icon : 'flag';
+        },
+
+        get goalsView() {
+            const all = this.goalsProgress;
+            const open = all.filter(g => g.pct < 100);
+            const done = all.filter(g => g.pct >= 100);
+            const dated = open.filter(g => g.targetDate).sort((a, b) => new Date(a.targetDate) - new Date(b.targetDate));
+            const featured = dated[0] || open[0] || null;
+            return { featured, others: open.filter(g => g !== featured), done };
+        },
+
+        goalWhen(g, long = false) {
+            if (!g.targetDate) return 'No date set';
+            const d = new Date(g.targetDate);
+            return long ? `By ${this.MONTHS[d.getMonth()]} ${d.getFullYear()}` : `By ${d.getFullYear()}`;
+        },
+
+        /* ── Emergency fund v4 ─────────────────────────────────────────── */
+        get efView() {
+            const monthly = Number(this.emergency.efMonthly) || 0, want = Math.max(1, Number(this.emergency.efMonths) || 6);
+            const have = Number(this.emergency.efCurrent) || 0;
+            const months = monthly ? have / monthly : 0;
+            const m = months >= 10 ? Math.round(months) : Math.round(months * 10) / 10;
+            const target = this.efRequired, diff = have - target;
+            return {
+                monthly, want, have, target,
+                sized: monthly > 0,
+                full: monthly > 0 && have >= target,
+                covered: Math.min(want, Math.floor(months)),
+                pips: Array.from({ length: Math.min(want, 12) }, (_, i) => i < Math.min(want, Math.floor(months))),
+                enough: monthly ? `set aside, enough for ${m} month${m === 1 ? '' : 's'}` : 'set aside so far',
+                diffLabel: diff >= 0 ? 'Beyond target' : 'Still to go',
+                diffTag: { up: diff >= 0, label: `${diff >= 0 ? '↑' : '↓'} ${this.formatCurrency(Math.abs(diff))}` },
+                note: !monthly ? 'Set what a month of essentials costs to size the buffer.'
+                    : diff > 0 ? 'The extra could earn more in a sweep FD. Keep this part where you can reach it.'
+                    : diff < 0 ? `Setting aside ${this.formatCurrency(Math.ceil(-diff / 6 / 100) * 100)} a month closes the gap in six months.`
+                    : 'Exactly on target.',
+            };
+        },
+
+        stepEfMonths(d) {
+            this.emergency.efMonths = Math.max(1, Math.min(24, (Number(this.emergency.efMonths) || 6) + d));
+            this.saveData();
+            if (window.RFMMotion?.Haptics) window.RFMMotion.Haptics.tap();
+        },
+
+        /* ── Assets and debts v4.1 ─────────────────────────────────────── */
+        get assetsView() {
+            const hold = this.holdingsTotal;
+            const prop = (Number(this.networth.property) || 0) + (Number(this.networth.otherAsset) || 0);
+            const cash = (Number(this.networth.bank) || 0) + (Number(this.networth.cash) || 0);
+            const owed = this.totalLiabilities;
+            const card = Number(this.networth.credit) || 0;
+            return {
+                hold, prop, cash, owed,
+                owedWhat: owed === card ? 'owed on your card' : card > 0 ? 'owed on loans and cards' : 'owed on loans',
+                split: [
+                    { k: 'hold', label: 'Your holdings', v: hold, c: '#C0A04A', bar: 'linear-gradient(90deg,#9A7B2C,#C0A04A)' },
+                    { k: 'prop', label: 'Property', v: prop, c: '#7F97C2', bar: '#7F97C2' },
+                    { k: 'cash', label: 'Bank and cash', v: cash, c: '#A1A1AA', bar: '#A1A1AA' },
+                ].filter(x => x.v > 0),
+            };
+        },
+
+        /* ── Maturities v4.1 ───────────────────────────────────────────── */
+        get maturityView() {
+            const up = (this.maturingInvestments || []).filter(i => i.daysLeft >= 0);
+            return { next: up[0] || null, later: up.slice(1) };
+        },
+
+        maturityLine(inv) {
+            const rate = Number(inv.rate) || 0, pay = this.payoutWords(inv);
+            const s = window.CorpusSchemes ? window.CorpusSchemes.match(inv) : null;
+            const extra = s && /extendable/.test(s.lockIn || '') ? `can be extended by ${String(s.lockIn).replace(/^.*extendable by\s*([^)]*)\).*$/, '$1').replace(/(\d)$/, '$1 years')}`
+                        : pay === 'at maturity' ? 'paid at maturity' : pay ? (/^(monthly|quarterly|yearly)$/.test(pay) ? `pays ${pay}` : `interest paid ${pay}`) : '';
+            return [rate ? `${rate}% a year` : '', extra].filter(Boolean).join(', ');
+        },
+
+        renewSentence(inv) {
+            if (!inv) return '';
+            if (inv.type === 'Bank FD' || /fd|fixed deposit/i.test(inv.name || '')) {
+                const who = inv.issuer || String(inv.name || '').split(/\s+(fixed|fd)/i)[0] || 'the bank';
+                return `If you do nothing, ${who} renews it at the rate on that day.`;
+            }
+            return 'The money is paid back to your bank on that day.';
+        },
+
+        /* ── Tax v4 ────────────────────────────────────────────────────── */
+        get taxView() {
+            const o = this.oldRegimeTax.tax, n = this.newRegimeTax.tax, save = this.taxSavingByOptimalRegime;
+            const best = o === n ? null : (o < n ? 'old' : 'new');
+            let tag = null, words = '';
+            if (o === 0 && n === 0) words = 'No tax due either way';
+            else if (!best || save === 0) words = 'Both regimes cost the same';
+            else { tag = `↑ ${this.formatCurrency(save)} saved`; words = `with the ${best} regime`; }
+            return { o, n, best, tag, words };
+        },
+
+        get isSenior() {
+            const age = Number(this.profile?.age);
+            return Number.isFinite(age) && age > 0 ? age >= 60 : !!this.tax.seniorCitizen;
+        },
+
+        /* ── Insights v6 and its three states ──────────────────────────── */
+        get insightsMode() {
+            const r = this.regenWealth;
+            if (r.loading) return 'inld';
+            if (r.error && !this.readingErrorDismissed) return 'iner';
+            return r.analysis ? 'in' : 'id';
+        },
+        readingErrorDismissed: false,
+        readingDrawerOpen: false,
+        readingRefreshing: false,
+
+        runReading(force = false) {
+            if (!this.hasAnalyzablePosition) return;
+            this.readingErrorDismissed = false;
+            this.readingRefreshing = true;
+            setTimeout(() => { this.readingRefreshing = false; }, 800);
+            this.runRegenWealthAnalysis(force);
+        },
+
+        get holdingCountWords() {
+            const n = (this.investments || []).length;
+            return `${n} holding${n === 1 ? '' : 's'}`;
+        },
+
+        // Which of the three designed steps the reading is on, from its own progress messages.
+        get readingStep() {
+            const m = String(this.regenWealth.progressMsg || '').toLowerCase();
+            if (/analy|writing|model|reading the evidence/.test(m)) return 2;
+            if (/research|price|news|rate|market|fund|gold|scheme|headline/.test(m)) return 1;
+            return 0;
+        },
+
+        get readingUpdated() {
+            const a = this.regenWealth.analysis;
+            if (!a) return '';
+            const t = a.timestamp ? new Date(a.timestamp) : null;
+            const when = t && !Number.isNaN(t.getTime())
+                ? (new Date().toDateString() === t.toDateString()
+                    ? t.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' }).toLowerCase()
+                    : this.shortDate(t))
+                : '';
+            const cov = a.research?.coverage;
+            const read = cov ? `${cov.studied} of ${cov.requested} holdings read` : '';
+            return ['Updated ' + when, read].filter(x => x && x !== 'Updated ').join(', ');
+        },
+
+        get readingSources() {
+            const a = this.regenWealth.analysis;
+            const names = [...new Set((a?.newsSources || []).filter(x => x.count).map(x => String(x.source).split(/[(:]/)[0].trim()))].slice(0, 3);
+            const read = names.length ? `Read from ${names.length > 1 ? names.slice(0, -1).join(', ') + ' and ' + names[names.length - 1] : names[0]}. ` : '';
+            return `${read}Educational only, not investment advice. Anything acted on should go past a SEBI-registered adviser.`;
+        },
+
+        get lastReadingDate() {
+            const t = this.regenWealth.analysis?.timestamp;
+            return t ? this.shortDate(new Date(t)) : '';
+        },
+
+        get briefDate() {
+            const at = Date.parse(this.daily.brief?.preparedAt || '') || Date.now();
+            const d = new Date(at);
+            return `${['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d.getDay()]} ${this.shortDate(d)}`;
+        },
+
+        verdictPill(v) {
+            return { Buy: 'healthy', Keep: 'healthy', Hold: 'neutral', Review: 'review', Trim: 'review' }[v] || 'neutral';
+        },
+
+        /* ── Settings v4 ────────────────────────────────────────────────── */
+        // "Retired. Wants steady income and safety, waits out a fall, paid monthly." (M12)
+        /* One line per asset you hold, in your own answers: what it is for and
+           when you need it. Two classes are spelled out; the rest are counted. */
+        get profileSentence() {
+            const p = this.profile || {};
+            if (!p.completedAt) return 'Answer eleven questions so every reading is written for you.';
+            if (p.version !== 2) return 'Corpus now asks per asset. Update your answers so each one is judged on its own terms.';
+            const word = (field, v) => ((this.PROFILE_ASK[field] || {}).opts || []).find(o => o.v === v)?.t || '';
+            const parts = (p.holdings || []).map(k => {
+                const cls = this.PROFILE_CLASSES.find(c => c.k === k);
+                const forWhat = (p.purpose[k] || []).map(v => word('purpose', v).toLowerCase()).join(' and ');
+                const when = (p.horizon[k] || []).map(v => word('horizon', v).toLowerCase()).join(', ');
+                return `${cls ? cls.t : k}${forWhat ? ' for ' + forWhat : ''}${when ? ', ' + when : ''}`;
+            });
+            const shown = parts.slice(0, 2).join('. ');
+            return shown + (parts.length > 2 ? `. And ${parts.length - 2} more.` : '.');
+        },
+
+        get profileTitle() {
+            const p = this.profile || {};
+            const name = String(p.name || '').trim();
+            if (!name) return 'About you';
+            return p.age ? `${name}, ${p.age}` : name;
+        },
+
+        textSize: (function () { try { const v = localStorage.getItem('corpus_text'); return v === 'large' || v === 'small' ? v : 'standard'; } catch (e) { return 'standard'; } })(),
+
+        setTextSize(v) {
+            this.textSize = v;
+            try { localStorage.setItem('corpus_text', v); } catch (e) {}
+            if (window.RFMMotion?.Haptics) window.RFMMotion.Haptics.tap();
+            // A new layout width only applies when the page is laid out again.
+            try { sessionStorage.setItem('corpus_return', this.activePage); } catch (e) {}
+            setTimeout(() => location.reload(), 120);
+        },
+
+        alertsOn: (function () { try { return localStorage.getItem('corpus_alerts_enabled') !== 'false'; } catch (e) { return true; } })(),
+
+        toggleAlerts() {
+            this.alertsOn = !this.alertsOn;
+            try { localStorage.setItem('corpus_alerts_enabled', this.alertsOn ? 'true' : 'false'); } catch (e) {}
+            if (this.alertsOn) this.scheduleMaturityAlerts().catch(() => {});
+            else {
+                const LN = window.AppPlugins?.LocalNotifications;
+                if (LN) LN.getPending().then(r => r.notifications?.length && LN.cancel({ notifications: r.notifications })).catch(() => {});
+            }
+        },
+
+        /* ── Notifications v4 ──────────────────────────────────────────── */
+        notiSeen: (function () { try { return JSON.parse(localStorage.getItem('corpus_noti_seen') || '[]'); } catch (e) { return []; } })(),
+
+        get notiView() {
+            const needs = [], coming = [];
+            for (const sip of this.dueSipDebits) {
+                needs.push({ id: 'due' + sip.id + this.currentMonthKey, tone: 'due', icon: 'help', title: `Did your ${sip.name} go through?`,
+                             meta: `${this.formatCurrency(sip.monthlyAmount)} was due on the ${this.ordinal(sip.dayOfMonth)}. Confirm it in Income and spending.`, page: 'income' });
+            }
+            if (this.portfolioFreshness.stale) {
+                needs.push({ id: 'stale' + this.localDateKey(), tone: 'warn', icon: 'sync_problem', title: 'Prices need a refresh',
+                             meta: `${this.syncedLabel.replace('Synced', 'Last synced')}. Open Holdings and pull down to refresh.`, page: 'investments' });
+            }
+            if (Number(this.efGap) > 0 && Number(this.emergency.efMonthly) > 0) {
+                needs.push({ id: 'ef' + this.currentMonthKey, tone: 'warn', icon: 'savings', title: 'Emergency fund is short',
+                             meta: `${this.formatCurrency(this.efGap)} below a ${this.emergency.efMonths}-month buffer.`, page: 'emergency' });
+            }
+            for (const inv of (this.maturingInvestments || [])) {
+                if (inv.daysLeft < 0 || inv.daysLeft > 90) continue;
+                coming.push({ id: 'm' + inv.id, icon: 'savings', sort: inv.daysLeft,
+                              title: inv.daysLeft === 0 ? `${inv.name} matures today` : `${inv.name} matures in ${inv.daysLeft} day${inv.daysLeft === 1 ? '' : 's'}`,
+                              meta: `${this.formatCurrency(this.getInvCurrentValue(inv))} on ${this.shortDate(inv.maturityDate)}. Decide where it goes.`, page: 'maturity' });
+            }
+            for (const e of this.planComingUp) {
+                if (e.id.startsWith('m')) continue;
+                const days = Math.round((e.sort - new Date().setHours(0, 0, 0, 0)) / 864e5);
+                coming.push({ id: e.id, icon: e.id === 'ppf' ? 'event_repeat' : 'payments', sort: days,
+                              title: e.id === 'ppf' ? 'PPF deposit due before 31 Mar' : `${e.title} in ${days} day${days === 1 ? '' : 's'}`,
+                              meta: e.id === 'ppf' ? 'Deposit at least ₹500 this year to keep the account active.' : `${e.tag.replace('↑ ', '')} on ${e.when}.`,
+                              page: e.id === 'ppf' ? 'investments' : 'cashflow' });
+            }
+            coming.sort((a, b) => a.sort - b.sort);
+            const all = [...needs, ...coming];
+            return { needs, coming, unseen: all.filter(n => !this.notiSeen.includes(n.id)).length };
+        },
+
+        markNotiSeen() {
+            this.notiSeen = [...this.notiView.needs, ...this.notiView.coming].map(n => n.id);
+            try { localStorage.setItem('corpus_noti_seen', JSON.stringify(this.notiSeen)); } catch (e) {}
+        },
+
+        /* ── Goal and recurring sheets ──────────────────────────────────── */
+        GOAL_KINDS: [{ v: 'Retirement', l: 'Retirement' }, { v: 'House', l: 'House' }, { v: 'Education', l: 'Education' },
+                     { v: 'Travel', l: 'Travel' }, { v: 'New Car', l: 'New car' }, { v: 'Emergency Fund', l: 'Emergency fund' }, { v: 'Other', l: 'Other' }],
+
+        monthLabel(d) {
+            if (!d) return 'Pick a month';
+            const t = new Date(String(d).length === 7 ? `${d}-01T00:00:00` : d);
+            return Number.isNaN(t.getTime()) ? 'Pick a month' : `${this.MONTHS[t.getMonth()]} ${t.getFullYear()}`;
+        },
+
+        // What to put aside each month to reach a goal by its date.
+        goalNeed(g) {
+            const target = Number(g?.target) || 0, have = Number(g?.current) || 0;
+            if (!g?.targetDate || have >= target) return 0;
+            const now = new Date(), end = new Date(g.targetDate);
+            const months = Math.max(1, (end.getFullYear() - now.getFullYear()) * 12 + (end.getMonth() - now.getMonth()));
+            return Math.ceil((target - have) / months / 100) * 100;
+        },
+
+        get editGoalPct() {
+            const t = Number(this.editGoalForm?.target) || 0, c = Number(this.editGoalForm?.current) || 0;
+            return t > 0 ? Math.min(100, Math.round((c / t) * 100)) : 0;
+        },
+
+        SIP_KINDS: ['SIP', 'RD', 'PPF', 'Other'],
+
+        nextDebitLabel(sip) {
+            if (!Number(sip?.dayOfMonth)) return '';
+            const d = this._sipDaysToNext(sip);
+            const t = new Date(); t.setHours(0, 0, 0, 0); t.setDate(t.getDate() + d);
+            return this.shortDate(t);
+        },
+
+        sipRecorded(sip) {
+            const k = sip?.lastRecordedMonth;
+            if (!k) return 'Not recorded yet. Corpus asks on each debit day.';
+            const [y, m] = k.split('-').map(Number);
+            const name = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'][m - 1];
+            return `Last recorded in ${name}${y !== new Date().getFullYear() ? ' ' + y : ''}.`;
+        },
+
+        stopSip(id) {
+            const before = this.sips.length;
+            this.deleteSip(id);
+            if (this.sips.length < before) this.cancelSipEdit();
+        },
+
+        removeHolding(id) {
+            const before = (this.investments || []).length;
+            this.deleteInvestment(id);
+            if ((this.investments || []).length < before) this.activePage = 'investments';
         }
 
     }));

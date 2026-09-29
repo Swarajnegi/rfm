@@ -16,7 +16,7 @@ const p = await b.newPage({ viewport:{width:390,height:844}, hasTouch:true });
 const errs=[]; p.on('pageerror',e=>errs.push(e.message));
 await p.addInitScript(s => {
   localStorage.setItem('rfm_v1', s);
-  localStorage.setItem('corpus_tour_v1','x'); localStorage.setItem('rfm_v1', JSON.stringify((v => ({ ...v, profile: v.profile || { completedAt: '2026-09-01T00:00:00.000Z', name: 'Test', age: 40, goal: 'balanced', risk: 'medium', horizon: '7to15', interests: ['stocks'] } }))(JSON.parse(localStorage.getItem('rfm_v1') || '{}'))));
+  localStorage.setItem('corpus_tour_v1','x'); localStorage.setItem('rfm_v1', JSON.stringify((v => ({ ...v, profile: v.profile || { version: 2, completedAt: '2026-09-01T00:00:00.000Z', name: 'Test', age: 40, goal: 'balanced', risk: 'medium', horizon: '7to15', interests: ['stocks'] } }))(JSON.parse(localStorage.getItem('rfm_v1') || '{}'))));
   localStorage.setItem('corpus_theme','light');
 }, readFileSync('scripts/seed.json','utf8'));
 await p.route('**/*', r => r.request().url().startsWith('file://') ? r.continue() : r.abort());
@@ -31,7 +31,7 @@ const busy = await p.evaluate(() => {
   const d = document.querySelector('[x-data]')._x_dataStack[0];
   d.navFetchState = 'fetching';
   return new Promise(r => setTimeout(() => r({
-    banner: !!document.querySelector('.syncbar, [x-show*="fetching"], .is-spinning'),
+    banner: [...document.querySelectorAll('.syncline')].some(el => el.offsetParent !== null && /Refreshing/.test(el.textContent)),
     reentrant: (() => { const before = d.navFetchState; d.fetchAllPrices(); return d.navFetchState === before; })(),
   }), 140));
 });
@@ -76,16 +76,17 @@ const drag = await p.evaluate(async () => {
   window.scrollTo(0, 0);
   touch('touchstart', 100);
   touch('touchmove', 130); await frame();
-  const short = { y: pull(), armed: bar.dataset.armed, label: bar.querySelector('.ptr__label').textContent };
+  const arc = () => parseFloat(bar.querySelector('circle').style.strokeDasharray) || 0;
+  const short = { y: pull(), armed: bar.dataset.armed, arc: arc() };
   touch('touchmove', 260); await frame();
-  const long = { y: pull(), armed: bar.dataset.armed, label: bar.querySelector('.ptr__label').textContent };
+  const long = { y: pull(), armed: bar.dataset.armed, arc: arc() };
   touch('touchend', 260);
   // Read synchronously: with the network blocked the sync resolves in
   // milliseconds, so an awaited read would only ever see the end state.
-  const committed = { label: bar.querySelector('.ptr__label').textContent,
+  const committed = { label: d.syncedLabel,
                       syncing: document.body.classList.contains('is-syncing') };
   await new Promise(r => setTimeout(r, 2200));
-  const rest = { opacity: bar.style.opacity, syncing: document.body.classList.contains('is-syncing'),
+  const rest = { snack: d.snack.on && d.snack.text, opacity: bar.style.opacity, syncing: document.body.classList.contains('is-syncing'),
                  refreshing: d.pullToRefresh.isRefreshing };
 
   // A short pull must NOT sync, or every downward flick fires the network.
@@ -108,12 +109,13 @@ const drag = await p.evaluate(async () => {
 
 ok('the indicator follows the finger', drag.short.y > 0 && drag.short.y < drag.long.y,
    `${drag.short.y.toFixed(0)}px then ${drag.long.y.toFixed(0)}px`);
-ok('a short pull is not armed', drag.short.armed === '0' && /Pull to sync/.test(drag.short.label),
-   `${drag.short.armed} "${drag.short.label}"`);
-ok('crossing the threshold arms it', drag.long.armed === '1' && /Release/.test(drag.long.label),
-   `${drag.long.armed} "${drag.long.label}"`);
+ok('a short pull is not armed, its arc part drawn', drag.short.armed === '0' && drag.short.arc > 0 && drag.short.arc < 78,
+   `${drag.short.armed}, arc ${drag.short.arc}`);
+ok('crossing the threshold arms it and closes the arc', drag.long.armed === '1' && drag.long.arc === 78,
+   `${drag.long.armed}, arc ${drag.long.arc}`);
 ok('releasing past the threshold starts a sync',
    /Syncing/.test(drag.committed.label) && drag.committed.syncing, JSON.stringify(drag.committed));
+ok('the result is reported in a snackbar', !!drag.rest.snack, String(drag.rest.snack));
 ok('and it puts itself away afterwards',
    drag.rest.opacity === '0' && !drag.rest.syncing && !drag.rest.refreshing, JSON.stringify(drag.rest));
 ok('a short pull syncs nothing', !drag.shortPullSynced);
@@ -169,7 +171,7 @@ ok('an unsynced holding says so', prov.none === 'unknown', prov.none);
 ok('a just-synced holding is NEVER stale, however old its quote',
    prov.usJustSynced.state !== 'stale', `${prov.usJustSynced.state} — "${prov.usJustSynced.label}"`);
 ok('and it says the market is shut rather than blaming the user',
-   /last close/.test(prov.usJustSynced.label), prov.usJustSynced.label);
+   /last close/i.test(prov.usJustSynced.label), prov.usJustSynced.label);
 ok('portfolio freshness summarises the worst case', !!prov.portfolio, prov.portfolio);
 
 const real = errs.filter(e => !/favicon/i.test(e));

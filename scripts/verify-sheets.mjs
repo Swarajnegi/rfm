@@ -4,12 +4,13 @@ import { chromium } from 'playwright';
 import { pathToFileURL } from 'node:url';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-const FLAGS = ['addingInv','addingGoal','addingSip','showNotifications'];
-const OPENERS = [['editingInv','openEditModal',0],['editingGoal','openGoalEdit',0],['editingSip','openEditSipModal',0]];
+// Notifications became a page in Corpus 3.0; Add to a position is opened with a holding.
+const FLAGS = ['addingInv','addingGoal','addingSip'];
+const OPENERS = [['editingInv','openEditModal',0],['editingGoal','openGoalEdit',0],['editingSip','openEditSipModal',0],['addingLot','openAddLot',0]];
 const b = await chromium.launch();
 const p = await b.newPage({ viewport:{width:390,height:844} });
 const errs=[]; p.on('pageerror',e=>errs.push(e.message));
-await p.addInitScript(s => { localStorage.setItem('rfm_v1',s); localStorage.setItem('corpus_tour_v1','x'); localStorage.setItem('rfm_v1', JSON.stringify((v => ({ ...v, profile: v.profile || { completedAt: '2026-09-01T00:00:00.000Z', name: 'Test', age: 40, goal: 'balanced', risk: 'medium', horizon: '7to15', interests: ['stocks'] } }))(JSON.parse(localStorage.getItem('rfm_v1') || '{}')))); }, readFileSync('scripts/seed.json','utf8'));
+await p.addInitScript(s => { localStorage.setItem('rfm_v1',s); localStorage.setItem('corpus_tour_v1','x'); localStorage.setItem('rfm_v1', JSON.stringify((v => ({ ...v, profile: v.profile || { version: 2, completedAt: '2026-09-01T00:00:00.000Z', name: 'Test', age: 40, goal: 'balanced', risk: 'medium', horizon: '7to15', interests: ['stocks'] } }))(JSON.parse(localStorage.getItem('rfm_v1') || '{}')))); }, readFileSync('scripts/seed.json','utf8'));
 await p.route('**/*', r => r.request().url().startsWith('file://') ? r.continue() : r.abort());
 await p.goto(pathToFileURL(path.resolve('web/index.html')).href, { waitUntil:'load' });
 await p.waitForTimeout(1300);

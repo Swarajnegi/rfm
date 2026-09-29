@@ -28,3 +28,6 @@ keystore.properties
 !.dev.vars.example
 .env*
 !.env.example
+
+# Third-party design skill (UI/UX Pro Max), installed locally; not our code.
+.claude/skills/ui-ux-pro-max/

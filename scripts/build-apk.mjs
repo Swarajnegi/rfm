@@ -1,7 +1,10 @@
 // Builds the installable APK and leaves it at the repo root as rfm-app.apk.
 //
 //     npm run apk
-//     npm run apk -- --release     (unsigned; a device will refuse to install it)
+//     npm run apk -- --release     (signed with the upload key when
+//                                   android/keystore.properties exists)
+//     npm run apk -- --release --out rfm-3.0.apk
+//     npm run apk -- --release --legacy-debug-sign --out corpus-legacy-update.apk
 //     npm run aab                  (signed release bundle for the Play Store)
 //     adb install -r rfm-app.apk
 //
@@ -39,8 +42,18 @@ import os from 'node:os';
 const ROOT = process.cwd();
 const ANDROID = path.join(ROOT, 'android');
 const BUNDLE = process.argv.includes('--bundle');
-const OUT = path.join(ROOT, BUNDLE ? 'corpus-release.aab' : 'rfm-app.apk');
+const OUT_ARG = process.argv.indexOf('--out');
+const OUT = path.join(ROOT, OUT_ARG > 0 && process.argv[OUT_ARG + 1] ? process.argv[OUT_ARG + 1]
+                              : BUNDLE ? 'corpus-release.aab' : 'rfm-app.apk');
 const RELEASE = BUNDLE || process.argv.includes('--release');
+const LEGACY_DEBUG_SIGN = process.argv.includes('--legacy-debug-sign');
+if (LEGACY_DEBUG_SIGN && (!RELEASE || BUNDLE)) {
+    console.error('  --legacy-debug-sign requires --release and cannot be used for a Play bundle.');
+    process.exit(1);
+}
+// build.gradle applies the release signing config whenever this file exists, and
+// Gradle then names the output app-release.apk rather than app-release-unsigned.apk.
+const SIGNED = LEGACY_DEBUG_SIGN || existsSync(path.join(ROOT, 'android', 'keystore.properties'));
 const WIN = os.platform() === 'win32';
 
 const run = (cmd, args, opts = {}) => {
@@ -137,7 +150,7 @@ function inspect(file) {
         if (!bridge.includes('nativePromise')) problems.push('native-bridge.js defines no nativePromise');
     }
     // The packaged web layer must be the one on disk, not a previous sync.
-    for (const f of ['index.html', 'app.js', 'plugins.js', 'corpus.css', 'motion.js', 'parser.js', 'ai-service-config.js',
+    for (const f of ['index.html', 'app.js', 'vendor.js', 'account-config.js', 'plugins.js', 'corpus.css', 'motion.js', 'parser.js', 'bank-transactions.js', 'ai-service-config.js',
                      'regenWealth.js', 'research.js', 'schemes.js', 'crash.js']) {
         const packed = read(`assets/public/${f}`);
         if (!packed) { problems.push(`missing assets/public/${f}`); continue; }
@@ -167,12 +180,13 @@ const task = BUNDLE ? 'bundleRelease' : RELEASE ? 'assembleRelease' : 'assembleD
 const built = BUNDLE
     ? path.join(ANDROID, 'app', 'build', 'outputs', 'bundle', 'release', 'app-release.aab')
     : path.join(ANDROID, 'app', 'build', 'outputs', 'apk', RELEASE ? 'release' : 'debug',
-                RELEASE ? 'app-release-unsigned.apk' : 'app-debug.apk');
+                RELEASE ? (SIGNED ? 'app-release.apk' : 'app-release-unsigned.apk') : 'app-debug.apk');
 const gradleEnv = { cwd: ANDROID, env: { ...process.env, JAVA_HOME } };
 
 run('npm', ['run', 'build']);            // the web bundle FIRST — cap sync only copies
 run('npx', ['cap', 'sync', 'android']);  // copy web/ in, refresh plugins and the bridge
-run(gradlew, [task, '--no-daemon'], gradleEnv);
+const gradleArgs = [task, ...(LEGACY_DEBUG_SIGN ? ['-PcorpusLegacyDebugSign'] : []), '--no-daemon'];
+run(gradlew, gradleArgs, gradleEnv);
 
 if (!existsSync(built)) {
     console.error(`\n  Gradle succeeded but ${path.relative(ROOT, built)} is missing.\n`);
@@ -184,7 +198,7 @@ if (problems.length) {
     console.log('\n  The package is wrong despite a successful build:');
     for (const p of problems) console.log(`    - ${p}`);
     console.log("  Gradle's incremental state is stale. Rebuilding clean.\n");
-    run(gradlew, ['clean', task, '--no-daemon'], gradleEnv);
+    run(gradlew, ['clean', ...gradleArgs], gradleEnv);
     problems = inspect(built);
 }
 if (problems.length) {
@@ -206,7 +220,7 @@ if (BUNDLE) {
 
 copyFileSync(built, OUT);
 console.log(`\n  ${path.basename(OUT)}  ${(statSync(OUT).size / 1048576).toFixed(1)} MiB  ` +
-            `(${BUNDLE ? 'release bundle, signed with the upload key' : RELEASE ? 'release, UNSIGNED' : 'debug, installable'})`);
+            `(${BUNDLE ? 'release bundle, signed with the upload key' : LEGACY_DEBUG_SIGN ? 'release mode, signed with the legacy debug key' : RELEASE ? (SIGNED ? 'release, signed with the upload key' : 'release, UNSIGNED') : 'debug, installable'})`);
 console.log('  verified: native bridge packaged, web layer matches web/ on disk');
 console.log(BUNDLE ? '  upload in Play Console → Testing → Closed testing → Create release\n'
-                   : '  install with:  adb install -r rfm-app.apk\n');
+                   : `  install with:  adb install -r ${path.basename(OUT)}\n`);

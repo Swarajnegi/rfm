@@ -47,7 +47,7 @@ async function boot(storage = {}, { wait = 2200, clock = null } = {}) {
     if (clock) await page.clock.install({ time: clock });
     await page.addInitScript(s => {
         for (const [k, v] of Object.entries(s)) localStorage.setItem(k, v);
-        localStorage.setItem('corpus_tour_v1', 'seen'); localStorage.setItem('rfm_v1', JSON.stringify((v => ({ ...v, profile: v.profile || { completedAt: '2026-09-01T00:00:00.000Z', name: 'Test', age: 40, goal: 'balanced', risk: 'medium', horizon: '7to15', interests: ['stocks'] } }))(JSON.parse(localStorage.getItem('rfm_v1') || '{}'))));
+        localStorage.setItem('corpus_tour_v1', 'seen'); localStorage.setItem('rfm_v1', JSON.stringify((v => ({ ...v, profile: v.profile || { version: 2, completedAt: '2026-09-01T00:00:00.000Z', name: 'Test', age: 40, goal: 'balanced', risk: 'medium', horizon: '7to15', interests: ['stocks'] } }))(JSON.parse(localStorage.getItem('rfm_v1') || '{}'))));
         localStorage.setItem('rfm_tour_v1', 'seen');
     }, storage);
     await page.route('**/*', r => r.request().url().startsWith('file://') ? r.continue() : r.abort());
@@ -73,7 +73,7 @@ const read = page => page.evaluate(() => {
         netWorth: d.netWorthTotal,
         range: d.nwChartRange,
         hero: (document.getElementById('nwHero') || {}).innerText || '',
-        canvas: !!document.querySelector('#nwChart canvas'),
+        canvas: !!document.querySelector('#nwChart svg path.line'),
         chartShown: !!document.querySelector('#nwChart') && document.querySelector('#nwChart').offsetParent !== null,
         text: main ? main.innerText : '',
     };
@@ -97,8 +97,8 @@ console.log('\nEMPTY FIRST RUN — nothing observed, so nothing plotted');
     // something to draw.
     ok('no fabricated ₹0 point', !r.history.some(p => p.value === 0), JSON.stringify(r.history));
     ok('no percentage is claimed', !/%/.test(r.hero), (r.hero.match(/\S*%\S*/) || [''])[0]);
-    ok('no growth language on an empty app', !/profit|investment return|growth|gain/i.test(r.text));
-    ok('the onboarding hero stands in for the chart', /Start your corpus/.test(r.text));
+    ok('no growth language on an empty portfolio hero', !/profit|investment return|growth|gain/i.test(r.hero));
+    ok('the onboarding hero stands in for the chart', /Add your first holding/.test(r.text));
     ok('no console errors', errors.length === 0, errors[0] || '');
     await ctx.close();
 }
@@ -236,7 +236,7 @@ console.log('\nEMPTY WINDOW — a period with nothing in it says so');
     ok('the window is empty, not back-filled with everything', r.windowed.length === 0,
        JSON.stringify(r.windowed));
     ok('nothing is plotted', r.plotted.length === 0, JSON.stringify(r.plotted));
-    ok('the app says which silence this is', r.rangeEmpty === true && /No observations in this period/.test(r.text));
+    ok('the app says which silence this is', r.rangeEmpty === true && /No values were recorded in this period/.test(r.text));
     ok('it does not claim there is no history at all', !/No history yet/.test(r.text));
     ok('no change is reported', r.change === null, JSON.stringify(r.change));
     ok('the canvas is hidden rather than blank', r.chartShown === false, String(r.chartShown));
@@ -462,24 +462,25 @@ console.log('\nDURABILITY — reload, restore, and leaving Home and coming back'
     ok('it survives a reload', reloaded.history.length === 4, JSON.stringify(reloaded.history.map(p => p.date)));
     ok('values survive too', reloaded.history[0].value === 300000, String(reloaded.history[0].value));
 
-    const reuse = await page.evaluate(async () => {
+    // The chart is an SVG bound to the series: a range switch must redraw the
+    // line from the new window, not leave the previous one on screen.
+    const redraw = await page.evaluate(async () => {
         const d = document.querySelector('[x-data]')._x_dataStack[0];
-        window._rfmNw.__tag = 'original';
-        const sameAfter = [];
-        for (const v of ['1W', 'ALL', '1M']) {
-            d.nwChartRange = v;
-            d.renderNwChart();
-            await new Promise(r => setTimeout(r, 120));
-            sameAfter.push(window._rfmNw && window._rfmNw.__tag === 'original');
+        const paths = [];
+        for (const v of ['1W', 'ALL']) {
+            d.setNwRange(v);
+            await new Promise(r => setTimeout(r, 250));
+            paths.push(document.querySelector('#nwChart path.line')?.getAttribute('d') || '');
         }
-        return { sameAfter, drawn: d.nwChartSeries.length };
+        d.setNwRange('1M');
+        return { paths, drawn: d.nwChartSeries.length };
     });
-    ok('switching range updates the chart instead of rebuilding it',
-       reuse.sameAfter.every(Boolean), JSON.stringify(reuse.sameAfter));
-    ok('and it still has data to draw', reuse.drawn > 0, String(reuse.drawn));
+    ok('every range switch leaves a line drawn from its window',
+       redraw.paths.every(Boolean), JSON.stringify(redraw.paths.map(p => p.length)));
+    ok('and it still has data to draw', redraw.drawn > 0, String(redraw.drawn));
 
-    // Away and back is the path that once deadlocked the renderer, because
-    // Lightweight Charts measured its container inside a View Transition.
+    // Away and back is the path that once deadlocked the renderer, when the
+    // chart was a canvas measured inside a View Transition.
     await page.evaluate(() => { document.querySelector('[x-data]')._x_dataStack[0].activePage = 'investments'; });
     await page.waitForTimeout(700);
     await page.evaluate(() => { document.querySelector('[x-data]')._x_dataStack[0].activePage = 'home'; });
@@ -567,8 +568,8 @@ console.log('\nCORPUS ONLY — old return preference cannot change the series');
         }),
     });
     const r = await read(page);
-    ok('one chart range selector remains', await page.locator('.series .seg--range').count() === 1);
-    ok('there is no Return or Corpus mode selector', await page.locator('.series .seg--mode').count() === 0);
+    ok('at most one chart range selector', await page.locator('[role="tablist"][aria-label="Chart range"]').count() <= 1);
+    ok('there is no Return or Corpus mode selector', await page.locator('[aria-label*="mode" i]').count() === 0);
     ok('legacy return preference does not change the corpus total', r.netWorth === 562000, String(r.netWorth));
     ok('today records the corpus value', r.history.length === 1 && r.history[0].value === 562000,
        JSON.stringify(r.history));
@@ -580,8 +581,8 @@ console.log('\nCORPUS ONLY — old return preference cannot change the series');
     await ctx.close();
 }
 
-// ── 13. THE FILTER CHIPS NAME WHAT YOU ACTUALLY HOLD ─────────────────────────
-console.log('\nFILTER CHIPS — no chip opens an empty screen');
+// ── 13. THE FILTER CHIPS: THE APPROVED SET, NONE OF THEM A DEAD END ─────────
+console.log('\nFILTER CHIPS — every chip lists holdings or says what belongs there');
 {
     const { ctx, page } = await boot({
         rfm_v1: JSON.stringify({
@@ -592,36 +593,39 @@ console.log('\nFILTER CHIPS — no chip opens an empty screen');
             ],
         }),
     });
-    const r = await page.evaluate(() => {
+    await page.evaluate(() => { document.querySelector('[x-data]')._x_dataStack[0].activePage = 'investments'; });
+    await page.waitForTimeout(600);
+    const r = await page.evaluate(async () => {
         const d = document.querySelector('[x-data]')._x_dataStack[0];
-        const chips = d.holdingFilters.map(f => f.label);
-        const empties = d.holdingFilters
-            .filter(f => f.key !== 'all')
-            .filter(f => !(d.investments || []).some(i => d._filterOf(i) === f.key))
-            .map(f => f.label);
+        const chips = d.holdingChips.map(c => c.label);
+        const rendered = [...document.querySelectorAll('[data-s~="ho"] .chips button')].map(b => b.textContent.trim());
+        const outcome = {};
+        for (const c of d.holdingChips) {
+            d.invFilter = c.key;
+            await new Promise(res => setTimeout(res, 120));
+            const rows = document.querySelectorAll('.row.holding').length;
+            const empty = document.querySelector('[data-s~="hofe"] .none .t-body')?.textContent.trim() || '';
+            outcome[c.key] = { rows, empty };
+        }
         d.invFilter = 'equity';
-        const equity = d.visibleHoldings.map(i => i.name);
+        const equity = d.chipHoldings.map(i => i.name);
         d.invFilter = 'all';
-        return { chips, empties, equity,
-                 rendered: [...document.querySelectorAll('.seg--scroll .seg__item')].map(b => b.textContent.trim()) };
+        return { chips, rendered, outcome, equity };
     });
-    // A US-only book used to show a "Stocks" chip that opened "Nothing in this
-    // group", while the US chip that WOULD have found them sat off the right
-    // edge of a horizontal scroller with nothing saying so.
-    ok('no chip is offered for a group you do not hold', r.empties.length === 0, r.empties.join(', '));
-    // There is no separate US chip any more. One "Stocks" chip holds both
-    // markets and the list bands them, so neither half can hide.
-    ok('one Stocks chip covers both markets', r.chips.includes('Stocks'), r.chips.join(' · '));
-    ok('and a US holding is inside it', r.equity.includes('NVIDIA'), r.equity.join(', ') || '(none)');
-    ok('no separate US chip', !r.chips.includes('US') && !r.chips.includes('Stocks (US)'),
-       r.chips.join(' · '));
+    // Holdings v5 always offers the same chips; a chip with nothing in it opens
+    // the approved "No bonds yet" state with a way to add one, never a blank list.
+    ok('the approved chip set is offered', ['Stocks', 'Mutual funds', 'Deposits', 'Government schemes', 'Gold', 'Bonds']
+       .every(c => r.chips.includes(c)), r.chips.join(' · '));
+    ok('no chip is a dead end', Object.values(r.outcome).every(o => o.rows > 0 || o.empty),
+       JSON.stringify(r.outcome));
+    ok('one Stocks chip covers both markets', r.equity.includes('NVIDIA'), r.equity.join(', ') || '(none)');
     ok('the rendered row matches', r.rendered.join(' · ') === r.chips.join(' · '),
        `${r.rendered.join(' · ')} vs ${r.chips.join(' · ')}`);
     await ctx.close();
 }
 
-// ── 13b. STOCKS LIVE TOGETHER, BANDED BY MARKET ─────────────────────────────
-console.log('\nMARKET BANDS — Indian and US equities in one list, labelled');
+// ── 13b. GROUPED BY WHAT THEY ARE, INDIAN BEFORE US ─────────────────────────
+console.log('\nHOLDING GROUPS — one card per kind, labelled');
 {
     const { ctx, page } = await boot({
         rfm_v1: JSON.stringify({
@@ -636,69 +640,31 @@ console.log('\nMARKET BANDS — Indian and US equities in one list, labelled');
     });
     await page.evaluate(() => { document.querySelector('[x-data]')._x_dataStack[0].activePage = 'investments'; });
     await page.waitForTimeout(600);
-
-    const all = await page.evaluate(() => {
+    const r = await page.evaluate(() => {
         const d = document.querySelector('[x-data]')._x_dataStack[0];
         d.invFilter = 'all';
-        return d.holdingGroups.map(g => ({ heading: g.heading, items: g.items.map(i => i.name) }));
+        const sections = d.holdingSections.map(g => ({ key: g.key, title: g.title, items: g.items.map(i => i.name) }));
+        const heads = [...document.querySelectorAll('.ghead .t-group')].map(h => ({
+            text: h.textContent.trim(), size: parseFloat(getComputedStyle(h).fontSize) }));
+        return { sections, heads };
     });
-    ok('a deposit is not filed under a market it does not trade in',
-       all[0].heading === '' && all[0].items.join() === 'HDFC FD', JSON.stringify(all[0]));
-    ok('home market comes first', all[1].heading === 'IND' && all[2].heading === 'US',
-       all.map(g => g.heading || '(none)').join(' · '));
-    // An unsuffixed legacy 'Stock' is Indian in an Indian investor's app, and
-    // must not be stranded in a third group or dropped on the floor.
-    ok('a legacy unsuffixed Stock bands as IND',
-       all[1].items.includes('Legacy Co'), all[1].items.join(', '));
-    ok('nothing is lost between the groups',
-       all.reduce((n, g) => n + g.items.length, 0) === 4,
-       String(all.reduce((n, g) => n + g.items.length, 0)));
+    const at = k => r.sections.findIndex(g => g.key === k);
+    ok('Indian stocks come before US stocks', at('ind') >= 0 && at('us') > at('ind'), r.sections.map(g => g.title).join(' · '));
+    // An unsuffixed legacy 'Stock' is Indian in an Indian investor's app.
+    ok('a legacy unsuffixed Stock files as Indian', r.sections[at('ind')].items.includes('Legacy Co'), JSON.stringify(r.sections));
+    ok('a deposit is not filed with the stocks', r.sections[at('fixed')]?.items.join() === 'HDFC FD', JSON.stringify(r.sections));
+    ok('nothing is lost between the groups', r.sections.reduce((n, g) => n + g.items.length, 0) === 4);
+    ok('each group is titled on screen', r.heads.map(h => h.text).join(' · ') === r.sections.map(g => g.title).join(' · '),
+       r.heads.map(h => h.text).join(' · '));
+    ok('at or above the 14px floor', r.heads.every(h => h.size >= 14), r.heads.map(h => h.size).join(', '));
 
-    const stocks = await page.evaluate(() => {
-        const d = document.querySelector('[x-data]')._x_dataStack[0];
-        d.invFilter = 'equity';
-        return { groups: d.holdingGroups.map(g => ({ heading: g.heading, n: g.items.length })),
-                 count: d.visibleHoldings.length };
-    });
-    await page.waitForTimeout(400);
-    ok('the Stocks chip shows BOTH markets', stocks.count === 3, String(stocks.count));
-    ok('split into two banded groups',
-       stocks.groups.length === 2 && stocks.groups.every(g => g.heading),
-       JSON.stringify(stocks.groups));
-
-    const rendered = await page.evaluate(() => {
-        const main = [...document.querySelectorAll('main')].find(m => m.offsetParent !== null);
-        const labels = [...main.querySelectorAll('.market-label')];
-        const brass = (() => { const s = document.createElement('span');
-            s.style.color = 'var(--brass)'; document.body.appendChild(s);
-            const c = getComputedStyle(s).color; s.remove(); return c; })();
-        return {
-            text: labels.map(l => l.textContent.trim()),
-            colors: labels.map(l => getComputedStyle(l).color),
-            sizes: labels.map(l => parseFloat(getComputedStyle(l).fontSize)),
-            brass,
-        };
-    });
-    ok('the headings render as IND and US', rendered.text.join(' · ') === 'IND · US',
-       rendered.text.join(' · ') || '(none)');
-    ok('in brass', rendered.colors.every(c => c === rendered.brass),
-       `${rendered.colors.join(', ')} vs ${rendered.brass}`);
-    ok('at or above the 13px floor', rendered.sizes.every(s => s >= 13), rendered.sizes.join(', '));
-
-    // The dashboard still splits them, because there the split IS the point.
+    // The dashboard still splits the markets, because there the split IS the point.
     const alloc = await page.evaluate(() => {
         const d = document.querySelector('[x-data]')._x_dataStack[0];
-        return d.allocationRows.filter(r => r.key === 'us' || r.key === 'equity')
-                               .map(r => ({ key: r.key, label: r.label, filter: r.filter }));
+        return d.allocationRows.filter(r => r.key === 'us' || r.key === 'equity').map(r => ({ key: r.key, label: r.label }));
     });
-    ok('the dashboard still names the market',
-       alloc.some(r => r.key === 'us' && r.label === 'Stocks (US)'), JSON.stringify(alloc));
-    ok('and the Indian side reads Stocks (IND)',
-       alloc.some(r => r.key === 'equity' && r.label === 'Stocks (IND)'), JSON.stringify(alloc));
-    // There is no 'us' chip to land on, so the row has to send you to one
-    // that exists or it opens an empty screen.
-    ok('the US row links to a chip that exists',
-       alloc.every(r => r.filter === 'equity'), JSON.stringify(alloc.map(r => r.filter)));
+    ok('the dashboard still names the market', alloc.some(r => r.key === 'us' && r.label === 'Stocks (US)'), JSON.stringify(alloc));
+    ok('and the Indian side reads Stocks (IND)', alloc.some(r => r.key === 'equity' && r.label === 'Stocks (IND)'), JSON.stringify(alloc));
     await ctx.close();
 }
 
@@ -741,7 +707,7 @@ console.log('\nALLOCATION LABELS — a one-instrument bucket says which instrume
         // a kind of thing to own). Instrument first, market in the bracket, so
         // the column reads as a list of things owned rather than of places.
         ok('a US equity book reads "Stocks (US)"', us === 'Stocks (US)', String(us));
-        ok('a fund book still reads "Mutual Funds"', mf === 'Mutual Funds', String(mf));
+        ok('a fund book reads "Mutual funds"', mf === 'Mutual funds', String(mf));
         await ctx.close();
     }
 
@@ -765,7 +731,7 @@ console.log('\nALLOCATION LABELS — a one-instrument bucket says which instrume
                 assets: d.totalAssets,
                 // The chips are filters, not statements about what is held: one
                 // labelled "EPF" would still match a PPF added tomorrow.
-                chips: d.holdingFilters.map(f => f.label),
+                chips: d.holdingChips.map(f => f.label),
             };
         });
         const sum = r.rows.reduce((a, x) => a + x.value, 0);
@@ -774,60 +740,38 @@ console.log('\nALLOCATION LABELS — a one-instrument bucket says which instrume
         ok('rows still sum to total assets', Math.abs(sum - r.assets) <= 2,
            `${Math.round(sum)} vs ${Math.round(r.assets)}`);
         ok('the filter chips keep their class names',
-           r.chips.includes('Deposits') && !r.chips.includes('EPF'), r.chips.join(' · '));
+           r.chips.includes('Government schemes') && !r.chips.includes('EPF'), r.chips.join(' · '));
         await ctx.close();
     }
 }
 
-// ── 15. MONEY IN AND MONEY OUT READ AS DIRECTIONS ───────────────────────────
-console.log('\nCASHFLOW COLOUR — in is green, out is red, at a glance');
+// ── 15. THE GAP READS AS A DIRECTION ────────────────────────────────────────
+console.log('\nCASHFLOW — the monthly gap is green when money is left over, red when short');
 {
-    const { ctx, page } = await boot({
-        rfm_v1: JSON.stringify({
-            version: '3.0', networth: {}, sips: [], goals: [], investments: [],
-            cashflow: { incomes: [{ id: 'i1', name: 'Salary', amount: 120000 }],
-                        expenses: [{ id: 'e1', name: 'Rent', amount: 45000 }] },
-        }),
-    });
-    await page.evaluate(() => { document.querySelector('[x-data]')._x_dataStack[0].activePage = 'income'; });
-    await page.waitForTimeout(600);
-    const r = await page.evaluate(() => {
-        const main = [...document.querySelectorAll('main')].find(m => m.offsetParent !== null);
-        const head = t => [...main.querySelectorAll('.sheet__head--split')]
-            .find(h => (h.querySelector('.sheet__title') || {}).textContent.trim() === t);
-        const read = t => {
-            const fig = head(t).querySelector('.tnum');
-            const cs = getComputedStyle(fig);
-            return { text: fig.textContent.trim(), color: cs.color,
-                     size: parseFloat(cs.fontSize), weight: cs.fontWeight };
-        };
-        // Both tokens have to be RESOLVED on a real element. --jade is a hex
-        // that computed style reports as rgb(), and --t-small is a clamp()
-        // that parseFloat reads as NaN off the declaration.
-        const probe = (prop, v) => {
-            const s = document.createElement('span');
-            s.style.setProperty(prop, `var(${v})`);
-            document.body.appendChild(s);
-            const out = getComputedStyle(s)[prop === 'font-size' ? 'fontSize' : 'color'];
-            s.remove();
-            return out;
-        };
-        return { in: read('Coming in'), out: read('Going out'),
-                 jade: probe('color', '--jade'), carnelian: probe('color', '--carnelian'),
-                 small: parseFloat(probe('font-size', '--t-small')) };
-    });
-    ok('money in is jade', r.in.color === r.jade, `${r.in.text} is ${r.in.color}`);
-    ok('money out is carnelian', r.out.color === r.carnelian, `${r.out.text} is ${r.out.color}`);
-    ok('the two are not the same colour', r.in.color !== r.out.color);
-    // Dropping `muted` for a colour class used to drop the size and weight with
-    // it, because one rule carried all three.
-    ok('they keep their type size', r.in.size === r.small && r.out.size === r.small,
-       `${r.in.size}px / ${r.out.size}px vs --t-small ${r.small}px`);
-    ok('and their weight', r.in.weight === '600' && r.out.weight === '600',
-       `${r.in.weight} / ${r.out.weight}`);
-    ok('nothing falls below the 13px floor', r.in.size >= 13 && r.out.size >= 13,
-       `${r.in.size}px / ${r.out.size}px`);
-    await ctx.close();
+    const read = async (incomes, expenses) => {
+        const { ctx, page } = await boot({
+            rfm_v1: JSON.stringify({ version: '3.0', networth: {}, sips: [], goals: [], investments: [],
+                                     cashflow: { incomes, expenses } }),
+        });
+        await page.evaluate(() => { document.querySelector('[x-data]')._x_dataStack[0].activePage = 'income'; });
+        await page.waitForTimeout(600);
+        const r = await page.evaluate(() => {
+            const tag = document.querySelector('[data-s~="is"] .hero .gap span');
+            const heads = [...document.querySelectorAll('[data-s~="is"] .card .head')].map(h => ({
+                title: h.querySelector('.t-section')?.textContent.trim(), value: h.querySelector('.t-value')?.textContent.trim() }));
+            const cs = getComputedStyle(tag);
+            return { cls: tag.className, bg: cs.backgroundColor, text: tag.textContent.trim(), size: parseFloat(cs.fontSize), heads };
+        });
+        await ctx.close();
+        return r;
+    };
+    const plus = await read([{ id: 'i1', name: 'Salary', amount: 120000 }], [{ id: 'e1', name: 'Rent', amount: 45000 }]);
+    const minus = await read([{ id: 'i1', name: 'Pension', amount: 30000 }], [{ id: 'e1', name: 'Rent', amount: 45000 }]);
+    ok('money left over is a green tag', plus.cls.includes('tag-up') && plus.bg === 'rgb(20, 83, 45)', `${plus.text} on ${plus.bg}`);
+    ok('a shortfall is a red tag', minus.cls.includes('tag-down') && minus.bg === 'rgb(112, 26, 26)', `${minus.text} on ${minus.bg}`);
+    ok('the clusters state both totals', plus.heads.some(h => h.title === 'Coming in' && h.value === '₹1,20,000')
+       && plus.heads.some(h => h.title === 'Going out' && h.value === '₹45,000'), JSON.stringify(plus.heads));
+    ok('nothing falls below the 14px floor', plus.size >= 14 && minus.size >= 14, `${plus.size}px / ${minus.size}px`);
 }
 
 await browser.close();

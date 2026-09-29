@@ -141,11 +141,10 @@
 
     function buildSteps() {
         const want = [
-            ['#nwHero',        'Your corpus',          'Everything you own, minus what you owe. It moves as you add holdings and refresh prices.'],
-            ['#navportfolio',  'Your holdings',        'Deposits, funds, stocks and gold live here — add them by hand, or import a CAS or bank statement and Corpus will read it.'],
-            ['#navplanning',   'Planning',             'What comes in, what goes out, your goals, your emergency fund and your tax.'],
-            ['#syncButton',    'Live prices',          'Pulls NAVs from AMFI and quotes for your stocks. Every figure shows where it came from and when, so you can always tell a live price from yesterday’s close.'],
-            ['#navinsights',   'Insights',             'What your own numbers say — and where your backup, theme and this tour live.'],
+            ['#nwHero',        'Your corpus',  'Everything you own, minus what you owe. It moves as you add holdings and refresh prices. Tap your initials for settings.'],
+            ['#navportfolio',  'Your holdings', 'Deposits, funds, stocks and gold live here. Add them by hand, or import a statement and Corpus reads it. Pull down anywhere to refresh prices.'],
+            ['#navplanning',   'Planning',      'What comes in, what goes out, your goals, your emergency fund and your tax.'],
+            ['#navinsights',   'Insights',      'What your own numbers say, a reading of your position, and a brief each morning.'],
         ];
         return want
             .filter(([sel]) => document.querySelector(sel))
@@ -156,7 +155,7 @@
         if (!window.driver) return;
         // Only ever runs from Overview: the steps describe that screen, and a
         // tour that fires over a detail view is disorienting rather than helpful.
-        const onHome = !!document.querySelector('main[x-show*="\'home\'"]:not([style*="display: none"])');
+        const onHome = !!document.querySelector('.screen[x-show*="\'home\'"]:not([style*="display: none"])');
         if (!force && !onHome) return;
         try { if (!force && localStorage.getItem(TOUR_KEY)) return; } catch (e) {}
         const steps = buildSteps();
@@ -217,47 +216,10 @@
         Haptics.commit();
     }
 
-    /* The app bar takes its rule only when content is behind it. Uses an
-       IntersectionObserver on a sentinel rather than a scroll listener, so it
-       costs nothing per frame. */
-    function watchAppBar() {
-        const bar = document.querySelector('.appbar');
-        if (!bar || !('IntersectionObserver' in window)) return;
+    window.RFMMotion = { transition, isTransitioning, hapticsEnabled, syncSweep, flashValue, enhanceLists, revealInsights, Haptics, startTour, TOUR_KEY, reduced };
 
-        // Rule: appears as soon as anything is behind the bar.
-        const sentinel = document.createElement('div');
-        sentinel.setAttribute('aria-hidden', 'true');
-        sentinel.style.cssText = 'position:absolute;top:0;height:1px;width:1px;pointer-events:none';
-        document.body.prepend(sentinel);
-        new IntersectionObserver(
-            ([e]) => bar.classList.toggle('is-stuck', !e.isIntersecting),
-            { threshold: 0 }
-        ).observe(sentinel);
-
-        // Collapse: keyed to the HERO FIGURE leaving, not to scroll position.
-        // Tying it to a pixel offset would swap the title in while the figure
-        // was still on screen, showing the same number twice.
-        let heroObserver = null;
-        const watchHero = () => {
-            const hero = document.querySelector('#nwHero');
-            if (heroObserver) heroObserver.disconnect();
-            if (!hero) { bar.classList.remove('is-collapsed'); return; }
-            heroObserver = new IntersectionObserver(
-                ([e]) => bar.classList.toggle('is-collapsed', !e.isIntersecting),
-                { rootMargin: '-56px 0px 0px 0px', threshold: 0 }
-            );
-            heroObserver.observe(hero);
-        };
-        watchHero();
-        // The hero belongs to one surface, so re-bind whenever the page changes.
-        document.addEventListener('corpus:navigated', watchHero);
-    }
-
-    window.RFMMotion = { transition, isTransitioning, hapticsEnabled, syncSweep, flashValue, enhanceLists, revealInsights, watchAppBar, Haptics, startTour, TOUR_KEY, reduced };
-
-    // Initialize app bar and lists once after Alpine settles.
+    // Initialize lists once after Alpine settles.
     document.addEventListener('alpine:initialized', () => {
-        watchAppBar();
         enhanceLists();
     });
 })();

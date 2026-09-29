@@ -545,7 +545,7 @@ function parseGrowwMF(text) {
             units: units,
             value: curVal,
             currentValue: curVal,
-            amount: v.investedValue || curVal,
+            amount: v.investedValue || 0,
             nav: nav,
             returns: r.returns,
             xirr: r.xirr,
@@ -597,7 +597,7 @@ function parseGrowwStocks(text) {
                 issuer: name || 'Indian Equity',
                 isin: isin,
                 units: units,
-                amount: avgPrice > 0 && units > 0 ? units * avgPrice : val,
+                amount: avgPrice > 0 && units > 0 ? units * avgPrice : 0,
                 value: val,
                 currentValue: val,
                 nav: units > 0 && val > 0 ? val / units : avgPrice,
@@ -660,8 +660,13 @@ function inferTypeFromISIN(isin) {
     return 'Stock'; // Default for INE; refined later by name keywords
 }
 
-function inferTypeFromName(name, currentType) {
+function inferTypeFromName(name, currentType, isin) {
     if (!name) return currentType;
+    // A mutual fund stays a mutual fund whatever its name says: "ELSS Tax
+    // Saver", "Gold ETF Fund of Fund" and "Bharat Bond ETF FOF" are all AMFI
+    // schemes priced by NAV. Renaming them dropped them out of fund totals and
+    // out of NAV sync, and filed them under deposits.
+    if (currentType === 'Mutual Fund' || String(isin || '').toUpperCase().startsWith('INF')) return 'Mutual Fund';
     const n = name.toUpperCase();
 
     // Bond keywords
@@ -733,87 +738,13 @@ function fallbackISINScan(lines) {
 // ════════════════════════════════════════════════════════════════
 
 function parseBankStatement(text) {
-    const fullText = text;
-    const lines = text.split('\n').map(cleanLine).filter(l => l.length > 0);
-
-    let bankName = 'Bank Account';
-    if (/ICICI\s*BANK/i.test(fullText)) bankName = 'ICICI Bank';
-    else if (/STATE\s*BANK\s*OF\s*INDIA|SBI/i.test(fullText)) bankName = 'State Bank of India';
-    else if (/HDFC\s*BANK/i.test(fullText)) bankName = 'HDFC Bank';
-    else if (/AXIS\s*BANK/i.test(fullText)) bankName = 'Axis Bank';
-    else if (/KOTAK/i.test(fullText)) bankName = 'Kotak Bank';
-    else if (/PUNJAB\s*NATIONAL|PNB/i.test(fullText)) bankName = 'PNB';
-    else if (/BANK\s*OF\s*BARODA/i.test(fullText)) bankName = 'Bank of Baroda';
-
-    // Account Number
-    let accountNo = '';
-    const accMatch = fullText.match(/(?:Saving|Savings|Account)\s*(?:no\.?|number)?\s*[:\-]?\s*(\d{8,18})/i);
-    if (accMatch) accountNo = accMatch[1];
-
-    // Investor name. This used to hunt for ONE SPECIFIC PERSON — a hardcoded first name
-    // and a list of nine surnames — and then fall back to that person's full name when
-    // nothing matched, so every other user's statement was attributed to a stranger. The
-    // label the bank itself prints is the only sound evidence here, so it is all this
-    // reads, and an absent name now stays absent rather than being filled in with a guess.
-    let investorName = '';
-    const labelled = fullText.match(/(?:Account\s*Holder|Customer\s*Name|Holder|Name)\s*[:\-]\s*([A-Za-z][A-Za-z\s.]{2,40}?)(?=\s{2,}|\s+(?:Address|Mobile|PAN|Email|Phone|Account|Branch|IFSC|Statement)\b|$)/i);
-    if (labelled && !ORG_WORDS.test(labelled[1])) {
-        investorName = labelled[1].trim();
-    }
-
-    // Closing balance
-    let closingBalance = 0;
-    const balanceMatches = [...fullText.matchAll(/([\d,]+\.\d{2})/g)].map(m => parseIndianNumber(m[0]));
-    if (balanceMatches.length > 0) {
-        for (let i = balanceMatches.length - 1; i >= 0; i--) {
-            if (balanceMatches[i] > 10 && balanceMatches[i] < 100000000) {
-                closingBalance = balanceMatches[i];
-                break;
-            }
-        }
-    }
-
-    // Salary detection. The narration keywords below are generic banking terms; the
-    // employer's name is read OUT of the statement rather than matched against one
-    // specific company that used to be written into this file. `NEFT` is deliberately no
-    // longer a salary marker: it is the transport for most inbound transfers, so it
-    // matched rent, refunds and family money and reported all of it as salary.
-    let salaryIncome = 0;
-    let salaryEmployer = '';
-
-    const txnChunks = fullText.split(/\b\d{1,2}\s+\d{2}\.\d{2}\.\d{4}\b/);
-    txnChunks.forEach(chunk => {
-        const nums = [...chunk.matchAll(/([\d,]+\.\d{2})/g)].map(m => parseIndianNumber(m[1]));
-        if (/\b(?:SALARY|PAYROLL|WAGES|REMUNERATION)\b/i.test(chunk) && nums.length >= 1) {
-            const empMatch = chunk.match(/([A-Z][A-Za-z\s&.]{3,40}\s+(?:PRIVATE|LIMITED|PVT|LTD|CORP|INC|LLP))/i);
-            if (nums[0] > 1000 && !salaryEmployer) {
-                salaryEmployer = empMatch ? empMatch[1].trim() : '';
-                salaryIncome = nums[0];
-            }
-        }
-    });
-
-    const shortAcc = accountNo ? `(a/c ...${accountNo.slice(-4)})` : '';
-    const itemName = `${bankName} Savings ${shortAcc}`.trim();
-
-    const holding = {
-        name: itemName,
-        type: 'Bank FD', // Mapped to Bank / Fixed Deposit asset class
-        issuer: bankName,
-        units: 1,
-        value: closingBalance,
-        nav: closingBalance,
-        folioNumber: accountNo,
-        dpId: '',
-        isin: '',
-        detectedSalary: salaryIncome,
-        detectedEmployer: salaryEmployer
-    };
-
+    // PDF text extraction loses table boundaries. The previous parser guessed the
+    // last number was a closing balance and imported it as a fixed deposit, which
+    // could double-count the user's money. Do not infer a bank balance or salary.
     return {
         type: 'BANK_STATEMENT',
-        investor: { name: investorName, pan: '' },
-        holdings: [holding]
+        investor: {},
+        holdings: []
     };
 }
 
@@ -834,32 +765,10 @@ function parseGenericPdf(text) {
         };
     }
 
-    const holdings = [];
-    let lastFoundValue = 0;
-
-    const valMatches = [...text.matchAll(/(?:Total|Valuation|Balance|Amount|Value|Sum)\s*[:\-]?\s*₹?\s*([\d,]+\.?\d*)/gi)];
-    if (valMatches.length > 0) {
-        lastFoundValue = parseIndianNumber(valMatches[valMatches.length - 1][1]);
-    }
-
-    if (lastFoundValue > 0) {
-        holdings.push({
-            name: 'Imported Financial Statement Holding',
-            type: 'Mutual Fund',
-            issuer: 'Imported Asset',
-            units: 1,
-            value: lastFoundValue,
-            nav: lastFoundValue,
-            folioNumber: '',
-            dpId: '',
-            isin: ''
-        });
-    }
-
     return {
         type: 'GENERIC_STATEMENT',
         investor: extractInvestorInfo(text),
-        holdings: holdings
+        holdings: []
     };
 }
 
@@ -871,14 +780,17 @@ function parseGenericPdf(text) {
 function normalizeToInvestments(parsed) {
     return parsed.holdings.map((h, idx) => {
         // Refine type using name-based heuristics
-        const refinedType = inferTypeFromName(h.name, h.type);
+        const refinedType = inferTypeFromName(h.name, h.type, h.isin);
 
         return {
             id: Date.now() + idx,
             name:           h.name || h.isin || 'Unknown',
             type:           refinedType,
             issuer:         h.issuer || extractIssuerFromName(h.name),
-            amount:         (h.amount !== undefined && h.amount > 0) ? h.amount : (h.value || 0),        // Invested cost
+            // What was paid. A statement that gives no invested figure (CAMS,
+            // KFintech, CDSL, NSDL) leaves it unknown; it is never today's value,
+            // which would read as a 0% gain. A balance with no units keeps its value.
+            amount:         h.amount > 0 ? h.amount : ((h.units || 0) > 0 ? 0 : (h.value || 0)),
             rate:           0,                    // Unknown from CAS — user can edit later
             payout:         refinedType === 'Mutual Fund' ? 'Cumulative' : 'Annual',
             rating:         '',                   // Not in CAS
@@ -888,6 +800,9 @@ function normalizeToInvestments(parsed) {
             isin:           h.isin || '',
             units:          h.units || 0,
             nav:            h.nav || 0,
+            // The average price the invested total implies, so a fund's cost is
+            // known from the moment it lands rather than read as today's NAV.
+            buyPrice:       (h.amount > 0 && h.units > 0) ? h.amount / h.units : 0,
             currentPrice:   h.nav || 0,
             currentValue:   h.value || (h.units && h.nav ? h.units * h.nav : (h.amount || 0)),
             folioNumber:    h.folioNumber || '',
@@ -970,5 +885,7 @@ function parseStatement(text) {
 window.RFMParser = {
     parseStatement,
     detectStatementType,
-    parseIndianNumber
+    parseIndianNumber,
+    normalizeToInvestments,
+    inferTypeFromName
 };

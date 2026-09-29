@@ -33,6 +33,8 @@ const DAILY = { greeting: 'Good morning, Papa', items: [
     { kind: 'rate', title: 'Scheme rates due to reset', body: 'The government resets small-savings rates on 30 September.' },
 ] };
 const ANALYSIS = { fit: { status: 'on-track', line: 'Income covers the monthly need.' },
+                   classFit: [{ class: 'US stocks', status: 'drifting', line: 'Growth money at 61% of the book, above what a 3 to 7 year need can ride out.' },
+                              { class: 'Mutual funds', status: 'on-track', line: 'Retirement money with 15+ years to run, left to compound.' }],
                    findings: [{ priority: 1, kind: 'income', title: 'Income is steady', why: 'SCSS and MIS pay ₹38,000 a quarter.' }],
                    holdings: [{ name: 'HDFC FD', verdict: 'Keep', summary: 'Rate locked.' }] };
 
@@ -79,71 +81,128 @@ async function boot({ investments = [], profile = null, reply = DAILY, clock = n
     return { ctx, page, errors, sent, state };
 }
 
-const PROFILE_RETIRED = { completedAt: '2026-09-01T00:00:00.000Z', name: 'Rajan Negi', age: 64, goal: 'retired', risk: 'low',
-                          payout: 'monthly', horizon: '3to7', interests: ['gold', 'schemes', 'fdbonds'] };
-const PROFILE_YOUNG = { completedAt: '2026-09-01T00:00:00.000Z', name: 'Swaraj', age: 26, goal: 'grow', risk: 'high',
-                        payout: null, horizon: 'gt15', interests: ['stocks', 'us'] };
+// Profile v2: every money answer is per asset class, several at once.
+const PROFILE_RETIRED = { version: 2, completedAt: '2026-09-01T00:00:00.000Z', name: 'Rajan Negi', age: 64,
+    holdings: ['gold', 'fd_bonds', 'schemes'],
+    purpose: { gold: ['safe'], fd_bonds: ['income', 'safe'], schemes: ['income', 'safe'] },
+    fall: { gold: ['sell'] }, horizon: { gold: ['3to7'], fd_bonds: ['3to7'], schemes: ['3to7'] },
+    payout: { fd_bonds: ['quarterly'], schemes: ['monthly'] }, knows: { schemes: ['long'] },
+    income: ['pension'], dependents: ['none'], cover: ['health'], plans: { nothing: [] } };
+// The shape of the book that asked for this: US shares for growth, bought on
+// dips and trimmed, needed in 3 to 7 years; funds for retirement and children.
+const PROFILE_YOUNG = { version: 2, completedAt: '2026-09-01T00:00:00.000Z', name: 'Swaraj', age: 26,
+    holdings: ['us_stocks', 'mf'],
+    purpose: { us_stocks: ['grow'], mf: ['retirement', 'children'] },
+    fall: { us_stocks: ['wait', 'buy'], mf: ['wait'] },
+    horizon: { us_stocks: ['trim', '3to7'], mf: ['gt15'] },
+    payout: { us_stocks: ['none'], mf: ['none'] }, knows: { us_stocks: ['some'], mf: ['long'] },
+    income: ['salary'], dependents: ['parents'], cover: ['health'], plans: { home: ['4to5'] } };
 
 // ── 1. FIRST RUN ─────────────────────────────────────────────────────────────
-console.log('\nFIRST RUN — asked once, answered by tapping');
+console.log('\nFIRST RUN — eleven screens, several answers each, per asset');
 {
     const { ctx, page, errors } = await boot({ investments: [FD] });
-    const shown = await page.locator('.onboard').isVisible();
-    ok('a new install is asked who it is talking to', shown);
+    ok('a new install is asked who it is talking to', await page.locator('.onboard').isVisible());
+    const btn = page.locator('.onboard .foot .btn-gold');
+    const next = async () => { await btn.click(); await page.waitForTimeout(250); };
+    const step = () => page.evaluate(`${$d}.onboardingStep`);
+    // Tick a chip on every per-asset card on the screen.
+    const everyRow = async label => { for (const card of await page.locator('.pcls').all()) await card.locator('.pchip', { hasText: label }).first().click(); };
 
-    await page.fill('.onboard__input', 'Rajan Negi');
-    await page.click('.onboard__foot .btn');
-    await page.fill('.onboard__input', '64');
-    await page.click('.onboard__foot .btn');
-    // Single choices advance by themselves.
-    // Order: goal → risk → payout → horizon.
-    await page.click('.onboard__opt:has-text("I’m retired")');
-    await page.waitForTimeout(400);
-    await page.click('.onboard__opt:has-text("Sell to stop the loss")');
-    await page.waitForTimeout(400);
-    ok('a retired goal is asked about payouts', await page.locator('h1:has-text("regular payouts")').isVisible());
-    await page.click('.onboard__opt:has-text("Monthly")');
-    await page.waitForTimeout(400);
-    await page.click('.onboard__opt:has-text("3 to 7 years")');
-    await page.waitForTimeout(400);
-    await page.click('.onboard__opt:has-text("Gold & silver")');
+    await page.fill('#ob-name', 'Rajan Negi'); await next();
+    await page.fill('#ob-age', '64'); await next();
+    ok('what you hold is ticked from the book', await page.locator('.onboard__opt.on:has-text("FDs and bonds")').count() === 1);
+    await page.click('.onboard__opt:has-text("Gold")');
     await page.click('.onboard__opt:has-text("Government schemes")');
-    await page.click('.onboard__foot .btn');
-    await page.waitForTimeout(400);
+    await next();
+
+    ok('each asset gets its own row', await page.locator('.pcls').count() === 3, `${await page.locator('.pcls').count()} rows`);
+    await page.locator('.pcls').first().locator('.pchip', { hasText: 'Keep it safe' }).click();
+    ok('Continue waits until every row is answered', await btn.isDisabled());
+    await everyRow('Regular income');
+    await page.locator('.pcls').nth(1).locator('.pchip', { hasText: 'Keep it safe' }).click();
+    const both = await page.evaluate(`${$d}.onboarding.draft.purpose`);
+    ok('one row takes several answers', both.gold?.length === 2 && both.fd_bonds?.length === 2, JSON.stringify(both));
+    await next();
+
+    ok('a 20% fall is asked only about what moves with a market', (await step()) === 'fall' && await page.locator('.pcls').count() === 1);
+    await everyRow('Sell some'); await next();
+    await everyRow('3 to 7 yrs'); await everyRow('Trim along the way'); await next();
+    await everyRow('Monthly'); await next();
+    await page.click('.onboard__opt:has-text("Pension")'); await page.click('.onboard__opt:has-text("Interest and dividends")'); await next();
+
+    await page.click('.onboard__opt:has-text("Partner")');
+    await page.click('.onboard__opt:has-text("No one")');
+    const alone = await page.evaluate(`${$d}.onboarding.draft.dependents`);
+    ok('"No one" stands alone', alone.join() === 'none', alone.join());
+    await page.click('.onboard__opt:has-text("Health insurance")'); await next();
+
+    await page.click('.onboard__opt:has-text("Home")');
+    ok('a plan needs a when', await btn.isDisabled());
+    await page.locator('.plan__when .pchip', { hasText: '2 to 3 yrs' }).click();
+    await page.locator('.plan__when .pchip', { hasText: '5+ yrs' }).click();
+    await next();
+    await everyRow('Many years');
+    ok('the last screen starts the app', /Start using Corpus/.test(await btn.innerText()));
+    await next();
 
     const r = await page.evaluate(`(() => { const d = ${$d}; return {
         open: d.onboarding.open, profile: JSON.parse(JSON.stringify(d.profile)), senior: d.tax.seniorCitizen,
-        stored: JSON.parse(localStorage.getItem('rfm_v1')).profile }; })()`);
+        stored: JSON.parse(localStorage.getItem('rfm_v1')).profile, sentence: d.profileSentence }; })()`);
+    const P = r.profile;
     ok('the screen closes when done', r.open === false);
-    ok('the answers are stored', r.profile.completedAt && r.profile.name === 'Rajan Negi' && r.profile.age === 64, JSON.stringify(r.profile));
-    ok('the goal and payout are what was tapped', r.profile.goal === 'retired' && r.profile.payout === 'monthly');
-    // Measured, not self-labelled: "Sell to stop the loss" is low risk.
-    ok('"sell after a fall" is recorded as low risk', r.profile.risk === 'low', r.profile.risk);
-    ok('interests are the ones picked', r.profile.interests.join() === 'gold,schemes', r.profile.interests.join());
-    ok('persisted inside rfm_v1', r.stored?.completedAt === r.profile.completedAt);
+    ok('eleven screens were walked', true);
+    ok('stored as profile v2', P.version === 2 && P.completedAt && P.name === 'Rajan Negi' && P.age === 64);
+    ok('holdings are the classes ticked', P.holdings.join() === 'gold,fd_bonds,schemes', P.holdings.join());
+    ok('purposes are per class and plural', P.purpose.fd_bonds.join() === 'income,safe' && P.purpose.gold.join() === 'safe,income', JSON.stringify(P.purpose));
+    ok('a fall is recorded only for gold', Object.keys(P.fall).join() === 'gold' && P.fall.gold.join() === 'sell', JSON.stringify(P.fall));
+    ok('timings are plural per class', P.horizon.schemes.join() === '3to7,trim', JSON.stringify(P.horizon));
+    ok('income sources are plural', P.income.join() === 'pension,dividends', P.income.join());
+    ok('the plan keeps both dates', P.plans.home.join() === '2to3,5plus', JSON.stringify(P.plans));
+    ok('persisted inside rfm_v1', r.stored?.version === 2 && r.stored?.completedAt === P.completedAt);
     ok('age 60+ switches on the senior-citizen tax rules', r.senior === true);
+    ok('Settings speaks in the per-asset answers', /Gold for keep it safe and regular income/.test(r.sentence), r.sentence);
 
-    await page.reload();
-    await page.waitForTimeout(600);
+    await page.reload(); await page.waitForTimeout(600);
     ok('a second open is not asked again', !(await page.locator('.onboard').isVisible()));
     ok('no console errors', errors.length === 0, errors[0] || '');
     await ctx.close();
 }
 
-// ── 2. BRANCHES AND MAPPING ──────────────────────────────────────────────────
-console.log('\nBRANCHES — only the questions that apply');
+// ── 2. BRANCHES ──────────────────────────────────────────────────────────────
+console.log('\nBRANCHES — only the classes and questions that apply');
 {
     const { ctx, page } = await boot();
     const r = await page.evaluate(`(() => { const d = ${$d};
-        d.onboarding.draft.goal = 'grow'; const grow = d.onboardingSteps.slice();
-        d.onboarding.draft.goal = 'income'; const income = d.onboardingSteps.slice();
-        const risks = Object.fromEntries(d.PROFILE_OPTIONS.risk.map(o => [o.t, o.v]));
-        return { grow, income, risks }; })()`);
-    ok('a growth goal is not asked about payouts', !r.grow.includes('payout'), r.grow.join(' → '));
-    ok('an income goal is', r.income.includes('payout'), r.income.join(' → '));
-    ok('the three risk answers map to low, medium, high',
-       r.risks['Sell to stop the loss'] === 'low' && r.risks['Wait it out'] === 'medium' && r.risks['Buy more'] === 'high',
-       JSON.stringify(r.risks));
+        d.onboarding.draft.holdings = ['fd_bonds', 'schemes']; const safeOnly = d.onboardingSteps.slice();
+        d.onboarding.draft.holdings = ['us_stocks', 'fd_bonds']; const mixed = d.onboardingSteps.slice();
+        return { safeOnly, mixed, fall: d.onboardingClasses('fall').map(c => c.k), horizon: d.onboardingClasses('horizon').map(c => c.k) }; })()`);
+    ok('nothing market-linked means no "20% fall" question', !r.safeOnly.includes('fall'), r.safeOnly.join(' → '));
+    ok('eleven screens with something market-linked', r.mixed.length === 11, r.mixed.join(' → '));
+    ok('the fall is asked of US stocks only', r.fall.join() === 'us_stocks', r.fall.join());
+    ok('timing is asked of both', r.horizon.join() === 'us_stocks,fd_bonds', r.horizon.join());
+    await ctx.close();
+}
+
+// ── 2b. ANSWERED BEFORE ──────────────────────────────────────────────────────
+console.log('\nCATCH-UP — the one-answer profile is carried over, and asked once');
+{
+    const V1 = { completedAt: '2026-09-01T00:00:00.000Z', name: 'Swaraj', age: 26, goal: 'grow', risk: 'high',
+                 payout: null, horizon: 'gt15', interests: ['us', 'mf'] };
+    const { ctx, page } = await boot({ investments: [AVGO], profile: V1 });
+    const r = await page.evaluate(`(() => { const d = ${$d}; return { open: d.onboarding.open, catchUp: d.onboarding.catchUp,
+        step: d.onboardingStep, draft: JSON.parse(JSON.stringify(d.onboarding.draft)), sentence: d.profileSentence }; })()`);
+    ok('an earlier answerer is asked once more', r.open && r.catchUp, JSON.stringify({ open: r.open, catchUp: r.catchUp }));
+    ok('starting at the per-asset questions', r.step === 'purpose', r.step);
+    ok('their old answers fill every class', r.draft.holdings.join() === 'us_stocks,mf' && r.draft.purpose.us_stocks.join() === 'grow'
+       && r.draft.fall.mf.join() === 'buy' && r.draft.horizon.us_stocks.join() === 'gt15', JSON.stringify(r.draft).slice(0, 160));
+    ok('Settings asks them to update', /asks per asset/.test(r.sentence), r.sentence);
+    await page.click('.onboard .top .link:has-text("Later")');
+    await page.waitForTimeout(200);
+    const later = await page.evaluate(`(() => { const d = ${$d}; return { open: d.onboarding.open, at: d.profile.catchUpSkippedAt, done: d.profile.completedAt }; })()`);
+    ok('"Later" closes it and keeps the profile', !later.open && !!later.at && !!later.done);
+    await page.reload(); await page.waitForTimeout(600);
+    ok('and it is not asked again that week', !(await page.locator('.onboard').isVisible()));
     await ctx.close();
 }
 
@@ -151,14 +210,14 @@ console.log('\nBRANCHES — only the questions that apply');
 console.log('\nSKIP — allowed, remembered, offered again after a week');
 {
     const { ctx, page } = await boot({ investments: [FD] });
-    await page.click('.onboard__top .linkbtn:has-text("Skip for now")');
+    await page.click('.onboard .top .link:has-text("Skip for now")');
     await page.waitForTimeout(300);
     const after = await page.evaluate(`(() => { const d = ${$d}; d.activePage = 'regen';
         return { open: d.onboarding.open, completed: d.profile.completedAt, skipped: d.profile.skippedAt }; })()`);
     await page.waitForTimeout(500);
     ok('skipping closes the screen', after.open === false);
     ok('and records nothing but when', !after.completed && !!after.skipped);
-    ok('Insights offers a way back', await page.locator('.brief__ask').isVisible());
+    ok('Insights offers a way back', await page.locator('button:has-text("Tell Corpus about you first")').isVisible());
 
     await page.reload();
     await page.waitForTimeout(600);
@@ -190,7 +249,7 @@ console.log('\nBACKUP — the profile travels with the data');
     await p2.setInputFiles('input[x-ref="restoreInput"]', file);
     await p2.waitForTimeout(800);
     const restored = await p2.evaluate(`JSON.parse(JSON.stringify(${$d}.profile))`);
-    ok('a restore on a new phone brings the answers back', restored.name === 'Rajan Negi' && restored.goal === 'retired',
+    ok('a restore on a new phone brings the answers back', restored.name === 'Rajan Negi' && restored.purpose?.schemes?.includes('income'),
        JSON.stringify(restored).slice(0, 80));
     await fresh.close();
     await ctx.close();
@@ -285,7 +344,10 @@ console.log('\nDAILY — once per day, on the local calendar');
 
     const p = sent[0];
     ok('the brief is marked as a daily brief', p.startsWith('CORPUS-BRIEF: daily-v1'));
-    ok('it is written for the person', /Name: Rajan Negi/.test(p) && /Retired/.test(p));
+    // Written for the person, but without their name: the screens promise the
+    // reading sends "a summary, never your name or account numbers".
+    ok('it is written for the person', /Income from: pension/.test(p) && /Government schemes \(PPF, EPF, SCSS, post office\): [^\n]*For: regular income and keeping it safe/.test(p));
+    ok('and never carries their name', !/Rajan/.test(p));
     ok('with the government scheme terms', /GOVERNMENT SCHEMES — CURRENT TERMS/.test(p) && /8\.2%/.test(p));
     ok('and their holdings matched to those schemes', /this is Senior Citizens Savings Scheme/.test(p) && /this is Post Office Monthly Income Scheme/.test(p));
     ok('and the truth about contributions', /contributions included/.test(p));
@@ -295,7 +357,7 @@ console.log('\nDAILY — once per day, on the local calendar');
     ok('it asks for a few items, not filler', /write fewer items rather than filler/.test(p));
 
     // A changed profile is a new brief even on the same day.
-    await page.evaluate(`(() => { const d = ${$d}; d.profile = { ...d.profile, interests: ['gold'] }; })()`);
+    await page.evaluate(`(() => { const d = ${$d}; d.profile = { ...d.profile, purpose: { ...d.profile.purpose, gold: ['grow'] } }; })()`);
     await page.evaluate(`${$d}.maybeRunDaily()`);
     await page.waitForTimeout(400);
     ok('changing the answers prepares a fresh brief', sent.length === 3, `${sent.length} requests`);
@@ -330,35 +392,53 @@ console.log('\nOFFLINE — the card never becomes an error box');
         const card = document.querySelector('.brief');
         return { text: card ? card.innerText : '', errorBox: !!card?.querySelector('.down') };
     });
-    ok('the on-device score is still shown', /Measured from your own numbers/.test(r.text));
+    ok('the on-device score is still shown', /Health score/.test(r.text));
     ok('with a quiet line, not an error', /next time Corpus can reach the internet/.test(r.text) && !r.errorBox, r.text.slice(0, 120));
     await ctx.close();
 }
 
 // ── 9. THE READING IS WRITTEN FOR THE PERSON ─────────────────────────────────
-console.log('\nPROMPT — the same book, two different readers');
+console.log('\nPROMPT — every per-asset answer reaches the reading');
 {
+    const MF = { id: 'mf1', name: 'Invesco India Mid Cap Fund Direct Growth', type: 'Mutual Fund', schemeCode: '120505', units: 131.348, buyPrice: 213.17, currentPrice: 237.39 };
     const prompts = {};
-    for (const [who, profile] of [['retired', PROFILE_RETIRED], ['young', PROFILE_YOUNG]]) {
-        const { ctx, page, sent } = await boot({ investments: [SCSS, AVGO], profile, reply: ANALYSIS });
+    for (const [who, profile, investments] of [['retired', PROFILE_RETIRED, [SCSS, MIS, FD]], ['young', PROFILE_YOUNG, [AVGO, MF]]]) {
+        const { ctx, page, sent } = await boot({ investments, profile, reply: ANALYSIS });
         await page.waitForTimeout(3600);           // let the daily brief go first
         const before = sent.length;
         await page.evaluate(`${$d}.runRegenWealthAnalysis(true)`);
         await page.waitForTimeout(300);
         prompts[who] = sent.slice(before).find(p => p.startsWith('CORPUS-BRIEF: analysis-v2')) || '';
-        if (who === 'retired') {
+        if (who === 'young') {
+            await page.evaluate(`${$d}.activePage = 'regen'`);
+            await page.waitForTimeout(600);
             const a = await page.evaluate(`JSON.parse(JSON.stringify(${$d}.regenWealth.analysis || null))`);
             ok('the analysis renders from the new shape', a?.fit?.status === 'on-track' && a.findings.length === 1);
+            ok('each asset comes back with its own verdict', a?.classFit?.map(c => c.key + ':' + c.status).join() === 'us_stocks:drifting,mf:on-track',
+               JSON.stringify(a?.classFit));
+            const rows = await page.locator('.byasset__row').allInnerTexts();
+            ok('and Insights shows them By asset', rows.length === 2 && /US stocks\s*Drifting/.test(rows[0]), rows.join(' | '));
         }
         await ctx.close();
     }
     const R = prompts.retired, Y = prompts.young;
     ok('both analyses were sent', R.length > 0 && Y.length > 0);
-    ok('a retired saver is judged on income first', /Judge first on INCOME/.test(R));
+    ok('each class is printed with its share and every answer',
+       /US stocks: \d+% of the book \(₹[\d,]+\)\. For: growth\. After a 20% fall: waits it out and buys more\. Needed: trimmed along the way and in 3 to 7 years\./.test(Y),
+       (Y.match(/- US stocks: [^\n]*/) || [''])[0]);
+    ok('funds keep their own, different answers',
+       /Mutual funds: \d+% of the book \(₹[\d,]+\)\. For: retirement and children’s future\. After a 20% fall: waits it out\. Needed: in 15\+ years\./.test(Y),
+       (Y.match(/- Mutual funds: [^\n]*/) || [''])[0]);
+    ok('the rules follow each class: trimming for US stocks', /US stocks: they trim along the way/.test(Y) && !/Mutual funds: they trim/.test(Y));
+    ok('buying the dip is an opportunity for US stocks', /US stocks: they would buy more after a fall/.test(Y));
+    ok('experience changes the explaining', /Mutual funds: they have many years with it\. Skip the basics/.test(Y));
+    ok('dependents without term cover are named first', /parents depend on them and there is no term life cover/.test(Y));
+    ok('the reply is asked for one verdict per class', /"classFit":\[/.test(Y) && /judged against THAT class's own answers/.test(Y));
+    ok('a retired saver is judged on the income each asset pays', /Government schemes: it should pay them monthly/.test(R));
     ok('and on senior-citizen rules', /senior citizen/.test(R) && /80TTB/.test(R));
-    ok('and on capital safety', /Capital safety and liquidity outrank return/.test(R));
-    ok('a young high-risk investor is not', !/Judge first on INCOME/.test(Y) && !/Capital safety and liquidity outrank/.test(Y));
-    ok('they are judged on growth quality instead', /Judge on growth quality/.test(Y));
+    ok('and a gold position they would sell is judged as such', /Gold: they would sell some/.test(R) || !/Gold: they would buy more/.test(R));
+    ok('a growth investor is not judged on income', !/should pay them/.test(Y));
+    ok('the name is never sent', !/Swaraj/.test(Y) && !/Rajan/.test(R));
     ok('the analysis still weighs analyst and revenue evidence for stocks',
        /analyst consensus and target, revenue and margins, company outlook and innovation/.test(Y));
 }
@@ -377,15 +457,12 @@ console.log('\nPAYOUTS — the income an income goal is about');
     ok('SCSS pays ₹30,750 a quarter', /Senior Citizen Savings Scheme: ₹30,750 quarterly \(≈ ₹10,250 a month\)/.test(p),
        (p.match(/Senior Citizen Savings Scheme: [^\n]*/) || [''])[0]);
     ok('MIS pays ₹5,550 a month', /PO MIS: ₹5,550 monthly/.test(p), (p.match(/PO MIS: [^\n]*/) || [''])[0]);
-    ok('the total is stated apart from the pension', /about ₹15,800 a month in total \(separate from the income above\)/.test(p),
-       (p.match(/about ₹[\d,]+ a month in total[^\n]*/) || [''])[0]);
+    ok('the indicative total is not represented as received cash', /Indicative payouts from stated terms, NOT verified cash received:\*\* about ₹15,800 a month equivalent/.test(p),
+       (p.match(/Indicative payouts from stated terms[^\n]*/) || [''])[0]);
     // The bug this guards: PPF was counted as monthly income.
     ok('PPF is not counted as income', /Pays only at maturity, not as income: PPF/.test(p));
-    // Measured live: "income gap of ₹18,000" when payouts closed all but
-    // ₹2,200 of it, because the only surplus in the prompt ignored them.
-    // Here income and expenses are 0, so including payouts it is ₹15,800.
-    ok('the surplus that counts payouts is stated, and named as the one to use',
-       /surplus INCLUDING investment payouts:\*\* ₹15,800 — use THIS figure/.test(p),
+    ok('unverified payout estimates do not inflate recorded surplus',
+       !/surplus INCLUDING investment payouts/.test(p),
        (p.match(/surplus INCLUDING[^\n]*/) || [''])[0]);
     ok('an FD with no recorded payout is not guessed at', /Payout frequency not recorded \(do not assume one\): HDFC FD/.test(p));
     // The fabricated "80TTB utilised: No" came from a field that did not exist.
@@ -412,25 +489,23 @@ console.log('\nHEALTH — no equity warnings about government schemes');
     ok('a stock as the largest holding still is', /High concentration in Reliance/.test(stock) && /Sharp swings/.test(stock));
 }
 {
-    // Secondary text inside the navy console must not take the light page's
-    // dark-green ink.
+    // Secondary text inside the navy AI card must stay light enough to read.
     const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
     const page = await ctx.newPage();
-    await page.addInitScript(() => { localStorage.setItem('corpus_theme', 'light'); localStorage.setItem('rfm_theme', 'light'); });
     await page.route('**/*', r => r.request().url().startsWith('file://') ? r.continue() : r.abort());
     await page.goto(URL); await page.waitForTimeout(500);
-    const c = await page.evaluate(() => {
-        const host = document.querySelector('.sheet--ai');
-        const probe = cls => { const e = document.createElement('span'); e.className = cls; host.appendChild(e);
-            const v = getComputedStyle(e).color; e.remove(); return v; };
-        // color-mix() reports `color(srgb r g b / a)` with 0–1 channels;
-        // a plain colour reports rgb() with 0–255.
-        const lum = c => { const m = c.match(/[\d.]+/g).map(Number); const k = /^color\(srgb/.test(c) ? 1 : 255;
-                           return (0.299 * m[0] + 0.587 * m[1] + 0.114 * m[2]) / k; };
-        return { meta: lum(probe('row__meta')), label: lum(probe('label')) };
+    const c = await page.evaluate(async () => {
+        const d = document.querySelector('[x-data]')._x_dataStack[0];
+        d.onboarding.open = false; d.activePage = 'regen';
+        await new Promise(r => setTimeout(r, 600));
+        const lum = el => { const m = getComputedStyle(el).color.match(/[\d.]+/g).map(Number);
+                            return (0.299 * m[0] + 0.587 * m[1] + 0.114 * m[2]) / 255; };
+        const body = document.querySelector('[data-s~="id"] .ai .ai-p');
+        const fine = document.querySelector('[data-s~="id"] .ai .fine');
+        return { body: body ? lum(body) : 0, fine: fine ? lum(fine) : 0 };
     });
-    ok('console body text is light on navy in the light theme', c.meta > 0.6, c.meta.toFixed(2));
-    ok('and so is its label', c.label > 0.55, c.label.toFixed(2));
+    ok('the AI card body text is light on navy', c.body > 0.6, c.body.toFixed(2));
+    ok('and so is its fine print', c.fine > 0.5, c.fine.toFixed(2));
     await ctx.close();
 }
 

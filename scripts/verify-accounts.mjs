@@ -1,0 +1,50 @@
+import assert from 'node:assert/strict';
+import { SyncEngine, META_KEY, canonical, decision, readDocument, validateDocument } from '../src/account-sync.mjs';
+const documentFor = n => ({ schema: 1, portfolio: { investments: [{ id: 'a', amount: n }] }, history: [] });
+const storage = () => { const m = new Map(); return { getItem: k => m.get(k) ?? null, setItem: (k,v) => m.set(k,v), removeItem: k => m.delete(k) }; };
+const s = storage(), first = documentFor(20000), second = documentFor(25000), third = documentFor(27000);
+s.setItem('rfm_v1', JSON.stringify(first.portfolio));
+let cloud = null, writes = 0, inFlightEdit = false;
+const transport = {
+  async read() { return cloud; },
+  async write(revision, document) {
+    writes++;
+    if ((cloud?.revision || 0) !== revision) return null;
+    cloud = { revision: revision + 1, document, updated_at: '2026-09-27T00:00:00Z' };
+    if (inFlightEdit) s.setItem('rfm_v1', JSON.stringify(third.portfolio));
+    return cloud;
+  }
+};
+const engine = new SyncEngine({ storage: s, transport, userId: 'alice' });
+assert.equal((await engine.sync()).state, 'unlinked');
+assert.equal(writes, 0, 'guest data is never uploaded without linking');
+s.setItem(META_KEY, JSON.stringify({ userId: 'bob', revision: 0 }));
+assert.equal((await engine.sync()).state, 'unlinked', 'account isolation');
+s.setItem(META_KEY, JSON.stringify({ userId: 'alice', revision: 0, base: null }));
+assert.equal((await engine.sync()).state, 'saved');
+assert.equal(cloud.document.portfolio.investments[0].amount, 20000);
+assert.equal((await engine.sync()).state, 'equal');
+assert.equal(writes, 1, 'no repeated write when unchanged');
+s.setItem('rfm_v1', JSON.stringify(second.portfolio));
+inFlightEdit = true;
+assert.equal((await engine.sync()).state, 'pending', 'edit during upload is retained');
+assert.equal(engine.metadata().base.portfolio.investments[0].amount, 25000);
+inFlightEdit = false;
+assert.equal((await engine.sync()).state, 'saved');
+cloud = { ...cloud, revision: cloud.revision + 1, document: second };
+assert.equal((await engine.sync()).state, 'pull');
+assert.equal(readDocument(s).portfolio.investments[0].amount, 27000, 'remote updates do not erase local data');
+s.setItem('rfm_v1', JSON.stringify(first.portfolio));
+assert.equal((await engine.sync()).state, 'conflict');
+assert.equal(readDocument(s).portfolio.investments[0].amount, 20000);
+cloud = null;
+assert.equal((await engine.sync()).state, 'missing', 'deleted cloud record never automatically resurrects');
+const failing = new SyncEngine({ storage: s, userId: 'alice', transport: { read: async () => { throw Error('offline'); } } });
+await assert.rejects(failing.sync(), /offline/);
+assert.equal(failing.busy, false);
+assert.equal(readDocument(s).portfolio.investments[0].amount, 20000);
+assert.equal(canonical({ b: 2, a: 1 }), canonical({ a: 1, b: 2 }));
+assert.throws(() => validateDocument({ schema: 2 }), /Unsupported/);
+assert.throws(() => validateDocument({ ...first, history: {} }), /Unsupported/);
+assert.equal(decision(first, first, { document: second, revision: 2 }, 1), 'pull');
+console.log('PASS: account isolation, consent, initial upload, no-op, in-flight edits, remote updates, conflicts, missing remote, offline retention, validation.');

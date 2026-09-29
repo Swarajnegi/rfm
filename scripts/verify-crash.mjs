@@ -44,7 +44,7 @@ ok('an uncaught error is reported', reports.length === 1, `${reports.length} rep
 ok('the rupee amount is scrubbed', !/15,00,000/.test(JSON.stringify(r)) && /<amount>/.test(r.message), r.message);
 ok('the email is scrubbed', !/rajan@example\.com/.test(JSON.stringify(r)) && /<email>/.test(r.message));
 ok('a long number is scrubbed', !/98765432/.test(JSON.stringify(r)) && /<number>/.test(r.message));
-ok('the version and platform travel with it', r.version === '1.1 (2)' && r.platform === 'web', `${r.version} / ${r.platform}`);
+ok('the version and platform travel with it', r.version === '3.1 (7)' && r.platform === 'web', `${r.version} / ${r.platform}`);
 ok('the file path is cut to a file name', !/file:\/\//.test(r.source || '') && !/J\.A\.R\.V\.I\.S/.test(JSON.stringify(r)), r.source);
 
 // The same error again is not a second report.

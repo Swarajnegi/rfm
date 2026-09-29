@@ -14,34 +14,22 @@ const errs = []; p.on('pageerror', e => errs.push(e.message));
 await p.addInitScript(s => {
   localStorage.setItem('rfm_v1', s);
   localStorage.setItem('corpus_theme','light');
-  localStorage.setItem('corpus_tour_v1','seen'); localStorage.setItem('rfm_v1', JSON.stringify((v => ({ ...v, profile: v.profile || { completedAt: '2026-09-01T00:00:00.000Z', name: 'Test', age: 40, goal: 'balanced', risk: 'medium', horizon: '7to15', interests: ['stocks'] } }))(JSON.parse(localStorage.getItem('rfm_v1') || '{}'))));
+  localStorage.setItem('corpus_tour_v1','seen'); localStorage.setItem('rfm_v1', JSON.stringify((v => ({ ...v, profile: v.profile || { version: 2, completedAt: '2026-09-01T00:00:00.000Z', name: 'Test', age: 40, goal: 'balanced', risk: 'medium', horizon: '7to15', interests: ['stocks'] } }))(JSON.parse(localStorage.getItem('rfm_v1') || '{}'))));
 }, readFileSync('scripts/seed.json','utf8'));
 await p.route('**/*', r => r.request().url().startsWith('file://') ? r.continue() : r.abort());
 await p.goto(pathToFileURL(path.resolve('web/index.html')).href);
 await p.waitForTimeout(1600);
 
-// App bar should be bare at rest and ruled once content is behind it.
-const atRest = await p.evaluate(() => document.querySelector('.appbar').classList.contains('is-stuck'));
-await p.evaluate(() => window.scrollTo(0, 400));
-await p.waitForTimeout(500);
-const scrolled = await p.evaluate(() => document.querySelector('.appbar').classList.contains('is-stuck'));
-ok('app bar is bare at rest', !atRest);
-ok('app bar takes its rule on scroll', scrolled);
-await p.evaluate(() => window.scrollTo(0, 0)); await p.waitForTimeout(450);
-ok('app bar gives the rule back', !(await p.evaluate(() => document.querySelector('.appbar').classList.contains('is-stuck'))));
-
 // Springs must actually be resolved values, not an unparsed custom property.
 const springs = await p.evaluate(() => {
   const cs = getComputedStyle(document.documentElement);
-  const btn = document.querySelector('.btn');
   return {
     spring: cs.getPropertyValue('--spring').trim().slice(0, 12),
-    btnTiming: btn ? getComputedStyle(btn).transitionTimingFunction.slice(0, 14) : '',
     dockTiming: getComputedStyle(document.querySelector('.dock__item'), '::before').transitionTimingFunction.slice(0,14),
   };
 });
 ok('spring easing resolves', springs.spring.startsWith('linear('), springs.spring + '…');
-ok('buttons use the spring', /linear|cubic/.test(springs.btnTiming), springs.btnTiming);
+ok('the dock pill rides the spring', /linear/.test(springs.dockTiming), springs.dockTiming);
 
 // View transitions must be reachable, and navigation must actually change page.
 const vt = await p.evaluate(() => typeof document.startViewTransition === 'function');
@@ -58,7 +46,7 @@ await p.evaluate(() => { document.querySelector('[x-data]')._x_dataStack[0].acti
 await p.waitForTimeout(400);
 await p.evaluate(() => { document.querySelector('[x-data]')._x_dataStack[0].addingInv = true; });
 await p.waitForTimeout(650);
-ok('sheet opens', await p.evaluate(() => !!document.querySelector('.bsheet') && document.querySelector('.bsheet').offsetParent !== null));
+ok('sheet opens', await p.evaluate(() => [...document.querySelectorAll('.bsheet')].some(s => s.offsetParent !== null)));
 await p.keyboard.press('Escape'); await p.waitForTimeout(400);
 ok('sheet closes on Escape', await p.evaluate(() => !document.querySelector('[x-data]')._x_dataStack[0].addingInv));
 

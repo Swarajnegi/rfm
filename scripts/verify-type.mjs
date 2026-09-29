@@ -14,7 +14,7 @@ import path from 'node:path';
 const b = await chromium.launch();
 const p = await b.newPage({ viewport: { width: 360, height: 844 } });
 const errs = []; p.on('pageerror', e => errs.push(e.message));
-await p.addInitScript(s => { localStorage.setItem('rfm_v1', s); localStorage.setItem('corpus_tour_v1','x'); localStorage.setItem('rfm_v1', JSON.stringify((v => ({ ...v, profile: v.profile || { completedAt: '2026-09-01T00:00:00.000Z', name: 'Test', age: 40, goal: 'balanced', risk: 'medium', horizon: '7to15', interests: ['stocks'] } }))(JSON.parse(localStorage.getItem('rfm_v1') || '{}')))); },
+await p.addInitScript(s => { localStorage.setItem('rfm_v1', s); localStorage.setItem('corpus_tour_v1','x'); localStorage.setItem('rfm_v1', JSON.stringify((v => ({ ...v, profile: v.profile || { version: 2, completedAt: '2026-09-01T00:00:00.000Z', name: 'Test', age: 40, goal: 'balanced', risk: 'medium', horizon: '7to15', interests: ['stocks'] } }))(JSON.parse(localStorage.getItem('rfm_v1') || '{}')))); },
                       readFileSync('scripts/seed.json','utf8'));
 await p.route('**/*', r => r.request().url().startsWith('file://') ? r.continue() : r.abort());
 await p.goto(pathToFileURL(path.resolve('web/index.html')).href, { waitUntil: 'load' });
@@ -62,7 +62,7 @@ const r = await p.evaluate(async () => {
     return Math.abs(at('\u20B9') - at('\uE000'));
   };
 
-  const fig = pick('.figure'), val = pick('.row__value');
+  const fig = pick('.t-figure'), val = pick('.t-value');
   const fc = fig && getComputedStyle(fig), vc = val && getComputedStyle(val);
   const out = { faces: [...new Set([...document.fonts].map(f => `${f.family}:${f.status}`))] };
 
@@ -88,7 +88,8 @@ const r = await p.evaluate(async () => {
     if (c.fontVariationSettings === 'normal') return false;
     const fam = c.fontFamily.split(',')[0].replace(/['"]/g, '');
     const axes = c.fontVariationSettings.match(/'(\w+)'/g) || [];
-    if (fam === 'Archivo') return axes.some(a => a !== "'wght'" && a !== "'wdth'");
+    // Manrope has one axis, weight. Anything else on it is a dead declaration.
+    if (fam === 'Manrope') return axes.some(a => a !== "'wght'");
     return false;
   }).length;
   return out;

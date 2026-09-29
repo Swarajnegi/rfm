@@ -11,13 +11,13 @@
 // Alpine.start() afterwards. Script order in index.html is load-bearing.
 
 import Alpine from 'alpinejs';
+import './accounts.mjs';
 
 import { gsap } from 'gsap';
 import { Flip } from 'gsap/Flip';
 import { SplitText } from 'gsap/SplitText';
 import { CustomEase } from 'gsap/CustomEase';
 
-import { createChart, AreaSeries, LineSeries, createSeriesMarkers } from 'lightweight-charts';
 import autoAnimate from '@formkit/auto-animate';
 import { driver } from 'driver.js';
 import 'number-flow';
@@ -32,7 +32,6 @@ window.Alpine = Alpine;
 window.gsap = gsap;
 window.Flip = Flip;
 window.SplitText = SplitText;
-window.LW = { createChart, AreaSeries, LineSeries, createSeriesMarkers };
 window.autoAnimate = autoAnimate;
 window.driver = driver;
 

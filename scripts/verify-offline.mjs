@@ -52,7 +52,7 @@ if (SEED) {
         localStorage.setItem('rfm_usd_inr_rate', '88.41');
         localStorage.setItem('rfm_tour_v1', 'done');   // tour already seen
         // The first-run questions are tested in verify-profile; here they are answered.
-        localStorage.setItem('rfm_v1', JSON.stringify((v => ({ ...v, profile: v.profile || { completedAt: '2026-09-01T00:00:00.000Z', name: 'Test', age: 40, goal: 'balanced', risk: 'medium', horizon: '7to15', interests: ['stocks'] } }))(JSON.parse(localStorage.getItem('rfm_v1') || '{}'))));
+        localStorage.setItem('rfm_v1', JSON.stringify((v => ({ ...v, profile: v.profile || { version: 2, completedAt: '2026-09-01T00:00:00.000Z', name: 'Test', age: 40, goal: 'balanced', risk: 'medium', horizon: '7to15', interests: ['stocks'] } }))(JSON.parse(localStorage.getItem('rfm_v1') || '{}'))));
     }, [seed, hist]);
 }
 
@@ -110,7 +110,6 @@ const globals = await page.evaluate(() => ({
     Alpine: typeof window.Alpine,
     gsap: typeof window.gsap,
     Flip: typeof window.Flip,
-    LW: typeof window.LW,
     autoAnimate: typeof window.autoAnimate,
     driver: typeof window.driver,
     numberFlow: !!customElements.get('number-flow'),
@@ -118,21 +117,20 @@ const globals = await page.evaluate(() => ({
 }));
 ok('Alpine started', globals.Alpine === 'function' || globals.Alpine === 'object');
 ok('GSAP + Flip present', globals.gsap === 'object' && globals.Flip === 'function' || globals.Flip === 'object');
-ok('Lightweight Charts present', globals.LW === 'object');
 ok('AutoAnimate present', globals.autoAnimate === 'function');
 ok('Driver.js present', globals.driver === 'function');
 ok('<number-flow> registered', globals.numberFlow);
 
 // Tailwind must have produced real utilities, not fallen back to nothing.
 const styled = await page.evaluate(() => {
-    const el = document.querySelector('main[x-show]') || document.body;
+    const el = [...document.querySelectorAll('.screen[x-show]')].find(m => getComputedStyle(m).display !== 'none') || document.body;
     const cs = getComputedStyle(document.body);
     return {
         bg: cs.backgroundColor,
         bgImage: cs.backgroundImage,
         font: cs.fontFamily,
-        mainCount: document.querySelectorAll('main[x-show]').length,
-        visibleMains: [...document.querySelectorAll('main[x-show]')].filter(m => getComputedStyle(m).display !== 'none').length,
+        mainCount: document.querySelectorAll('.screen[x-show]:not(.onboard)').length,
+        visibleMains: [...document.querySelectorAll('.screen[x-show]:not(.onboard)')].filter(m => getComputedStyle(m).display !== 'none').length,
         rendered: el.getBoundingClientRect().height > 0,
     };
 });
@@ -141,42 +139,35 @@ const styled = await page.evaluate(() => {
 // instead: if Tailwind compiled, text-primary resolves to the token colour.
 // Corpus has no utility framework: the design system is hand-authored, so the
 // check is that its tokens resolve and its primitives compute.
+// Corpus 3.0 styles each screen from its approved design, scoped under
+// [data-s~=<screen>]. What must hold offline is that those scoped rules
+// resolve: a card on the Overview is the design's raised card, and the hero
+// is the design's navy panel.
 const tw = await page.evaluate(() => {
-    // The sheet is a STATEMENT, not a card: it is deliberately transparent and
-    // square, and its sections are delimited by a brass hairline under a brass
-    // label. This probe used to assert the opposite (a filled, 24px-radius
-    // panel) and so encoded the card design it was meant to outlive. What must
-    // hold either way is that the primitive STYLES — so it asserts the rule and
-    // the label colour, which is what carries the structure now.
-    const p = document.createElement('div');
-    p.className = 'sheet';
-    const head = document.createElement('div');
-    head.className = 'sheet__head';
-    const title = document.createElement('h2');
-    title.className = 'sheet__title';
-    head.appendChild(title); p.appendChild(head);
-    document.body.appendChild(p);
-    const hs = getComputedStyle(head), ts = getComputedStyle(title);
+    const host = document.createElement('div');
+    host.setAttribute('data-s', 'ov');
+    const card = document.createElement('section'); card.className = 'card';
+    const hero = document.createElement('section'); hero.className = 'hero';
+    host.append(card, hero); document.body.appendChild(host);
+    const cc = getComputedStyle(card), hc = getComputedStyle(hero);
     const root = getComputedStyle(document.documentElement);
     const out = {
-        headRule: hs.borderBottomWidth,
-        headRuleColor: hs.borderBottomColor,
-        titleColor: ts.color,
-        titleCase: ts.textTransform,
-        brass: root.getPropertyValue('--brass').trim(),
+        cardRadius: cc.borderTopLeftRadius, cardFill: cc.backgroundImage,
+        heroFill: hc.backgroundImage, heroRadius: hc.borderTopLeftRadius,
+        gold: root.getPropertyValue('--gold').trim(),
         ink: root.getPropertyValue('--ink').trim(),
         display: root.getPropertyValue('--display').trim(),
     };
-    p.remove();
+    host.remove();
     return out;
 });
-ok('design tokens resolve', !!tw.brass && !!tw.ink, `--brass ${tw.brass}, --ink ${tw.ink}`);
-ok('sheet primitive computes', tw.headRule === '1px' && tw.headRuleColor !== 'rgba(0, 0, 0, 0)'
-   && tw.titleCase === 'uppercase' && tw.titleColor !== 'rgba(0, 0, 0, 0)',
-   `rule ${tw.headRule} ${tw.headRuleColor}, label ${tw.titleColor} ${tw.titleCase}`);
+ok('design tokens resolve', !!tw.gold && !!tw.ink, `--gold ${tw.gold}, --ink ${tw.ink}`);
+ok('the scoped design rules compute', tw.cardRadius === '16px' && /gradient/.test(tw.cardFill)
+   && tw.heroRadius === '24px' && /gradient/.test(tw.heroFill),
+   `card ${tw.cardRadius}, hero ${tw.heroRadius}`);
 ok('display face declared', /Newsreader/.test(tw.display), tw.display.split(',')[0]);
 ok('body ground painted', styled.bg !== 'rgba(0, 0, 0, 0)' || /gradient/.test(styled.bgImage), styled.bg);
-ok('webfont applied', /Archivo/i.test(styled.font), styled.font.split(',')[0]);
+ok('webfont applied', /Manrope/i.test(styled.font), styled.font.split(',')[0]);
 ok('exactly one page visible', styled.visibleMains === 1, `${styled.visibleMains} of ${styled.mainCount}`);
 ok('content has height', styled.rendered);
 
@@ -185,8 +176,7 @@ ok('content has height', styled.rendered);
 // actually loaded rather than merely that the element exists.
 const iconFont = await page.evaluate(async () => {
     await document.fonts.ready;
-    return document.fonts.check('24px "Material Symbols Rounded"')
-        && document.fonts.check('40px "Fraunces"');
+    return document.fonts.check('24px "Material Symbols Outlined"');
 });
 ok('icon font loaded (subset)', iconFont, iconFont ? '' : 'icons would render as words');
 
@@ -198,14 +188,14 @@ if (SEED) {
         // and the laid-out width, not on scraped text.
         heroValue: document.querySelector('number-flow')?.value ?? null,
         heroWidth: document.querySelector('number-flow')?.getBoundingClientRect().width ?? 0,
-        chartCanvas: !!document.querySelector('#nwChart canvas'),
+        chartDrawn: !!document.querySelector('#nwChart svg path.line, [data-s~="ofd"] .first .pt'),
         holdingRows: document.querySelectorAll('[data-holding-row]').length,
-        emptyState: !!document.querySelector('.hero__empty'),
+        emptyState: [...document.querySelectorAll('[data-s~="nu"]')].some(e => e.offsetParent !== null),
     }));
     ok('hero renders <number-flow>', populated.numberFlow);
     ok('hero has a numeric value', Number.isFinite(populated.heroValue), String(populated.heroValue));
     ok('hero figure is laid out', populated.heroWidth > 40, populated.heroWidth.toFixed(0) + 'px');
-    ok('chart drew a canvas', populated.chartCanvas);
+    ok('the chart drew its line (or the first day\'s point)', populated.chartDrawn);
     ok('empty state suppressed', !populated.emptyState);
 }
 
@@ -262,7 +252,7 @@ const contrast = await page.evaluate(() => {
 
     const probes = [];
     const sample = [...document.querySelectorAll(
-            'main[x-show] p, main[x-show] span, main[x-show] h2, main[x-show] h3, main[x-show] number-flow, main[x-show] button')]
+            '.screen[x-show] p, .screen[x-show] span, .screen[x-show] h2, .screen[x-show] h3, .screen[x-show] number-flow, .screen[x-show] button')]
         .filter(e => e.offsetParent !== null &&
                      (e.tagName === 'NUMBER-FLOW' || e.textContent.trim().length > 2))
         .slice(0, 120);
@@ -284,7 +274,7 @@ const contrast = await page.evaluate(() => {
 ok('text meets WCAG AA contrast', contrast.failures.length === 0,
    `${contrast.checked} probes, worst ${contrast.worst.toFixed(2)}:1` +
    (contrast.failures.length ? ` — e.g. "${contrast.failures[0].text}" at ${contrast.failures[0].r.toFixed(2)}:1` : ''));
-ok('no text below the 13px floor', contrast.minSize >= 13,
+ok('no text below the 14px floor', contrast.minSize >= 14,
    `smallest rendered ${contrast.minSize}px ("${contrast.smallestText}")`);
 
 const realErrors = consoleErrors.filter(e => !/favicon|Failed to load resource/i.test(e));

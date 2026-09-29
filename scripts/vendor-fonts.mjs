@@ -26,7 +26,8 @@ const OUT = 'web/fonts';
 // a 60px total and a 13px label.
 const FACES = [
   { pkg: '@fontsource-variable/newsreader', css: 'opsz.css', family: 'Newsreader' },
-  { pkg: '@fontsource-variable/archivo',    css: 'wght.css', family: 'Archivo'    },
+  // Corpus 3.0 sets every UI string in Manrope; Archivo went with the old screens.
+  { pkg: '@fontsource-variable/manrope',    css: 'wght.css', family: 'Manrope'    },
 ];
 // Vietnamese is ~32 KB per face for an audience this app does not have.
 const SUBSETS = ['latin', 'latin-ext'];
@@ -77,7 +78,7 @@ if (ICONS) {
     || execFileSync('node', ['scripts/icon-names.mjs'], { encoding: 'utf8' }).trim();
   console.log(`  icon subset: ${names.split(',').length} glyphs`);
   try {
-    const res = await fetch(`https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&icon_names=${names}&display=block`,
+    const res = await fetch(`https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&icon_names=${names}&display=block`,
                             { headers: { 'User-Agent': UA } });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     let text = await res.text();

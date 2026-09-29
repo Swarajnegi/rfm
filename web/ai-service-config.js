@@ -7,5 +7,5 @@ window.CorpusAiConfig = Object.freeze({
     endpoint: 'https://corpus-ai-gateway.swarajnegi999.workers.dev/v1/portfolio-reading',
     // Stamped on crash reports. Keep in step with versionName/versionCode in
     // android/app/build.gradle.
-    version: '1.1 (2)'
+    version: '3.1 (7)'
 });

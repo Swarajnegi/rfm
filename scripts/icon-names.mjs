@@ -21,23 +21,23 @@ function branchLiterals(expr) {
 const html = readFileSync('web/index.html', 'utf8');
 const js = readFileSync('web/app.js', 'utf8');
 
-// 1. Literal text inside an icon element: <span class="icon">download</span>
-for (const m of html.matchAll(/<span[^>]*class="[^"]*\bicon\b[^"]*"[^>]*>([a-z0-9_]+)<\/span>/g)) {
+// 1. Literal text inside an icon element: <span class="material-symbols-outlined">download</span>
+for (const m of html.matchAll(/<span[^>]*class="[^"]*\b(?:icon|material-symbols-outlined)\b[^"]*"[^>]*>\s*([a-z0-9_]+)\s*<\/span>/g)) {
   names.add(m[1]);
 }
 // 2. Every string literal inside an x-text on an icon element. This is what the
 //    earlier scan missed: `x-text="up ? 'trending_up' : 'trending_down'"` names
 //    two icons, and only one of them is ever on screen at a time.
-for (const m of html.matchAll(/<span[^>]*class="[^"]*\bicon\b[^"]*"[^>]*\sx-text="([^"]*)"/g)) {
+for (const m of html.matchAll(/<span[^>]*class="[^"]*\b(?:icon|material-symbols-outlined)\b[^"]*"[^>]*\sx-text="([^"]*)"/g)) {
   for (const s of branchLiterals(m[1])) names.add(s);
 }
 // Same again for elements where x-text precedes class.
-for (const m of html.matchAll(/<span[^>]*\sx-text="([^"]*)"[^>]*class="[^"]*\bicon\b[^"]*"/g)) {
+for (const m of html.matchAll(/<span[^>]*\sx-text="([^"]*)"[^>]*class="[^"]*\b(?:icon|material-symbols-outlined)\b[^"]*"/g)) {
   for (const s of branchLiterals(m[1])) names.add(s);
 }
 // 3. Icons declared in app.js data (SURFACES, attention items, filters). These
 //    are invisible to any HTML-only scan — the DONUT_SMALL miss came from here.
-for (const m of js.matchAll(/\bicon:\s*'([a-z][a-z0-9_]+)'/g)) names.add(m[1]);
+for (const m of (js + html).matchAll(/\bicon:\s*'([a-z][a-z0-9_]+)'/g)) names.add(m[1]);
 
 const list = [...names].sort();
 

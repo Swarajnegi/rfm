@@ -1,5 +1,9 @@
 # Corpus — road to the Play Store and App Store
 
+> Historical checklist (superseded for current launch tracking on 2026-09-27).
+> Use [CORPUS_LAUNCH_PLAN.md](CORPUS_LAUNCH_PLAN.md) for current audit issues, pricing proposals, evidence and release gates.
+> The entries below are preserved as history; prices, provider/legal assumptions and completion claims require revalidation.
+
 Goal: a paid app that thousands of people use. Order matters — each phase
 unblocks the next. Tick items as they land; add the date.
 

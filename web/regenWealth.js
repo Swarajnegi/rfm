@@ -42,29 +42,40 @@ window.RegenWealth = (() => {
         const isUsdHolding = investment => investment.currency === 'USD'
             || investment.type === 'Stock (US)'
             || investment.type === 'ETF (US)';
-        const holdingCost = investment => {
+        /* The app's own valuation, never a copy of it. A private copy here once
+           counted an imported fund as ₹0 invested but at its full value, so a
+           reading reported the funds' entire worth as profit. The fallbacks only
+           serve callers that pass plain data (the tests); they follow the same
+           rules: cost is what was paid or unknown, never today's price. */
+        const own = name => typeof appData[name] === 'function' ? appData[name].bind(appData) : null;
+        const holdingValue = own('getInvCurrentValue') || (investment => {
             if (number(investment.units) > 0) {
-                return number(investment.buyPrice) > 0
-                    ? number(investment.units) * number(investment.buyPrice) * (isUsdHolding(investment) ? fxRate : 1)
-                    : null;
-            }
-            return number(investment.amount) > 0 ? number(investment.amount) : null;
-        };
-        const holdingValue = investment => {
-            if (number(investment.units) > 0 && number(investment.currentPrice) > 0) {
-                return number(investment.units) * number(investment.currentPrice) * (isUsdHolding(investment) ? fxRate : 1);
+                const price = number(investment.currentPrice) || number(investment.nav) || number(investment.buyPrice);
+                return number(investment.units) * price * (isUsdHolding(investment) ? fxRate : 1);
             }
             return number(investment.currentValue) || number(investment.amount);
-        };
+        });
+        const holdingCostOrZero = own('getInvInvestedCost') || (investment => number(investment.units) > 0
+            ? number(investment.units) * number(investment.buyPrice) * (isUsdHolding(investment) ? fxRate : 1)
+            : number(investment.amount));
+        const marketLinked = own('isMarketLinked') || (investment => {
+            const t = investment.type || '';
+            return t.includes('Stock') || t.includes('ETF') || t === 'Mutual Fund' || t === 'Gold' || t === 'Physical Metal';
+        });
 
         const holdings = investments.map(investment => {
-            const cost = holdingCost(investment);
+            const linked = marketLinked(investment);
+            const paid = holdingCostOrZero(investment);
             const value = holdingValue(investment);
+            // A balance (EPF, FD, scheme) is not an investment with a gain; a
+            // market holding with no recorded buy price has an unknown one.
+            const cost = linked && paid > 0 ? paid : null;
             const pnl = cost === null ? null : value - cost;
             return {
                 name: investment.name || investment.ticker || 'Unnamed holding',
                 type: investment.type || 'Other',
                 ticker: investment.ticker || '',
+                marketLinked: linked,
                 invested: cost === null ? null : Math.round(cost),
                 marketValue: Math.round(value),
                 pnl: pnl === null ? null : Math.round(pnl),
@@ -72,12 +83,24 @@ window.RegenWealth = (() => {
                 lastUpdated: investment.lastNavUpdate || ''
             };
         });
-        const totalInvested = holdings.reduce((sum, holding) => sum + (holding.invested || 0), 0);
+        const priced = holdings.filter(h => h.marketLinked && h.invested !== null);
+        const totalInvested = priced.reduce((sum, h) => sum + h.invested, 0);
+        const pricedValue = priced.reduce((sum, h) => sum + h.marketValue, 0);
+        const marketGain = pricedValue - totalInvested;
+        const marketGainPct = totalInvested > 0 ? Number(((marketGain / totalInvested) * 100).toFixed(2)) : null;
+        const costUnknown = holdings.filter(h => h.marketLinked && h.invested === null).map(h => h.name);
+        const balancesValue = holdings.filter(h => !h.marketLinked).reduce((sum, h) => sum + h.marketValue, 0);
         const totalMarketValue = holdings.reduce((sum, holding) => sum + holding.marketValue, 0);
 
+        // Split by the app's own classes, so "Stocks (US)" is one line however
+        // its holdings happen to be typed.
         const breakdown = {};
-        holdings.forEach(holding => {
-            breakdown[holding.type] = (breakdown[holding.type] || 0) + holding.marketValue;
+        const classes = Array.isArray(appData.HOLDING_CLASSES) && own('_classOf') ? appData.HOLDING_CLASSES : null;
+        investments.forEach((investment, i) => {
+            const key = classes
+                ? ((c => c && (c.key === 'equity' ? 'Stocks (India)' : c.short))(classes.find(c => c.key === appData._classOf(investment)))) || holdings[i].type
+                : holdings[i].type;
+            breakdown[key] = (breakdown[key] || 0) + holdings[i].marketValue;
         });
         const allocationPct = {};
         Object.entries(breakdown).forEach(([type, amt]) => {
@@ -102,7 +125,12 @@ window.RegenWealth = (() => {
         const totalExpense = expenseStreams.length
             ? expenseStreams.reduce((sum, stream) => sum + number(stream.amount), 0)
             : number(cf.housing) + number(cf.food) + number(cf.medical) + number(cf.otherExpense);
-        const monthlySurplus = totalIncome - totalExpense;
+        // The Income screen's own figures when the app is present, so the reading
+        // and the screen never disagree on income, spending or the surplus.
+        const appNum = k => (typeof appData[k] === 'number' && Number.isFinite(appData[k])) ? appData[k] : null;
+        const incomeOut = appNum('totalIncome') ?? totalIncome;
+        const expenseOut = appNum('totalExpense') ?? totalExpense;
+        const monthlySurplus = incomeOut - expenseOut;
 
         const nw = appData.networth || {};
         const totalAssets      = number(nw.bank) + number(nw.cash)
@@ -112,26 +140,62 @@ window.RegenWealth = (() => {
                                + number(nw.credit) + number(nw.otherDebt);
 
         const ef = appData.emergency || {};
-        const efTarget = number(ef.efMonthly) * number(ef.efMonths || 12);
+        const efTarget = appNum('efRequired') ?? number(ef.efMonthly) * number(ef.efMonths || 12);
         const efCurrent = number(ef.efCurrent);
         const efCoverageMonths = number(ef.efMonthly) > 0
             ? Math.round(efCurrent / number(ef.efMonthly))
             : 0;
 
         const payouts = payoutPicture(investments, holdingValue);
+        const profile = normProfile(appData.profile);
+        const payoutFit = [];
+        if (profile && typeof appData._profileClassOf === 'function') {
+            for (const [cls, requested] of Object.entries(profile.payout || {})) {
+                if (requested.includes('none')) continue;
+                const inClass = investments.filter(inv => appData._profileClassOf(inv) === cls);
+                const terms = inClass.map(inv => ({ name: inv.name, term: String(inv.payout || inv.payoutFrequency || '').toLowerCase() }));
+                for (const frequency of requested) {
+                    const matches = terms.filter(x => frequency === 'yearly' ? /year|annual/.test(x.term) : x.term.includes(frequency));
+                    payoutFit.push(`${CLASSES[cls] || cls}: wants ${frequency}; ${matches.length ? 'recorded terms match on ' + matches.map(x => x.name).join(', ') : 'no holding with that recorded payout frequency'}. Actual cash paid is not verified.`);
+                }
+            }
+        }
+
+        // Value and share per profile class, from the app's own classifier.
+        const classShares = {};
+        if (typeof appData._profileClassOf === 'function') {
+            investments.forEach((investment, i) => {
+                const k = appData._profileClassOf(investment);
+                classShares[k] = classShares[k] || { value: 0, pct: 0 };
+                classShares[k].value += holdings[i].marketValue;
+            });
+            for (const k of Object.keys(classShares)) {
+                classShares[k].pct = totalMarketValue > 0 ? Math.round((classShares[k].value / totalMarketValue) * 100) : 0;
+            }
+        }
 
         return {
             totalInvested,
             totalMarketValue,
+            pricedValue,
+            marketGain,
+            marketGainPct,
+            costUnknown,
+            balancesValue,
             payouts,
+            payoutFit,
+            cpi: appData.cpi && Number.isFinite(Number(appData.cpi.rate)) ? {
+                rate: Number(appData.cpi.rate), referenceMonth: appData.cpi.referenceMonth,
+                releasedOn: appData.cpi.releasedOn, stale: !!appData.cpiStale || !!appData.cpiOffline
+            } : null,
             holdingsCount: investments.length,
             holdings: holdings.sort((a, b) => b.marketValue - a.marketValue).slice(0, 8),
             allocationPct,
             breakdown,
             concentrationRisks,
             monthlyPension: pension,
-            monthlyIncome: totalIncome,
-            monthlyExpense: totalExpense,
+            monthlyIncome: incomeOut,
+            monthlyExpense: expenseOut,
             monthlySurplus,
             totalAssets,
             totalLiabilities,
@@ -149,7 +213,8 @@ window.RegenWealth = (() => {
                 gap: Math.max(0, number(g.target) - number(g.current))
             })),
             lastPriceSync: appData.lastNavFetchTime || '',
-            profile: normProfile(appData.profile),
+            profile,
+            classShares,
             capturedAt: new Date().toISOString()
         };
     }
@@ -166,6 +231,7 @@ window.RegenWealth = (() => {
     function payoutPicture(investments, valueOf) {
         const paying = [], atMaturity = [], unknown = [];
         for (const inv of investments) {
+            if (inv.type === 'Recurring Deposit') continue; // only principal is confirmed
             const rate = Number(inv.rate) || 0;
             const scheme = window.CorpusSchemes?.match(inv) || null;
             const recorded = String(inv.payout || inv.payoutFrequency || '').toLowerCase();
@@ -187,8 +253,8 @@ window.RegenWealth = (() => {
 
     function payoutLines(snapshot) {
         const po = snapshot.payouts;
-        if (!po || (!po.paying.length && !po.atMaturity.length && !po.unknown.length)) return '- **Payouts from investments:** none recorded';
-        const out = [`- **Payouts from investments:** about ₹${fmtIn(po.monthlyTotal)} a month in total (separate from the income above)`];
+        if (!po || (!po.paying.length && !po.atMaturity.length && !po.unknown.length)) return '- **Indicative payouts from stated terms:** none recorded';
+        const out = [`- **Indicative payouts from stated terms, NOT verified cash received:** about ₹${fmtIn(po.monthlyTotal)} a month equivalent`];
         for (const p of po.paying) out.push(`  - ${p.name}: ₹${fmtIn(p.perPeriod)} ${p.period} (≈ ₹${fmtIn(p.monthlyEq)} a month)`);
         if (po.atMaturity.length) out.push(`  - Pays only at maturity, not as income: ${po.atMaturity.join(', ')}`);
         if (po.unknown.length) out.push(`  - Payout frequency not recorded (do not assume one): ${po.unknown.join(', ')}`);
@@ -201,75 +267,116 @@ window.RegenWealth = (() => {
        investor. The same Broadcom verdict went to a retired parent whose money
        is in SCSS and a post office MIS and who wanted to know whether their
        monthly income is safe. The profile is what the reading is FOR. */
-    const GOALS = {
-        grow: 'Grow wealth over the long term',
-        balanced: 'Balanced growth',
-        safe: 'Keep capital safe',
-        income: 'A regular income from investments',
-        retirement: 'Build towards retirement',
-        retired: 'Retired — income and safety',
+    // Profile v2: every money answer is per asset class, and several at once.
+    const CLASSES = {
+        in_stocks: 'Indian stocks', us_stocks: 'US stocks', mf: 'Mutual funds', gold: 'Gold', metals: 'Other metals',
+        fd_bonds: 'FDs and bonds', schemes: 'Government schemes (PPF, EPF, SCSS, post office)', property: 'Property',
     };
-    const RISKS = {
-        low: 'Low — said they would sell after a 20% fall',
-        medium: 'Medium — said they would wait out a 20% fall',
-        high: 'High — said they would buy more after a 20% fall',
-    };
-    const HORIZONS = { lt3: 'under 3 years', '3to7': '3 to 7 years', '7to15': '7 to 15 years', gt15: 'more than 15 years' };
-    const PAYOUTS = { monthly: 'monthly', quarterly: 'quarterly', yearly: 'yearly', none: 'none — let it grow' };
-    const INTERESTS = { stocks: 'stocks', mf: 'mutual funds', gold: 'gold and silver', schemes: 'government schemes (PPF, SCSS, post office)',
-                        fdbonds: 'FDs and bonds', us: 'US markets' };
+    const MARKET = new Set(['in_stocks', 'us_stocks', 'mf', 'gold', 'metals']);
+    const PURPOSE = { grow: 'growth', retirement: 'retirement', income: 'regular income', safe: 'keeping it safe',
+                      emergency: 'emergency money', purchase: 'a big purchase', children: 'children’s future' };
+    const FALL = { sell: 'sells some', wait: 'waits it out', buy: 'buys more' };
+    const HORIZON = { trim: 'trimmed along the way', lt3: 'within 3 years', '3to7': 'in 3 to 7 years', '7to15': 'in 7 to 15 years', gt15: 'in 15+ years' };
+    const PAYOUT = { monthly: 'monthly', quarterly: 'quarterly', yearly: 'yearly', none: 'none, let it grow' };
+    const KNOWS = { new: 'new to it', some: 'a few years', long: 'many years', simple: 'wants it explained simply' };
+    const INCOME = { salary: 'salary', business: 'business or freelance', rent: 'rent', pension: 'pension', dividends: 'interest and dividends', none: 'not earning yet' };
+    const DEPENDENTS = { partner: 'partner', children: 'children', parents: 'parents', none: 'no one' };
+    const COVER = { emergency: 'emergency fund', health: 'health insurance', term: 'term life cover', none: 'none yet' };
+    const PLANS = { home: 'a home', education: 'education', wedding: 'a wedding', car: 'a car', travel: 'travel', nothing: 'nothing planned' };
+    const PLAN_WHEN = { '1': 'in about a year', '2to3': 'in 2 to 3 years', '4to5': 'in 4 to 5 years', '5plus': 'in 5+ years' };
+    // Kept for the exports other code imports.
+    const GOALS = PURPOSE;
 
     function normProfile(p) {
         if (!p || !p.completedAt) return null;
         const age = Number(p.age);
+        const list = (v, table) => (Array.isArray(v) ? v : []).filter(x => table[x]);
+        const per = (obj, table, onlyMarket) => {
+            const out = {};
+            for (const k of Object.keys(CLASSES)) {
+                if (onlyMarket && !MARKET.has(k)) continue;
+                const v = list((obj || {})[k], table);
+                if (v.length) out[k] = v;
+            }
+            return out;
+        };
+        const plans = {};
+        for (const [k, v] of Object.entries(p.plans || {})) if (PLANS[k]) plans[k] = list(v, PLAN_WHEN);
+        const payout = per(p.payout, PAYOUT);
+        for (const [key, values] of Object.entries(payout)) if (values.length > 1) payout[key] = values.filter(x => x !== 'none');
         return {
             name: String(p.name || '').trim().slice(0, 40) || null,
             age: Number.isFinite(age) && age > 0 ? Math.round(age) : null,
-            goal: GOALS[p.goal] ? p.goal : null,
-            risk: RISKS[p.risk] ? p.risk : null,
-            payout: PAYOUTS[p.payout] ? p.payout : null,
-            horizon: HORIZONS[p.horizon] ? p.horizon : null,
-            interests: (Array.isArray(p.interests) ? p.interests : []).filter(i => INTERESTS[i]),
+            holdings: list(p.holdings, CLASSES),
+            purpose: per(p.purpose, PURPOSE), fall: per(p.fall, FALL, true), horizon: per(p.horizon, HORIZON),
+            payout, knows: per(p.knows, KNOWS),
+            income: list(p.income, INCOME), dependents: list(p.dependents, DEPENDENTS), cover: list(p.cover, COVER), plans,
         };
     }
 
-    /* What "good" means for this person. The same holding is a fine position
-       for one reader and a problem for another; these lines tell the model
-       which yardstick to hold it against. */
-    function judgeRules(p) {
-        if (!p) return ['- No profile was given. Assume a balanced Indian investor, and say once that the reading would be sharper with their goal.'];
+    const words = (vals, table) => (vals || []).map(v => table[v]).filter(Boolean);
+    const joinAnd = arr => arr.length <= 1 ? (arr[0] || '') : `${arr.slice(0, -1).join(', ')} and ${arr[arr.length - 1]}`;
+
+    /* What "good" means for this person, asset by asset. The same holding is a
+       fine position for one reader and a problem for another, and for one
+       reader it can be fine in US shares and wrong in the emergency money. */
+    function judgeRules(p, shares) {
+        if (!p) return ['- No profile was given. Assume a balanced Indian investor, and say once that the reading would be sharper with their goals.'];
         const out = [];
-        const incomeGoal = p.goal === 'income' || p.goal === 'retired' || (p.payout && p.payout !== 'none');
-        if (incomeGoal) {
-            out.push(`- Judge first on INCOME: does the book reliably pay ${p.payout && p.payout !== 'none' ? p.payout : 'regularly'}, what happens to that income when a deposit matures or a rate resets, and is the principal safe.`);
-            out.push('- Name any government scheme they qualify for that pays on their schedule (SCSS quarterly, POMIS monthly), with its current rate and limit from the table below.');
+        const share = k => (shares && shares[k] ? shares[k].pct : 0);
+        for (const k of p.holdings) {
+            const name = CLASSES[k].replace(/ \(.*\)$/, '');
+            const purpose = p.purpose[k] || [], fall = p.fall[k] || [], when = p.horizon[k] || [], knows = p.knows[k] || [];
+            if (fall.includes('sell') && share(k) > 30) out.push(`- ${name}: they would sell some after a 20% fall and it is ${share(k)}% of the book. Judge its drawdown risk first.`);
+            if (fall.includes('buy')) out.push(`- ${name}: they would buy more after a fall. A drawdown in a well-supported holding here is an opportunity to name, not only a risk.`);
+            if (MARKET.has(k) && k !== 'gold' && when.includes('lt3')) out.push(`- ${name}: some of it is needed within 3 years while it sits in a market-linked asset. Say how much a fall would cost that part.`);
+            if (when.includes('trim')) out.push(`- ${name}: they trim along the way. Judge rebalancing points and the capital-gains tax on each trim.`);
+            if (when.filter(w => w !== 'trim').length > 1) out.push(`- ${name}: it serves more than one date (${joinAnd(words(when, HORIZON))}). Split the judgment by date rather than averaging.`);
+            if (purpose.includes('emergency') && MARKET.has(k)) out.push(`- ${name}: they count it as emergency money, but it moves with a market. Flag it.`);
+            if (purpose.includes('income') || (p.payout[k] || []).some(v => v !== 'none')) out.push(`- ${name}: it should pay them ${joinAnd(words((p.payout[k] || []).filter(v => v !== 'none'), PAYOUT)) || 'regularly'}. Judge whether it reliably does, and what happens at a maturity or rate reset.`);
+            if (purpose.includes('safe') && MARKET.has(k) && k !== 'gold') out.push(`- ${name}: they want it kept safe. A large or concentrated position here is a finding even when it is doing well.`);
+            if (knows.includes('new') || knows.includes('simple')) out.push(`- ${name}: they are newer to it or want it simple. Define any term you use about it in plain words.`);
+            else if (knows.includes('long')) out.push(`- ${name}: they have many years with it. Skip the basics.`);
         }
-        if (p.goal === 'safe' || p.risk === 'low') {
-            out.push('- Capital safety and liquidity outrank return. A large equity or single-stock position is a finding for this person even when the stock is doing well.');
-        }
-        if (p.goal === 'grow' || p.risk === 'high') {
-            out.push('- Judge on growth quality: analyst evidence, revenue and margins, valuation, concentration. A drawdown in a well-supported holding is a finding about opportunity, not only risk.');
-        }
-        if (p.goal === 'balanced') out.push('- Judge on drift between growth and safety assets, and whether each side is doing its job.');
-        if (p.goal === 'retirement') out.push('- Judge on the horizon: long-term compounding (EPF, PPF, NPS, equity funds) and whether the mix suits the years left.');
+        if (p.dependents.some(d => d !== 'none') && !p.cover.includes('term')) out.push(`- ${joinAnd(words(p.dependents, DEPENDENTS))} depend on them and there is no term life cover. State that gap before anything about returns.`);
+        if (!p.cover.includes('emergency')) out.push('- They have no emergency fund in place. Say how much of the book could serve as one without selling at a loss.');
+        if (!p.cover.includes('health')) out.push('- No health insurance is in place. Name it as a gap once.');
+        const soon = Object.entries(p.plans).filter(([k, v]) => k !== 'nothing' && v.some(w => w === '1' || w === '2to3'));
+        if (soon.length) out.push(`- Coming up soon: ${joinAnd(soon.map(([k, v]) => `${PLANS[k]} ${joinAnd(words(v, PLAN_WHEN))}`))}. Check how much of the book can be reached by then without selling a fallen asset.`);
+        if (p.income.includes('none')) out.push('- They are not earning yet: nothing new is coming in to top up the book.');
+        else if (p.income.includes('business')) out.push('- Business or freelance income is uneven: weigh liquidity higher.');
         if (p.age && p.age >= 60) out.push('- They are a senior citizen: SCSS eligibility, the 80TTB deduction on interest, and liquidity for health costs are relevant.');
-        if (p.horizon === 'lt3') out.push('- Money is needed within 3 years: equity volatility is a real risk to name, not a footnote.');
-        if (p.interests.includes('gold')) out.push('- They asked Corpus to watch gold and silver: use the metals data below whenever it bears on their position.');
+        if (p.holdings.includes('gold')) out.push('- They hold or want gold: use the metals data below whenever it bears on their position.');
         return out;
     }
 
-    function profileBlock(p) {
+    // The profile, printed next to what they actually hold in each class.
+    function profileBlock(p, shares) {
         if (!p) return '## WHO THIS IS FOR\n- No profile given.\n' + judgeRules(null).join('\n');
         const lines = ['## WHO THIS IS FOR'];
-        if (p.name) lines.push(`- Name: ${p.name}`);
+        // The name is deliberately NOT sent. The screens promise "a summary,
+        // never your name or account numbers", and nothing the model writes
+        // needs it: a greeting is composed on the phone.
         if (p.age) lines.push(`- Age: ${p.age}`);
-        if (p.goal) lines.push(`- Goal: ${GOALS[p.goal]}`);
-        if (p.risk) lines.push(`- Risk comfort: ${RISKS[p.risk]}`);
-        if (p.payout) lines.push(`- Payouts wanted: ${PAYOUTS[p.payout]}`);
-        if (p.horizon) lines.push(`- Needs most of the money in: ${HORIZONS[p.horizon]}`);
-        if (p.interests.length) lines.push(`- Asked Corpus to watch: ${p.interests.map(i => INTERESTS[i]).join(', ')}`);
+        if (p.income.length) lines.push(`- Income from: ${joinAnd(words(p.income, INCOME))}`);
+        if (p.dependents.length) lines.push(`- Depend on them: ${joinAnd(words(p.dependents, DEPENDENTS))}`);
+        if (p.cover.length) lines.push(`- Already in place: ${joinAnd(words(p.cover, COVER))}`);
+        const plans = Object.entries(p.plans);
+        if (plans.length) lines.push(`- Coming up: ${plans.map(([k, v]) => k === 'nothing' ? 'nothing planned' : `${PLANS[k]}${v.length ? ' ' + joinAnd(words(v, PLAN_WHEN)) : ''}`).join('; ')}`);
+        lines.push('\n## EACH ASSET, AS THEY DESCRIBED IT (their answers, beside what they hold)');
+        for (const k of p.holdings) {
+            const s = shares && shares[k];
+            const held = s && s.value > 0 ? `${s.pct}% of the book (₹${fmtIn(Math.round(s.value))})` : 'not held yet (they want it)';
+            const bits = [];
+            if ((p.purpose[k] || []).length) bits.push(`For: ${joinAnd(words(p.purpose[k], PURPOSE))}`);
+            if ((p.fall[k] || []).length) bits.push(`After a 20% fall: ${joinAnd(words(p.fall[k], FALL))}`);
+            if ((p.horizon[k] || []).length) bits.push(`Needed: ${joinAnd(words(p.horizon[k], HORIZON))}`);
+            if ((p.payout[k] || []).length) bits.push(`Payouts: ${joinAnd(words(p.payout[k], PAYOUT))}`);
+            if ((p.knows[k] || []).length) bits.push(`Knows it: ${joinAnd(words(p.knows[k], KNOWS))}`);
+            lines.push(`- ${CLASSES[k]}: ${held}. ${bits.join('. ')}${bits.length ? '.' : ''}`);
+        }
         lines.push('\n## HOW TO JUDGE THIS BOOK FOR THEM');
-        lines.push(...judgeRules(p));
+        lines.push(...judgeRules(p, shares));
         return lines.join('\n');
     }
 
@@ -449,17 +556,19 @@ window.RegenWealth = (() => {
             .map(([t, pct]) => `  - ${t}: ${pct}% (₹${fmt(snapshot.breakdown[t])})`)
             .join('\n') || '  - No investments recorded yet';
         const holdingLines = snapshot.holdings
-            .map(holding => `  - ${holding.name}${holding.ticker ? ` (${holding.ticker})` : ''}: current ₹${fmt(holding.marketValue)}, ${holding.invested === null ? 'cost basis pending' : `invested ₹${fmt(holding.invested)}, P&L ${holding.pnlPct >= 0 ? '+' : ''}${holding.pnlPct}%`}`)
+            .map(holding => `  - ${holding.name}${holding.ticker ? ` (${holding.ticker})` : ''}: current ₹${fmt(holding.marketValue)}, ${!holding.marketLinked ? 'a balance (no gain to report)' : holding.invested === null ? 'buy price not recorded, so no gain is known' : `invested ₹${fmt(holding.invested)}, gain ${holding.pnlPct >= 0 ? '+' : ''}${holding.pnlPct}%`}`)
             .join('\n') || '  - No holdings recorded yet';
 
         return `${MARK_ANALYSIS}
 You are a concise research analyst for an Indian investor. Consider all supplied evidence before deciding. Never invent a price, analyst forecast, revenue figure, interest rate, company outlook, product innovation, or news item.
 
-${profileBlock(snapshot.profile)}
+${profileBlock(snapshot.profile, snapshot.classShares)}
 
 ## USER PORTFOLIO PROFILE
-- **Total Invested:** ₹${fmt(snapshot.totalInvested)}
-- **Current Portfolio Market Value:** ₹${fmt(snapshot.totalMarketValue)}
+- **Market-linked holdings (stocks, ETFs, funds, gold) with a recorded buy price:** invested ₹${fmt(snapshot.totalInvested)}, worth ₹${fmt(snapshot.pricedValue)} now, ${snapshot.marketGain >= 0 ? 'a gain' : 'a loss'} of ₹${fmt(Math.abs(Math.round(snapshot.marketGain)))}${snapshot.marketGainPct === null ? '' : ` (${snapshot.marketGainPct >= 0 ? '+' : ''}${snapshot.marketGainPct}%)`}. These are computed exactly; quote them as given and never recompute invested, value or gain from other lines.
+${snapshot.costUnknown.length ? `- **Left out of that gain (no buy price recorded):** ${snapshot.costUnknown.join(', ')}. Do not guess their gain.
+` : ''}- **Balances (EPF, PPF, deposits, schemes, bonds):** ₹${fmt(snapshot.balancesValue)}. These are savings balances, not money invested for a gain; never add them to the invested total.
+- **Everything held, at today's value:** ₹${fmt(snapshot.totalMarketValue)}
 - **Number of Holdings:** ${snapshot.holdingsCount}
 - **Asset Allocation:**
 ${allocationLines}
@@ -469,9 +578,11 @@ ${holdingLines}
 - **Monthly Pension Income:** ₹${fmt(snapshot.monthlyPension)}
 - **Monthly Total Income (salary, pension and other recorded income):** ₹${fmt(snapshot.monthlyIncome)}
 ${payoutLines(snapshot)}
+- **Requested payout frequencies versus recorded holdings:** ${snapshot.payoutFit.length ? snapshot.payoutFit.join(' | ') : 'No payout frequency requested or profile unavailable'}. Name any gap briefly; do not invent paid income or promise a return.
+- **India inflation planning assumption:** ${snapshot.cpi ? `${snapshot.cpi.rate}% for ${snapshot.cpi.referenceMonth}, published ${snapshot.cpi.releasedOn}${snapshot.cpi.stale ? ' (stale/offline last available)' : ''}` : 'Unavailable'}. Monthly official CPI is a context assumption, not measured real portfolio return.
 - **Monthly Expenses:** ₹${fmt(snapshot.monthlyExpense)}
 - **Monthly surplus from recorded income alone:** ₹${fmt(snapshot.monthlySurplus)}
-- **Monthly surplus INCLUDING investment payouts:** ₹${fmt(snapshot.monthlySurplus + (snapshot.payouts?.monthlyTotal || 0))} — use THIS figure for any statement about an income gap or shortfall
+- **Hypothetical surplus IF all stated payout terms are honored:** ₹${fmt(snapshot.monthlySurplus + (snapshot.payouts?.monthlyTotal || 0))}. Do not call this confirmed cash flow or use it to dismiss an income gap.
 - **Net Worth:** ₹${fmt(snapshot.netWorth)} (Assets ₹${fmt(snapshot.totalAssets)} − Liabilities ₹${fmt(snapshot.totalLiabilities)})
 - **Emergency Fund:** ${snapshot.efCoverageMonths} months covered (target: ${Math.round(snapshot.efTarget / Math.max(snapshot.efMonthlyNeeded, 1))} months)
 - **Tax Regime:** ${snapshot.taxRegime}
@@ -482,13 +593,14 @@ ${payoutLines(snapshot)}
 ${researchBlock(pack)}
 
 ## WHAT TO RETURN
-1. "fit": one sentence on how this book serves THIS person's goal, and a status: on-track, drifting or off-track.
+1. "fit": one sentence on how this book serves THIS person's goals overall, and a status: on-track, drifting or off-track.
+1b. "classFit": one entry per asset class listed under EACH ASSET, judged against THAT class's own answers (its purpose, what they would do in a fall, when it is needed, payouts), not the average. Use the class name exactly as listed, a status, and one sentence of at most 25 words that cites what they hold.
 2. "findings": the things that genuinely matter for them, most important first. THE BAR: include a finding only if it would change a decision toward or away from their goal — a payout at risk, a deposit maturing or a rate resetting, a concentration, a clear analyst or price signal, a scheme they qualify for and are not using, a tax point. Anything that clears the bar MUST be included, however many that is; anything that does not clear it is left out. No filler, no generic advice ("diversify", "review regularly"), no restating the numbers without a consequence. Each finding cites the measured fact it rests on and names the holdings it concerns.
 3. "holdings": one short line per holding — Buy, Hold or Trim for traded holdings and funds, from their evidence; Keep or Review for deposits and schemes, from rate, tenure and payout. This list sits collapsed under the findings, so keep each line under 20 words.
 HOW TO WEIGH THE EVIDENCE: for stocks, weigh analyst consensus and target, revenue and margins, company outlook and innovation, recent verified news, valuation and price risk. For funds, weigh NAV history against the benchmark. For deposits and schemes, weigh rate, payout, lock-in and maturity against the government terms. For gold and silver, weigh the price trend and the share of the book. Use only fields actually supplied; if a factor is missing, omit it, and do not infer analyst sentiment from a price fall. Price units must match the quoted currency.
 
 Respond ONLY with compact valid JSON:
-{"fit":{"status":"on-track|drifting|off-track","line":"One sentence against their goal"},"findings":[{"priority":1,"kind":"risk|opportunity|income|allocation|tax|rate","title":"At most 8 words","why":"At most 40 words, citing the measured fact","consider":"At most 25 words: what to weigh, not an order","holdings":["names it concerns"],"evidence":["up to two measured facts"]}],"holdings":[{"name":"Exact holding name","verdict":"Buy|Hold|Trim","summary":"At most 20 words"}],"macroContext":"One short sentence grounded in supplied news, or empty string"}`;
+{"fit":{"status":"on-track|drifting|off-track","line":"One sentence against their goals"},"classFit":[{"class":"Exact class name from EACH ASSET","status":"on-track|drifting|off-track","line":"At most 25 words"}],"findings":[{"priority":1,"kind":"risk|opportunity|income|allocation|tax|rate","figure":"The one number the finding turns on, as the reader would say it (94%, ₹6.2 L, 23 days), or empty string","title":"At most 8 words, reading on from the figure when there is one","why":"At most 40 words, citing the measured fact","consider":"At most 25 words: what to weigh, not an order","holdings":["names it concerns"],"evidence":["up to two measured facts"]}],"holdings":[{"name":"Exact holding name","verdict":"Buy|Hold|Trim","summary":"At most 20 words"}],"macroContext":"One short sentence grounded in supplied news, or empty string"}`;
     }
 
     // ── The daily brief ────────────────────────────────────────────────────────
@@ -524,7 +636,7 @@ Respond ONLY with compact valid JSON:
         return `${MARK_DAILY}
 You write a short morning brief for one Indian investor, from the evidence below only. Never invent a price, rate or news item.
 
-${profileBlock(p)}
+${profileBlock(p, snapshot.classShares)}
 
 ## THEIR BOOK TODAY (${today})
 - Value ₹${Math.round(snapshot.totalMarketValue).toLocaleString('en-IN')} across ${snapshot.holdingsCount} holdings: ${allocation}
@@ -534,7 +646,7 @@ ${maturing.length ? maturing.map(u => `- MATURING: ${u.name} ${u.daysToMaturity 
 ${pack ? researchBlock(pack) : '## RESEARCH\nNo research could be gathered today. Do not describe markets, prices or news from memory.'}
 
 ## WHAT TO WRITE
-A greeting line that uses their name if given, then the few items that matter TODAY for their goal — usually three to five. Prefer: what changed since yesterday; a price or rate that bears on something they hold or asked to watch (gold, schemes, FDs); a maturity coming up; a scheme they qualify for; one concrete step toward their goal. If little happened, write fewer items rather than filler. Each body is at most 30 words and states the measured fact.
+A short greeting line with no name in it, then the few items that matter TODAY for their goal — usually three to five. Prefer: what changed since yesterday; a price or rate that bears on something they hold or asked to watch (gold, schemes, FDs); a maturity coming up; a scheme they qualify for; one concrete step toward their goal. If little happened, write fewer items rather than filler. Each body is at most 30 words and states the measured fact.
 
 Respond ONLY with compact valid JSON:
 {"greeting":"One line","items":[{"kind":"news|rate|price|action|reminder","title":"At most 8 words","body":"At most 30 words"}]}`;
@@ -833,6 +945,7 @@ Respond ONLY with compact valid JSON:
             .map((f, i) => ({
                 priority: Number.isFinite(Number(f.priority)) ? Number(f.priority) : i + 1,
                 kind: KINDS.includes(f.kind) ? f.kind : 'allocation',
+                figure: typeof f.figure === 'string' && f.figure.trim().length <= 14 ? f.figure.trim() : '',
                 title: brief(f.title || f.why, 10),
                 why: brief(f.why, 45),
                 consider: brief(f.consider, 28),
@@ -858,7 +971,14 @@ Respond ONLY with compact valid JSON:
         const fit = result.fit && typeof result.fit === 'object' && result.fit.line
             ? { status: FIT.includes(result.fit.status) ? result.fit.status : null, line: brief(result.fit.line, 30) }
             : null;
-        return { fit, findings, holdings, macroContext: brief(result.macroContext, 25) };
+        // One verdict per asset class, named as the prompt listed them.
+        const byName = Object.fromEntries(Object.entries(CLASSES).flatMap(([k, t]) => [[t.toLowerCase(), k], [t.replace(/ \(.*\)$/, '').toLowerCase(), k], [k, k]]));
+        const seen = new Set();
+        const classFit = (Array.isArray(result.classFit) ? result.classFit : [])
+            .map(c => c && typeof c === 'object' ? { key: byName[String(c.class || '').trim().toLowerCase()], status: c.status, line: c.line } : null)
+            .filter(c => c && c.key && c.line && !seen.has(c.key) && seen.add(c.key))
+            .map(c => ({ key: c.key, label: CLASSES[c.key].replace(/ \(.*\)$/, ''), status: FIT.includes(c.status) ? c.status : null, line: brief(c.line, 28) }));
+        return { fit, classFit, findings, holdings, macroContext: brief(result.macroContext, 25) };
     }
 
     function validateDaily(result) {
@@ -981,7 +1101,7 @@ Respond ONLY with compact valid JSON:
     const hasPending = () => !!(window.AppPlugins?.AnalysisJob && localStorage.getItem(PENDING_KEY));
     // Legacy direct callers remain test-only compatibility paths. The rendered
     // application exclusively uses analyzeManaged, which never reads a user key.
-    return { callManagedLLM, analyzeManaged, recoverPending, hasPending, loadCached, clearCache,
+    return { callManagedLLM, analyzeManaged, recoverPending, hasPending, loadCached, clearCache, buildPortfolioSnapshot,
              runDaily, loadDaily, normProfile, GOALS };
 
 })();

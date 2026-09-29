@@ -47,7 +47,7 @@ page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
 // the reload test below read the ORIGINAL portfolio back and call it "unchanged".
 await page.addInitScript(s => {
     if (!localStorage.getItem('rfm_v1')) localStorage.setItem('rfm_v1', s);
-    localStorage.setItem('corpus_tour_v1', 'x'); localStorage.setItem('rfm_v1', JSON.stringify((v => ({ ...v, profile: v.profile || { completedAt: '2026-09-01T00:00:00.000Z', name: 'Test', age: 40, goal: 'balanced', risk: 'medium', horizon: '7to15', interests: ['stocks'] } }))(JSON.parse(localStorage.getItem('rfm_v1') || '{}'))));
+    localStorage.setItem('corpus_tour_v1', 'x'); localStorage.setItem('rfm_v1', JSON.stringify((v => ({ ...v, profile: v.profile || { version: 2, completedAt: '2026-09-01T00:00:00.000Z', name: 'Test', age: 40, goal: 'balanced', risk: 'medium', horizon: '7to15', interests: ['stocks'] } }))(JSON.parse(localStorage.getItem('rfm_v1') || '{}'))));
 }, LEGACY);
 await page.route('**/*', r => r.request().url().startsWith('file://') ? r.continue() : r.abort());
 await page.goto(pathToFileURL(path.resolve('web/index.html')).href, { waitUntil: 'load' });
@@ -449,20 +449,21 @@ console.log('\nLOGOS — a real mark where one exists, a monogram where it does 
     // The point of the whole design: with the network cut the monogram must still render.
     const mark = await page.evaluate(async () => {
         const d = document.querySelector('[x-data]')._x_dataStack[0];
-        d.addingInv = true; d.newInv.type = 'Stock (US)';
+        d.openAddHolding('equity');
         d.symbolSearch.results = [{ symbol: 'NVDA', ticker: 'NVDA', name: 'NVIDIA Corporation',
                                     exchange: 'NasdaqGS', market: 'US', isEtf: false }];
         await new Promise(r => setTimeout(r, 500));
-        const el = document.querySelector('.typeahead .mark');
-        const img = el && el.querySelector('.mark__img');
+        const el = document.querySelector('[data-s~="ah-st"] .res .mark');
         const txt = el ? el.textContent.trim() : '';
-        const opacity = img ? getComputedStyle(img).opacity : null;
-        d.addingInv = false; d.symbolSearch.results = [];
-        return { hasMark: !!el, text: txt, hasImg: !!img, opacity };
+        const imgs = document.querySelectorAll('[data-s~="ah-st"] .res img').length;
+        const shown = document.querySelectorAll('[data-s~="ah-st"] .res .logo.on').length;
+        d.closeAddHolding(); d.symbolSearch.results = [];
+        return { hasMark: !!el, text: txt, imgs, shown };
     });
+    // The real logo is layered over the monogram and only shows once it loads.
+    // With the network cut it never loads, so the monogram is what you see.
     ok('the monogram renders with the network cut', mark.hasMark && mark.text.length >= 1, mark.text);
-    ok('the logo layer exists but is transparent until it loads',
-       mark.hasImg && mark.opacity === '0', `opacity ${mark.opacity}`);
+    ok('the logo layer is there but stays hidden offline', mark.imgs === 1 && mark.shown === 0, `${mark.imgs} img, ${mark.shown} shown`);
     // Holding rows carry the same mark. Offline, every row must still show a monogram
     // and a consistent left edge — a list where only some rows are indented reads worse
     // than one with none.
@@ -471,21 +472,19 @@ console.log('\nLOGOS — a real mark where one exists, a monogram where it does 
         d.activePage = 'investments';
         await new Promise(r => setTimeout(r, 700));
         const out = [...document.querySelectorAll('.row.holding')].map(row => ({
-            mono: row.querySelector('.mark > span')?.textContent.trim() || '',
+            mono: row.querySelector('.well')?.textContent.trim() || '',
             left: Math.round(row.querySelector('.row__name').getBoundingClientRect().left),
-            imgOpacity: row.querySelector('.mark__img')
-                ? getComputedStyle(row.querySelector('.mark__img')).opacity : null,
+            imgs: row.querySelectorAll('img').length,
+            shown: row.querySelectorAll('.logo.on').length,
         }));
         d.activePage = 'home';
         return out;
     });
-    ok('every holding row shows a monogram offline',
+    ok('every holding row shows a monogram or icon offline',
        rows.length > 0 && rows.every(r => r.mono.length >= 1), `${rows.length} rows`);
     ok('all holding names share one left edge',
        new Set(rows.map(r => r.left)).size === 1, `left edges: ${[...new Set(rows.map(r => r.left))].join(', ')}px`);
-    ok('row logos are transparent until they load',
-       rows.filter(r => r.imgOpacity !== null).every(r => r.imgOpacity === '0'),
-       `${rows.filter(r => r.imgOpacity !== null).length} row(s) carry a logo layer`);
+    ok('no row shows a logo it could not load', rows.every(r => r.shown === 0), `${rows.reduce((a, r) => a + r.imgs, 0)} logo layer(s), none shown`);
 }
 
 // ── MF SCHEME RESOLUTION ──────────────────────────────────────────────────────
@@ -635,7 +634,7 @@ console.log('\nIDS — unique regardless of clock resolution');
 console.log('\nCHART RANGES — every button on screen narrows the series');
 {
     step('chart ranges - every button on screen narrows the series');
-    const r = await page.evaluate(() => {
+    const r = await page.evaluate(async () => {
         const d = document.querySelector('[x-data]')._x_dataStack[0];
         // Seed two years of daily points so every window has something to cut.
         // Keys are LOCAL, like the app's own: toISOString() off a local-midnight
@@ -643,12 +642,17 @@ console.log('\nCHART RANGES — every button on screen narrows the series');
         // day out of step with the cutoffs being tested.
         const today = new Date();
         const hist = [];
-        for (let i = 730; i >= 0; i--) {
+        // 730 points: the most the app keeps (_normalizeHistory caps at two years).
+        for (let i = 729; i >= 0; i--) {
             const dt = new Date(today.getFullYear(), today.getMonth(), today.getDate() - i);
             hist.push({ date: d.localDateKey(dt), value: 1000000 + i, source: 'test' });
         }
         d.nwHistory = hist;
-        const buttons = [...document.querySelectorAll('.series .seg--range .seg__item')].map(b => b.textContent.trim());
+        // Stored as well: any snapshot the app takes while this waits reloads history from storage.
+        localStorage.setItem('rfm_nw_history', JSON.stringify(hist));
+        // The buttons live in the Overview hero, which draws once there are two points.
+        await new Promise(r => setTimeout(r, 600));
+        const buttons = [...document.querySelectorAll('#nwHero .seg button')].map(b => b.textContent.trim());
         const counts = {};
         for (const b of buttons) { d.nwChartRange = b; counts[b] = d.nwChartData.length; }
         const labels = {};

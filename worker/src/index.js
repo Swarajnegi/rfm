@@ -58,6 +58,52 @@ function fail(status, message, detail) {
     return json({ error: { message, ...(detail ? { detail } : {}) } }, status);
 }
 
+// MoSPI publishes all-India combined CPI monthly, not a live daily quote. The
+// catalogue identifies the official Annexure IV; the annexure supplies the
+// combined inflation column. Never replace the last verified client value on
+// a malformed or unavailable release.
+export async function latestCpi(fetcher = fetch) {
+    const catalogue = await fetcher('https://api.mospi.gov.in/api/esankhyiki/cms/golden-sheet/list?product=CPI&page=1&limit=10',
+        { signal: AbortSignal.timeout(9000) });
+    if (!catalogue.ok) throw new Error('MoSPI catalogue unavailable');
+    const body = await catalogue.json();
+    const entry = (body.data || []).find(x => /^All India Combined \(General\) level index and inflation/.test(x.table_name || ''));
+    if (!entry || !/^\w+ \d{4}$/.test(entry.ref_period || '') || !/^\d{1,2} \w{3} \d{4}$/.test(entry.release_date || ''))
+        throw new Error('MoSPI release metadata invalid');
+    const match = /https:\/\/datawrapper\.dwcdn\.net\/[A-Za-z0-9]+\/\d+\//.exec(entry.data_wrapper_iframe_embeded_code || '');
+    if (!match) throw new Error('MoSPI annexure link invalid');
+    const csv = await fetcher(match[0] + 'data.csv', { signal: AbortSignal.timeout(9000) });
+    if (!csv.ok) throw new Error('MoSPI annexure unavailable');
+    const rows = (await csv.text()).split(/\r?\n/).filter(x => /^[A-Z][a-z]{2}-\d{2}\*?,/.test(x));
+    const last = rows.at(-1)?.split(',');
+    const month = last?.[0]?.replace('*', '');
+    const rate = Number(last?.[6]);
+    const [referenceName, referenceYear] = entry.ref_period.split(' ');
+    const expected = `${referenceName.slice(0, 3)}-${referenceYear.slice(-2)}`;
+    if (month !== expected || !Number.isFinite(rate) || rate < -10 || rate > 40)
+        throw new Error('MoSPI combined CPI figure does not match its release');
+    return { rate, referenceMonth: entry.ref_period, releasedOn: entry.release_date,
+             source: 'MoSPI, All India Combined CPI (General), Annexure IV',
+             sourceUrl: 'https://esankhyiki.mospi.gov.in/catalogue-main/catalogue?product=CPI',
+             fetchedAt: new Date().toISOString() };
+}
+
+async function cpiResponse(request) {
+    const cache = typeof caches !== 'undefined' ? caches.default : null;
+    const key = new Request(new URL('/v1/cpi/latest', request.url).toString());
+    const hit = cache && await cache.match(key);
+    if (hit) return hit;
+    try {
+        const result = new Response(JSON.stringify(await latestCpi()), {
+            headers: { ...JSON_HEADERS, 'cache-control': 'public, max-age=21600' }
+        });
+        if (cache) await cache.put(key, result.clone());
+        return result;
+    } catch (error) {
+        return fail(503, 'Published CPI is temporarily unavailable.', { reason: String(error.message || error).slice(0, 120) });
+    }
+}
+
 // Failures a different model can plausibly fix. 429 is deliberately absent:
 // from OpenRouter it usually means the shared allowance is spent, and the next
 // batch would be refused for the same reason.
@@ -267,6 +313,7 @@ export default {
         if (request.method === 'POST' && path === '/v1/crash') return crash(request, env);
         if (request.method === 'GET' && path === '/v1/market') return market(request, env);
         if (request.method === 'GET' && path === '/v1/feed') return feed(request, env);
+        if (request.method === 'GET' && path === '/v1/cpi/latest') return cpiResponse(request);
         if (request.method !== 'POST' || path !== '/v1/portfolio-reading') {
             return fail(404, 'Not found.');
         }

@@ -5,7 +5,7 @@ import path from 'node:path';
 const b = await chromium.launch();
 for (const theme of ['light','dark']) {
   const p = await b.newPage({ viewport:{width:390,height:844} });
-  await p.addInitScript(([s,t]) => { localStorage.setItem('rfm_v1',s); localStorage.setItem('corpus_tour_v1','x'); localStorage.setItem('rfm_v1', JSON.stringify((v => ({ ...v, profile: v.profile || { completedAt: '2026-09-01T00:00:00.000Z', name: 'Test', age: 40, goal: 'balanced', risk: 'medium', horizon: '7to15', interests: ['stocks'] } }))(JSON.parse(localStorage.getItem('rfm_v1') || '{}')))); localStorage.setItem('rfm_theme',t); }, [readFileSync('scripts/seed.json','utf8'), theme]);
+  await p.addInitScript(([s,t]) => { localStorage.setItem('rfm_v1',s); localStorage.setItem('corpus_tour_v1','x'); localStorage.setItem('rfm_v1', JSON.stringify((v => ({ ...v, profile: v.profile || { version: 2, completedAt: '2026-09-01T00:00:00.000Z', name: 'Test', age: 40, goal: 'balanced', risk: 'medium', horizon: '7to15', interests: ['stocks'] } }))(JSON.parse(localStorage.getItem('rfm_v1') || '{}')))); localStorage.setItem('rfm_theme',t); }, [readFileSync('scripts/seed.json','utf8'), theme]);
   await p.route('**/*', r => r.request().url().startsWith('file://') ? r.continue() : r.abort());
   await p.goto(pathToFileURL(path.resolve('web/index.html')).href, { waitUntil:'load' });
   await p.waitForTimeout(1200);

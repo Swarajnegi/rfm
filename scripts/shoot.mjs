@@ -28,7 +28,7 @@ for (const theme of themes) {
       localStorage.setItem('rfm_nw_history', h);
       localStorage.setItem('rfm_usd_inr_rate', '88.41');
       localStorage.setItem('rfm_tour_v1', 'seen');
-      localStorage.setItem('corpus_tour_v1', 'seen'); localStorage.setItem('rfm_v1', JSON.stringify((v => ({ ...v, profile: v.profile || { completedAt: '2026-09-01T00:00:00.000Z', name: 'Test', age: 40, goal: 'balanced', risk: 'medium', horizon: '7to15', interests: ['stocks'] } }))(JSON.parse(localStorage.getItem('rfm_v1') || '{}'))));
+      localStorage.setItem('corpus_tour_v1', 'seen'); localStorage.setItem('rfm_v1', JSON.stringify((v => ({ ...v, profile: v.profile || { version: 2, completedAt: '2026-09-01T00:00:00.000Z', name: 'Test', age: 40, goal: 'balanced', risk: 'medium', horizon: '7to15', interests: ['stocks'] } }))(JSON.parse(localStorage.getItem('rfm_v1') || '{}'))));
       localStorage.setItem('corpus_theme', t);
     }, [seedBlob, hist, theme]);
     await p.route('**/*', r => r.request().url().startsWith('file://') ? r.continue() : r.abort());

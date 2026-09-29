@@ -42,7 +42,7 @@ for (const f of FRAMES) {
     localStorage.setItem('rfm_v1', s);
     localStorage.setItem('rfm_nw_history', h);
     localStorage.setItem('rfm_usd_inr_rate', '88.41');
-    localStorage.setItem('corpus_tour_v1', 'seen'); localStorage.setItem('rfm_v1', JSON.stringify((v => ({ ...v, profile: v.profile || { completedAt: '2026-09-01T00:00:00.000Z', name: 'Test', age: 40, goal: 'balanced', risk: 'medium', horizon: '7to15', interests: ['stocks'] } }))(JSON.parse(localStorage.getItem('rfm_v1') || '{}'))));
+    localStorage.setItem('corpus_tour_v1', 'seen'); localStorage.setItem('rfm_v1', JSON.stringify((v => ({ ...v, profile: v.profile || { version: 2, completedAt: '2026-09-01T00:00:00.000Z', name: 'Test', age: 40, goal: 'balanced', risk: 'medium', horizon: '7to15', interests: ['stocks'] } }))(JSON.parse(localStorage.getItem('rfm_v1') || '{}'))));
     localStorage.setItem('corpus_theme', t);
     localStorage.setItem('corpus_last_visit', JSON.stringify({
       at: new Date(Date.now() - 3 * 864e5).toISOString(), value: 1_237_000,

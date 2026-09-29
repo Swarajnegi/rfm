@@ -1,1632 +1,572 @@
 /* ═══════════════════════════════════════════════════════════════════════════
-   CORPUS — design system
+   CORPUS 3.0 — the app shell.
 
-   The material is a LIT SLAB. A card is the page pressed outward: its fill is
-   identical to the ground, and only a lit upper edge, a dark undercut and two
-   cast shadows separate it. There are no borders anywhere, and nothing nests
-   inside anything — the rule that survived from the statement-sheet material
-   this replaced. Hierarchy is carried by type, space and elevation together.
-
-   Depth is NOT symmetric between themes, and that is deliberate. On the light
-   ground a shadow has room to darken, so it does the separating on its own. On
-   the dark ground a shadow onto #061A12 has nothing left to darken, so the
-   undercut has to be drawn in black. See --card-under.
-
-   The palette is lacquer green, aged brass and ivory — the inside of a
-   jewellery box and the binding of an old ledger. Light is the shipped
-   default: a light luxury finance app is both rarer and more usable in
-   daylight than another dark one.
-   ═══════════════════════════════════════════════════════════════════════════ */
+   Every screen's own look lives in src/screens.css, generated from the approved
+   Stitch designs and scoped to [data-s~=<screen>]. This file holds only what no
+   single design owns: the tokens, the page, the dock, the sheet container, pull
+   to sync, page transitions and the tour. Dark only until the light designs
+   exist; there is deliberately no light token block to drift out of step.
+   ═══════════════════════════════════════════════════════════════════════ */
 
 :root {
-  /* ── Palette ─────────────────────────────────────────────────────────── */
-  --ground:        #E2E9E3;   /* celadon stone, deepened. deliberately NOT cream */
-  --ground-sunk:   #D6DFD8;
-  --sheet:         #F4F7F3;
-  --sheet-raised:  #FFFFFF;
-  --ink:           #08170F;
-  --ink-soft:      #44554E;
-  --ink-faint:     #56685F;
-  --brass:         #7E6524;   /* the same antique gold, darkened to carry on white */
-  --brass-bright:  #9A7D33;
-  --jade:          #12543E;
-  --carnelian:     #A33B2A;
-
-  --rule:          color-mix(in srgb, var(--ink) 12%, transparent);
-  --rule-strong:   color-mix(in srgb, var(--ink) 24%, transparent);
-  --brass-rule:    color-mix(in srgb, var(--brass) 38%, transparent);
-  --wash:          color-mix(in srgb, var(--brass) 7%, transparent);
-
-  --lift: 0 1px 2px color-mix(in srgb, var(--ink) 6%, transparent),
-          0 12px 32px color-mix(in srgb, var(--ink) 9%, transparent);
-  --lift-high: 0 -2px 8px color-mix(in srgb, var(--ink) 5%, transparent),
-               0 -24px 60px color-mix(in srgb, var(--ink) 16%, transparent);
-
-  /* ── Card material ───────────────────────────────────────────────────
-     A card is the page pressed outward, not a lighter panel laid on top.
-     Its fill is IDENTICAL to the ground; only light and shadow separate the
-     two. A lighter fill reads as a separate object stuck on — which is what
-     this replaced.
-
-     The bottom edge differs per theme and that asymmetry is the whole point.
-     On this pale ground a shadow has plenty of room to darken, so it does the
-     work and no line is drawn. On the dark theme a shadow onto #061A12 has
-     almost nothing left to darken, so the undercut must be DRAWN in black or
-     the card's lower half simply does not read. See the dark block below. */
-  --card-fill:   var(--ground);
-  --card-lit:    rgb(255 255 255 / 0.70);   /* the lit upper lip */
-  --card-under:  transparent;               /* nothing drawn — shadow suffices */
-  --card-grad:   linear-gradient(180deg, rgb(255 255 255 / 0.03), rgb(0 0 0 / 0.02));
-  --card-cast:   0 1px 2px rgb(8 23 15 / 0.06), 0 12px 32px rgb(8 23 15 / 0.09);
-
-  /* Warm off-white for the wordmark, page label and dock. On the dark theme it
-     is the one non-gold highlight; on light it has no role, so it is ink. */
-  --skin: var(--ink);
-
-  /* The AI console keeps its navy and gold in BOTH themes on purpose, but its
-     shadow cannot. On a pale page a dark object with a weak shadow reads as a
-     hole punched through the page rather than a slab resting on it, so light
-     mode carries noticeably more weight than dark mode needs. */
-  --ai-cast: 0 2px 4px rgb(8 23 15 / 0.10), 0 18px 44px rgb(8 23 15 / 0.14);
-
-  /* ── Type ────────────────────────────────────────────────────────────── */
-  /* Newsreader. Chosen for the money, not for the mood: its figures are
-     TABULAR — every digit the same width — so the total does not change width
-     as it counts, and it carries a rupee sign. The face it replaced had
-     neither, and its headline figure visibly jittered between values. It is a
-     newspaper serif, which is the letterform tradition financial pages are
-     actually set in. `opsz` is a real optical-size axis: the same face is drawn
-     with more contrast and tighter spacing for a 60px total than for a 13px
-     label, the way metal type was cut per size. */
-  --display: 'Newsreader', 'Iowan Old Style', Georgia, serif;
-  --ui:      'Archivo', system-ui, -apple-system, 'Segoe UI', sans-serif;
-
-  /* Modular scale with fluid mobile adaptability. 13px is a strict hard floor. */
-  --t-micro: 13px;  --lh-micro: 17px;
-  --t-small: clamp(13px, 3.4vw, 14px);  --lh-small: 19px;
-  --t-body:  clamp(14.5px, 3.6vw, 16px);  --lh-body: clamp(20px, 4.8vw, 24px);
-  --t-lead:  clamp(15px, 3.8vw, 18px);  --lh-lead: clamp(21px, 5vw, 26px);
-  --t-title: clamp(18px, 4.5vw, 22px);  --lh-title: clamp(23px, 5.5vw, 28px);
-  --t-head:  clamp(22px, 5.5vw, 28px);  --lh-head: clamp(27px, 6.5vw, 34px);
-  --t-figure: clamp(28px, 7.8vw, 44px);
-
-  /* ── Space ───────────────────────────────────────────────────────────── */
-  --s1: 4px;  --s2: 8px;  --s3: 12px; --s4: 16px;
-  --s5: 24px; --s6: 32px; --s7: 48px; --s8: 64px;
-  --gutter: clamp(14px, 4vw, 20px);
-  --measure: 34rem;
-
-  --r-control: 10px;
-  --r-panel:   16px;
-  --r-sheet:   24px;
-
-  /* A bezier decelerates to a halt; a spring overshoots a touch and settles.
-     linear() samples the spring directly, so this needs no JS and stays on the
-     compositor. Fallback for older engines is the bezier below. */
-  --ease: cubic-bezier(0.16, 1, 0.3, 1);
-  --spring: linear(
-    0, 0.0018 1.4%, 0.0082, 0.0202 4.2%, 0.0398, 0.0691 7.5%, 0.1103 9.6%,
-    0.2039 13.1%, 0.4304 19.8%, 0.5266 22.8%, 0.6117, 0.6868 28.5%,
-    0.7529 31.4%, 0.8104, 0.8604 37.4%, 0.9036 40.5%, 0.9405 43.9%,
-    0.9714 47.7%, 0.9967 52.1%, 1.0168 57.2%, 1.0318 63.5%, 1.0407 71.8%,
-    1.0443 84.4%, 1.0442 100%);
-  --spring-soft: linear(
-    0, 0.0039 2.3%, 0.0157, 0.0352 6.9%, 0.0625 9.2%, 0.1407 13.8%,
-    0.25 18.4%, 0.3906 23%, 0.5625 27.6%, 0.6406 29.9%, 0.7109,
-    0.7734 34.5%, 0.8281, 0.875 39.1%, 0.9141, 0.9453 43.7%,
-    0.9688 46%, 0.9844 48.3%, 0.9961 52.9%, 1 57.5%, 1 100%);
-  --fast: 180ms;
-  --slow: 420ms;
-
-  color-scheme: light;
-}
-
-:root[data-theme="dark"] {
-  --ground:        #061A12;   /* lacquer, taken deeper — green, not near-black */
-  --ground-sunk:   #03110B;
-  --sheet:         #0C2418;
-  --sheet-raised:  #133021;
-  --ink:           #F6F9F6;   /* reads as white; a hair off pure so it does not
-                                 halate against the dark green at body size */
-  --ink-soft:      #B9C8BF;
-  --ink-faint:     #94A79B;
-  --brass:         #BFA05C;   /* soft antique gold, not the bright yellow one */
-  --brass-bright:  #D9BF83;
-  --jade:          #3FA47A;
-  --carnelian:     #D2705C;
-
-  --rule:        color-mix(in srgb, var(--ink) 14%, transparent);
-  --rule-strong: color-mix(in srgb, var(--ink) 28%, transparent);
-  --brass-rule:  color-mix(in srgb, var(--brass) 34%, transparent);
-  --wash:        color-mix(in srgb, var(--brass) 9%, transparent);
-
-  --lift: 0 1px 2px rgb(0 0 0 / 0.4), 0 16px 40px rgb(0 0 0 / 0.36);
-  --lift-high: 0 -2px 10px rgb(0 0 0 / 0.3), 0 -28px 70px rgb(0 0 0 / 0.5);
-
-  /* The drawn undercut. A shadow cast onto #061A12 has nowhere left to go, so
-     the card's lower boundary is a black line rather than an absence of light.
-     Counter-intuitive on a dark UI, and the single thing that makes the depth
-     read at all — without it the lit top edge is the only visible edge and the
-     card looks like it stops halfway. */
-  --card-lit:   rgb(255 255 255 / 0.14);
-  --card-under: rgb(0 0 0 / 0.70);
-  --card-grad:  linear-gradient(180deg, rgb(255 255 255 / 0.04), rgb(0 0 0 / 0.04));
-  --card-cast:  0 3px 5px rgb(0 0 0 / 0.90), 0 18px 40px rgb(0 0 0 / 0.75);
-
-  --skin: #F2ECE3;
-  --ai-cast: 0 1px 2px rgb(0 0 0 / 0.30), 0 18px 44px rgb(0 0 0 / 0.30);
-
+  --bg: #09090B;
+  --ink: #FAFAFA;
+  --mute: #A1A1AA;
+  --line: #27272A;
+  --gold1: #C0A04A;
+  --gold2: #9A7B2C;
+  --goldtx: #C9A95A;
+  --gold: var(--goldtx);
+  --soft: #E4E4E7;
+  --steel: #7F97C2;
+  --navy: #0E1A2E;
+  --up: #14532D;
+  --down: #701A1A;
+  --ease: cubic-bezier(.2, .8, .2, 1);
+  --spring: linear(0, .009, .035 2.1%, .141, .281 6.7%, .723 12.9%, .938 16.7%, 1.017, 1.077, 1.121, 1.149 24.3%, 1.159, 1.163, 1.161, 1.154 29.9%, 1.129 32.8%, 1.051 39.6%, 1.017 43.1%, .991, .977 51%, .974 53.8%, .975 57.1%, .997 69.8%, 1.003 76.9%, 1.004 83.8%, 1);
+  --display: 'Newsreader', Georgia, serif;
+  --ui: 'Manrope', system-ui, sans-serif;
+  --t-small: 14px;
+  --dock-h: 72px;
+  --col: 430px;
+  --k: 1;
+  --scale: 1;
+  /* Android 15+ draws the app behind the status bar. Capacitor's SystemBars
+     writes the real inset into --safe-area-inset-top; env() covers the WebViews
+     that pass it through natively. */
+  --sat: calc(var(--safe-area-inset-top, calc(env(safe-area-inset-top, 0px) / var(--k))) * var(--k));
+  --sab: calc(var(--safe-area-inset-bottom, calc(env(safe-area-inset-bottom, 0px) / var(--k))) * var(--k));
   color-scheme: dark;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --ground: #061A12; --ground-sunk: #03110B; --sheet: #0C2418; --sheet-raised: #133021;
-    --ink: #F6F9F6; --ink-soft: #B9C8BF; --ink-faint: #94A79B;
-    --brass: #BFA05C; --brass-bright: #D9BF83; --jade: #3FA47A; --carnelian: #D2705C;
-    --rule: color-mix(in srgb, var(--ink) 14%, transparent);
-    --rule-strong: color-mix(in srgb, var(--ink) 28%, transparent);
-    --brass-rule: color-mix(in srgb, var(--brass) 34%, transparent);
-    --wash: color-mix(in srgb, var(--brass) 9%, transparent);
-    --lift: 0 1px 2px rgb(0 0 0 / 0.4), 0 16px 40px rgb(0 0 0 / 0.36);
-    --lift-high: 0 -2px 10px rgb(0 0 0 / 0.3), 0 -28px 70px rgb(0 0 0 / 0.5);
-    --card-lit:   rgb(255 255 255 / 0.14);
-    --card-under: rgb(0 0 0 / 0.70);
-    --card-grad:  linear-gradient(180deg, rgb(255 255 255 / 0.04), rgb(0 0 0 / 0.04));
-    --card-cast:  0 3px 5px rgb(0 0 0 / 0.90), 0 18px 40px rgb(0 0 0 / 0.75);
-    --skin: #F2ECE3;
-    --ai-cast: 0 1px 2px rgb(0 0 0 / 0.30), 0 18px 44px rgb(0 0 0 / 0.30);
-    color-scheme: dark;
-  }
-}
-
-/* ── Reset ─────────────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; }
-html { -webkit-text-size-adjust: 100%; }
+html { background: #050507; -webkit-text-size-adjust: 100%; }
 body {
-  margin: 0;
-  background: var(--ground);
+  max-width: var(--col);
+  margin: 0 auto;
+  min-height: 100dvh;
+  position: relative;
+  overflow-x: hidden;
+  background: var(--bg);
   color: var(--ink);
   font-family: var(--ui);
-  font-size: var(--t-body);
-  line-height: var(--lh-body);
-  font-variant-numeric: tabular-nums lining-nums;
+  font-size: 16px;
+  line-height: 24px;
+  letter-spacing: .005em;
+  font-variant-numeric: tabular-nums;
   -webkit-font-smoothing: antialiased;
   -webkit-tap-highlight-color: transparent;
   overscroll-behavior-y: contain;
-  padding-bottom: calc(76px + env(safe-area-inset-bottom));
+  caret-color: var(--goldtx);
+  padding-top: var(--sat);
 }
-h1, h2, h3 {
-  margin: 0; font-family: var(--display); font-weight: 600;
-  font-variation-settings: 'opsz' 32;
+/* Scrolled content must not show through the status icons: a strip of the
+   page colour sits under them, above every screen and overlay. */
+body::before {
+  content: ''; position: fixed; top: 0; left: 0; right: 0; z-index: 95;
+  height: var(--sat); background: var(--bg); pointer-events: none;
 }
-p { margin: 0; }
-button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
-input, select, textarea { font: inherit; }
+button, input, select, textarea { font: inherit; color: inherit; letter-spacing: inherit; }
+button { cursor: pointer; }
+h1, h2, h3, p { margin: 0; }
 [hidden], [x-cloak] { display: none !important; }
+::selection { background: rgba(201, 162, 39, .35); color: #FAFAFA; }
+:focus-visible { outline: 2px solid var(--goldtx); outline-offset: 2px; border-radius: 12px; }
+/* A field draws its own gold focus border; a second ring on the input inside
+   it reads as a stray outline. */
+.field :focus-visible, .field:focus-visible { outline: none; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); border: 0; }
 
-:focus-visible {
-  outline: 2px solid var(--brass);
-  outline-offset: 3px;
-  border-radius: 4px;
-}
-
-/* ── Layout primitives ─────────────────────────────────────────────────── */
-.surface { padding: 0 var(--gutter); max-width: 44rem; margin: 0 auto; }
-.stack > * + * { margin-top: var(--s4); }
-.stack-tight > * + * { margin-top: var(--s3); }
-
-/* The sheet is the material, and it is now a LIT SLAB.
-   It has been both things. It began as a filled, bordered, 24px-radius panel,
-   and a screen of those read as a deck of boxes — every group announcing its
-   own edges, so the eye counted containers instead of reading figures. It was
-   then stripped to a bare statement: transparent, delimited only by hairlines.
-
-   Neither survived use. The bordered version was cluttered; the bare version
-   gave a long screen no structure to grip. What replaced both keeps the one
-   property that mattered — NO GROUP ANNOUNCES ITS OWN EDGES — while restoring
-   physical grouping, by making the card the same colour as the page and
-   separating it with light alone. There is still no border anywhere. */
-.sheet {
-  position: relative;
-  background-color: var(--card-fill);
-  background-image: var(--card-grad);
-  border: 0;
-  border-radius: var(--r-panel);
-  /* 24px inside the card is right at 390px and wrong at 360px: with the 20px
-     page gutter it takes 88px off the line, which clipped a text input on the
-     income page. The inset scales down with the viewport instead of holding a
-     figure that only suits one device. */
-  padding: var(--s2) clamp(var(--s3), 3.8vw, var(--s4));
-  box-shadow:
-    inset 0 -1px 0 var(--card-under),
-    var(--card-cast);
-}
-/* The lit upper lip, faded at the corners. A full-width inset line reads as a
-   drawn border; a gradient that dies before the radius reads as light falling
-   on a curved edge, which is the whole illusion. */
-.sheet::before {
-  content: ''; position: absolute; inset: 0 0 auto; height: 1px;
-  border-radius: var(--r-panel) var(--r-panel) 0 0;
-  background: linear-gradient(90deg,
-    transparent, var(--card-lit) 18%, var(--card-lit) 82%, transparent);
-  pointer-events: none;
-}
-/* Pressed. The slab sinks toward the page and its contact shadow tightens. */
-button.sheet:active, .sheet--press:active { transform: translateY(2px); }
-
-/* Rules carry the structure that borders used to. */
-.rule { height: 1px; background: var(--rule); border: 0; margin: 0; }
-.rule--brass { background: var(--brass-rule); }
-
-/* ── Rows ──────────────────────────────────────────────────────────────── */
-.row {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  align-items: baseline;
-  gap: var(--s3);
-  padding: var(--s3) clamp(var(--s3), 3.5vw, var(--s4));
-  min-height: 48px;
-  width: 100%;
-  text-align: left;
-  position: relative;
-}
-.row + .row { box-shadow: inset 0 1px 0 var(--rule); }
-
-/* A row that carries a mark needs a third column for it. The base row aligns on the
-   text baseline, which is right for two columns of type and wrong once a disc joins
-   them, so a marked row centres instead. */
-.row--marked { grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; }
-
-button.row, label.row {
-  transition: background var(--fast) var(--ease), transform 120ms var(--ease);
-  -webkit-tap-highlight-color: transparent;
-}
-button.row:hover, label.row:hover { background: var(--wash); }
-/* Scales from the row's own left edge so a list does not appear to breathe
-   sideways when one item is pressed. */
-button.row:active, label.row:active { background: var(--wash); transform: scale(0.994); transform-origin: left center; }
-.row__name { font-size: var(--t-body); font-weight: 500; }
-.row__meta { font-size: var(--t-micro); line-height: var(--lh-micro); color: var(--ink-faint); margin-top: 2px; }
-.row__value { font-size: var(--t-body); font-weight: 600; text-align: right; }
-.row__delta { font-size: var(--t-micro); text-align: right; margin-top: 2px; }
-
-/* ── The figure ────────────────────────────────────────────────────────── */
-.figure {
-  font-family: var(--display);
-  font-size: var(--t-figure);
-  line-height: 1.02;
-  font-weight: 600;
-  /* Newsreader's opsz tops out at 72; 100 silently clamped on the old face. */
-  font-variation-settings: 'opsz' 72;
-  font-variant-numeric: tabular-nums lining-nums;
-  letter-spacing: -0.015em;
-  display: block;
-}
-.figure--sm { font-size: var(--t-head); }
-
-/* ── Text roles ────────────────────────────────────────────────────────── */
-.label   { font-size: var(--t-micro); line-height: var(--lh-micro); color: var(--ink-soft); font-weight: 500; }
-.muted   { color: var(--ink-faint); }
-.lead    { font-size: var(--t-lead); line-height: var(--lh-lead); color: var(--ink-soft); max-width: var(--measure); }
-.title   { font-size: var(--t-title); line-height: var(--lh-title); }
-.headline{ font-size: var(--t-head); line-height: var(--lh-head); letter-spacing: -0.01em; }
-.up   { color: var(--jade); }
-.down { color: var(--carnelian); }
-.tnum { font-variant-numeric: tabular-nums; }
-
-/* ── Provenance: where a figure came from and when ─────────────────────── */
-.stamp {
-  font-size: var(--t-micro);
-  line-height: var(--lh-micro);
-  color: var(--ink-faint);
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-.stamp--stale { color: var(--brass); }
-.stamp__dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; flex: none; }
-
-/* ── Controls ──────────────────────────────────────────────────────────── */
-.btn {
-  display: inline-flex; align-items: center; justify-content: center; gap: var(--s2);
-  min-height: 48px; padding: 0 var(--s5);
-  border-radius: var(--r-control);
-  font-size: var(--t-small); font-weight: 600; letter-spacing: 0.01em;
-  transition: transform 260ms var(--spring), background var(--fast) var(--ease), box-shadow var(--fast) var(--ease);
-  -webkit-tap-highlight-color: transparent;
-}
-.btn:active { transform: scale(0.965); }
-.btn--primary { background: var(--ink); color: var(--ground); }
-.btn--brass   { background: var(--brass); color: var(--ground); }
-.btn--quiet   { background: transparent; color: var(--ink); box-shadow: inset 0 0 0 1px var(--rule-strong); }
-.btn--ghost   { background: transparent; color: var(--ink-soft); }
-.btn--block   { width: 100%; }
-
-.chip {
-  display: inline-flex; align-items: center; gap: 6px;
-  padding: 5px 12px; border-radius: 999px;
-  font-size: var(--t-micro); font-weight: 600;
-  background: var(--wash); color: var(--brass);
-}
-.chip--up   { background: color-mix(in srgb, var(--jade) 12%, transparent); color: var(--jade); }
-.chip--down { background: color-mix(in srgb, var(--carnelian) 12%, transparent); color: var(--carnelian); }
-
-.field {
-  width: 100%; min-height: 48px;
-  padding: 0 var(--s4);
-  background: var(--ground-sunk);
-  color: var(--ink);
-  border: 1px solid var(--rule);
-  border-radius: var(--r-control);
-  transition: border-color var(--fast) var(--ease), box-shadow var(--fast) var(--ease);
-}
-.field:focus {
-  outline: none;
-  border-color: var(--brass);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brass) 18%, transparent);
+/* The icon face. The designs load it from Google; here it is vendored and
+   subset, so the family name is the only thing the two share. */
+.material-symbols-outlined {
+  font-family: 'Material Symbols Outlined';
+  font-weight: normal;
+  font-style: normal;
+  font-size: 24px;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  -webkit-font-feature-settings: 'liga';
+  font-feature-settings: 'liga';
+  -webkit-font-smoothing: antialiased;
+  font-variation-settings: 'wght' 300;
+  flex: none;
 }
 
-/* ── Segmented control ─────────────────────────────────────────────────── */
-.seg { display: flex; gap: var(--s1); padding: 0; background: none; }
-.seg__item {
-  flex: 1; min-height: 44px; padding: 0 var(--s3);
-  border-radius: 999px; font-size: var(--t-micro); font-weight: 600; color: var(--ink-faint);
-  transition: color var(--fast) var(--ease), background var(--fast) var(--ease);
-}
-/* Marked by a brass rule under the label, not a filled pill — the same mark the
-   dock uses for the active surface. A pill is a blob at this size and made the
-   range selector the heaviest thing on a screen whose subject is a number. */
-.seg__item { position: relative; }
-.seg__item[aria-selected="true"] { color: var(--brass); background: none; }
-.seg__item[aria-selected="true"]::after {
-  content: ''; position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%);
-  width: 18px; height: 2px; border-radius: 2px; background: var(--brass);
-}
+/* A screen root stands where each design's <body> stood, so that design's
+   body rule lands on it through [data-s] and its children are the design's own. */
+.screen { display: block; overflow-x: clip !important; }
+/* The design bodies set overflow-x:hidden, which turns each screen into a
+   scroll container and silently disables position:sticky inside it. clip
+   trims the same overflow without that side effect. */
 
-/* ── Icons ─────────────────────────────────────────────────────────────── */
-.icon {
-  font-family: 'Material Symbols Rounded';
-  font-weight: normal; font-style: normal;
-  line-height: 1; letter-spacing: normal; text-transform: none;
-  display: inline-block; white-space: nowrap; direction: ltr;
-  font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24;
-  -webkit-font-feature-settings: 'liga'; font-feature-settings: 'liga';
-  font-size: 22px; flex: none;
+/* ═══ TOP APP BAR ════════════════════════════════════════════════════════
+   Pinned under the status bar, as Android top app bars are. A hairline
+   appears once content is scrolled beneath it. */
+.screen .appbar {
+  position: sticky; top: var(--sat); z-index: 40;
+  background: var(--bg);
+  transition: box-shadow .2s linear;
 }
-.icon--sm { font-size: 18px; }
-.icon--fill { font-variation-settings: 'FILL' 1, 'wght' 400; }
+main > .appbar { width: auto !important; margin-left: -20px; margin-right: -20px; padding-left: 20px; padding-right: 20px; }
+:root[data-scrolled="1"] .screen .appbar { box-shadow: 0 1px 0 var(--line); }
 
-/* ── Motion ────────────────────────────────────────────────────────────── */
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation-duration: 1ms !important; transition-duration: 1ms !important; }
-}
+/* ═══ KEYBOARD OPEN ══════════════════════════════════════════════════════
+   The field being typed into stays in view. The sheet's footer drops to its
+   one primary action (the header's close stays), and the dock steps aside. */
+.bsheet { scroll-padding-bottom: 104px; scroll-padding-top: 16px; }
+:root[data-kb="1"] .bsheet { max-height: calc(100dvh - var(--sat) - 8px); scroll-padding-bottom: 88px; }
+:root[data-kb="1"] .bsheet .bar > .btn-text,
+:root[data-kb="1"] .bsheet .bar > .btn-soft { display: none; }
+:root[data-kb="1"] .bsheet .bar { padding-top: 10px !important; padding-bottom: 10px !important; margin-top: 12px !important; }
+:root[data-kb="1"] .dock, :root[data-kb="1"] .snack { display: none; }
 
-/* ═══ SHELL ═══════════════════════════════════════════════════════════════ */
+.screen.has-dock { padding-bottom: var(--sab); }
 
-.appbar {
-  position: sticky; top: 0; z-index: 40;
-  padding-top: env(safe-area-inset-top);
-  background: color-mix(in srgb, var(--ground) 86%, transparent);
-  backdrop-filter: blur(16px) saturate(140%);
-  -webkit-backdrop-filter: blur(16px) saturate(140%);
-  border-bottom: 1px solid transparent;
-  transition: border-color 240ms var(--ease), background 240ms var(--ease);
+/* The designs draw rows, tiles and choices as divs; here they are buttons so
+   they can be reached and pressed. :where() keeps this at zero specificity, so
+   it clears the browser's button chrome and loses to every design rule. */
+:where(.btn-reset) {
+  background: none; border: 0; padding: 0; margin: 0; width: 100%;
+  text-align: left; color: inherit; font: inherit; cursor: pointer;
 }
-/* A permanent divider under a bar that has nothing beneath it is noise; it
-   should appear only when it is actually separating two things. */
-.appbar.is-stuck {
-  border-bottom-color: var(--rule);
-  background: color-mix(in srgb, var(--ground) 94%, transparent);
+/* A real input inside a field the design drew as a box of text. */
+:where(.field) :where(input, select, textarea) {
+  flex: 1; min-width: 0; width: 100%;
+  background: transparent; border: 0; outline: 0; padding: 0; margin: 0;
+  color: inherit; font: inherit; letter-spacing: inherit;
 }
-.appbar__inner { display: flex; align-items: center; justify-content: space-between; min-height: 52px; }
+:where(input.field, select.field, textarea.field) { outline: 0; }
+:where(input, select, textarea)::placeholder { color: #71717A; opacity: 1; }
 
-/* The wordmark IS the brand — set in the display face at a confident size, not
-   shrunk into a logo slot beside an icon. */
-.wordmark {
-  font-family: var(--display);
-  font-size: 21px; font-weight: 600;
-  font-variation-settings: 'opsz' 30;
-  letter-spacing: -0.015em;
-  color: var(--skin);
-}
-.appbar__actions { display: flex; gap: var(--s1); }
-.appbar__context { display: flex; align-items: center; gap: var(--s3); }
-.appbar__label {
-  color: var(--skin);
-  font-size: var(--t-micro);
-  font-weight: 650;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-.avatarbtn {
-  position: relative;
-  width: 44px; height: 44px;
-  display: grid; place-items: center;
-  color: var(--skin);
-  border-radius: 999px;
-}
-.avatarbtn__face {
-  width: 24px; height: 24px;
-  display: grid; place-items: center;
-  border: 1px solid currentColor;
-  border-radius: 50%;
-}
-.avatarbtn__glyph { position: relative; width: 12px; height: 13px; }
-.avatarbtn__glyph::before {
-  content: ''; position: absolute; left: 50%; top: 0;
-  width: 5px; height: 5px; border: 1px solid currentColor; border-radius: 50%;
-  transform: translateX(-50%);
-}
-.avatarbtn__glyph::after {
-  content: ''; position: absolute; left: 50%; bottom: 0;
-  width: 10px; height: 6px; border: 1px solid currentColor; border-radius: 8px 8px 4px 4px;
-  transform: translateX(-50%);
-}
+/* number-flow renders its digits in a shadow root; it inherits the figure's
+   type and needs only to sit on the baseline like text. */
+number-flow { display: inline-block; font-variant-numeric: tabular-nums; }
 
-.iconbtn {
-  position: relative;
-  width: 44px; height: 44px;
-  display: grid; place-items: center;
-  border-radius: 999px;
-  color: var(--ink-soft);
-  transition: background var(--fast) var(--ease), color var(--fast) var(--ease);
-}
-.iconbtn:hover { background: var(--wash); color: var(--ink); }
-.iconbtn:disabled { opacity: 0.45; }
-.iconbtn__dot {
-  position: absolute; top: 9px; right: 10px;
-  width: 7px; height: 7px; border-radius: 999px;
-  background: var(--brass); box-shadow: 0 0 0 2px var(--ground);
-}
-.icon.is-spinning { animation: spin 900ms linear infinite; }
-@keyframes spin { to { transform: rotate(360deg); } }
-
-/* ═══ HERO ════════════════════════════════════════════════════════════════
-   The figure sits directly on the page. Giving it a card would make it one
-   more tile among tiles; alone on the ground it is unmistakably the subject. */
-.hero { padding: var(--s5) 0 var(--s2); }
-.hero .figure { margin-top: var(--s2); }
-.hero__delta {
-  display: flex; align-items: center; gap: 6px;
-  margin-top: var(--s2);
-  font-size: var(--t-small); font-weight: 600;
-}
-/* The standing caveat under the delta. A change in a TOTAL is not a return,
-   and this line is the only thing in the app that says so — so it is quiet but
-   it is never conditional on anything except a delta being shown at all. */
-.hero__caveat {
-  margin-top: 4px;
-  font-size: var(--t-micro); line-height: var(--lh-micro);
-  color: var(--ink-faint); font-weight: 500;
-}
-.hero__empty { padding: var(--s4) 0 0; }
-.hero__cta { display: flex; flex-wrap: wrap; gap: var(--s3); margin-top: var(--s5); }
-
-/* ═══ SERIES ══════════════════════════════════════════════════════════════ */
-/* Full-bleed to the screen edges — a chart boxed inside a card reads as a
-   widget; run to the edge and it reads as the shape of the money itself. */
-.series { margin: 0 calc(var(--gutter) * -1); overflow: hidden; }
-.series__canvas { height: clamp(120px, 20vh, 145px); width: 100%; }
-.series .seg { margin: var(--s2) var(--gutter) 0; }
-
-/* The chart carries no axis and no price scale — that is the design — so the
-   dates live here instead: the real span of what is drawn at rest, and the
-   exact observation under your finger while you hold it. Indented to the gutter
-   so it lands on the same left edge as every other line on the page, which is
-   what the alignment audit measures. */
-.series__foot {
-  display: flex; align-items: center; justify-content: space-between;
-  gap: var(--s3);
-  margin: var(--s2) var(--gutter) 0;
-}
-.series__stamp {
-  margin: 0;
-  font-size: var(--t-micro); line-height: var(--lh-micro);
-  color: var(--ink-faint); font-weight: 500;
-  min-height: var(--lh-micro);
-}
-
-/* An empty window is stated, not drawn. The box keeps the canvas's height so
-   the range pills do not jump between a period that has points and one that
-   does not. */
-.series__empty {
-  display: flex; align-items: center;
-  height: clamp(120px, 20vh, 145px);
-  margin: 0 var(--gutter);
-  font-size: var(--t-micro); line-height: var(--lh-micro);
-  color: var(--ink-faint); font-weight: 500;
-}
-
-/* ═══ PULL TO SYNC ════════════════════════════════════════════════════════ */
-/* Parked above the viewport and dragged down by the gesture. It is moved with
-   inline transform/opacity only — never by a class change and never by Alpine —
-   because the version that wrote reactive state per touchmove froze the phone. */
-.ptr {
-  position: fixed; top: 0; left: 0; right: 0; z-index: 60;
-  height: 56px; margin-top: -56px;
-  display: flex; align-items: center; justify-content: center; gap: var(--s2);
-  font-size: var(--t-micro); line-height: var(--lh-micro);
-  font-weight: 600; color: var(--ink-soft);
-  background: var(--ground);
-  opacity: 0;
-  pointer-events: none;
-  will-change: transform, opacity;
-}
-.ptr__spin {
-  width: 14px; height: 14px; border-radius: 50%;
-  border: 2px solid var(--brass-rule);
-  border-top-color: var(--brass);
-  transition: transform .2s linear;
-}
-/* Past the commit point the ring closes up and takes the accent, so the finger
-   knows it has crossed the threshold before it lifts. */
-.ptr[data-armed="1"] .ptr__spin { border-color: var(--brass); transform: scale(1.15); }
-.ptr[data-armed="1"] { color: var(--brass); }
-
-body.is-syncing .ptr__spin { animation: ptr-spin .7s linear infinite; }
-@keyframes ptr-spin { to { transform: rotate(360deg); } }
-
-@media (prefers-reduced-motion: reduce) {
-  body.is-syncing .ptr__spin { animation: none; }
-  .ptr { transition-duration: 1ms !important; }
-}
-
-/* ═══ SHEET ═══════════════════════════════════════════════════════════════ */
-/* A group heading is a signpost, not a headline. Only ONE thing per screen is
-   set in the display face — the page title — or the hierarchy flattens. */
-.sheet__head {
-  padding: 0 0 var(--s2);
-  border-bottom: 1px solid var(--brass-rule);
-}
-/* .market-label shares this exactly: a market band over the holdings list is
-   the same kind of signpost as a card's title, and giving it its own brass
-   would be a second gold that has to be kept in step with the first. */
-.sheet__title,
-.market-label {
-  font-family: var(--ui); font-variation-settings: normal;
-  font-size: var(--t-micro); line-height: var(--lh-micro);
-  font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase;
-  color: var(--brass);
-}
-/* Sits on the ground between cards, not inside one, so it needs its own air
-   above and the same left edge as every other line on the page. */
-.market-label { margin: var(--s2) 0 calc(var(--s1) * -1); }
-.holdings-list + .holdings-list { margin-top: var(--s4); }
-/* Air between sections does the work the borders used to. */
-.stack > .sheet + .sheet { margin-top: var(--s6); }
-.sheet .row { padding-left: 0; padding-right: 0; }
-.sheet .row--total { background: transparent; box-shadow: inset 0 1px 0 var(--brass-rule); }
-.row--total { background: var(--wash); }
-.row--total .row__value { font-family: var(--display); font-size: var(--t-lead);
-  font-variation-settings: 'opsz' 20; font-variant-numeric: tabular-nums lining-nums; }
-
-.allocation-section { display: grid; gap: var(--s3); }
-.section-label {
-  font-family: var(--ui); font-size: var(--t-micro); line-height: var(--lh-micro);
-  font-weight: 600; color: var(--skin);
-}
-.card-list { display: grid; gap: var(--s3); }
-.card-row {
-  min-height: 62px;
-  padding: var(--s2) clamp(var(--s3), 3.8vw, var(--s4));
-}
-.card-list > .card-row + .card-row {
-  box-shadow: inset 0 -1px 0 var(--card-under), var(--card-cast);
-}
-.holding-card { min-height: 72px; }
-.planning-card {
-  min-height: 64px;
-  align-items: center;
-  padding-top: var(--s2);
-  padding-bottom: var(--s2);
-}
-.planning-summary { padding-top: var(--s3); }
-.planning-summary .figure { margin-top: var(--s1); }
-.planning-card__figure { display: block; text-align: left; margin-top: 2px; }
-.facts-list .row { min-height: 52px; padding-top: var(--s3); padding-bottom: var(--s3); }
-.attention {
-  padding-left: 18px !important;
-}
-.attention .row__name { font-weight: 600; }
-.attention::before {
-  content: ''; position: absolute; left: 0; top: 6px; bottom: 6px;
-  width: 3px; background: var(--brass);
-  border-radius: 2px;
-}
-
-/* ═══ DOCK ════════════════════════════════════════════════════════════════
-   Active state is a brass rule above the item. A filled pill would compete
-   with the figure for attention, which is the one thing on screen that
-   should be loud. */
+/* ═══ DOCK ═══════════════════════════════════════════════════════════════
+   From Overview v4: navy, a gold hairline, a 3px pill above the active tab. */
 .dock {
-  position: fixed;
-  left: 50%;
-  transform: translateX(-50%);
-  width: min(calc(100% - 24px), 24rem);
-  bottom: calc(10px + env(safe-area-inset-bottom));
-  z-index: 50;
-  display: grid; grid-auto-flow: column; grid-auto-columns: 1fr;
-  min-height: 52px;
-  border-radius: 9999px;
-  overflow: hidden;
-  /* Opaque by default. The frosted treatment below is applied only where the
-     engine can actually blur — without the blur, 8% translucency is not depth,
-     it is legible ghost text sliding under the navigation. */
-  background: var(--ground);
-  box-shadow: inset 0 1px 0 var(--rule), var(--card-cast);
-}
-@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .dock {
-    background: color-mix(in srgb, var(--ground) 92%, transparent);
-    backdrop-filter: blur(20px) saturate(140%);
-    -webkit-backdrop-filter: blur(20px) saturate(140%);
-  }
+  position: fixed; bottom: 0; left: 50%; transform: translateX(-50%);
+  width: 100%; max-width: var(--col); z-index: 50;
+  height: calc(var(--dock-h) + var(--sab));
+  padding-bottom: var(--sab);
+  display: grid; grid-template-columns: repeat(4, 1fr); align-items: stretch;
+  background: var(--navy);
+  border-top: 1px solid rgba(201, 162, 39, .16);
 }
 .dock__item {
-  display: grid; justify-items: center; align-content: center; gap: 2px;
-  padding: 6px 4px 7px;
-  min-height: 52px;
-  color: var(--skin);
-  opacity: 0.68;
   position: relative;
-  transition: color var(--fast) var(--ease);
-  -webkit-tap-highlight-color: transparent;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  min-height: 48px; padding: 0; background: none; border: 0;
+  color: var(--steel);
 }
-.dock__item .icon { font-size: 20px; transition: transform 320ms var(--spring); }
-.dock__item.is-active .icon { transform: translateY(-1px) scale(1.05); }
 .dock__item::before {
   content: ''; position: absolute; top: 0; left: 50%;
-  width: 22px; height: 2px; background: var(--brass);
-  transform: translateX(-50%) scaleX(0);
-  transform-origin: center;
-  transition: transform 340ms var(--spring), opacity var(--fast) var(--ease);
-  opacity: 0;
+  width: 24px; height: 3px; margin-left: -12px; border-radius: 3px;
+  background: var(--gold2);
+  transform: scaleX(0);
+  transition: transform .28s var(--spring);
 }
-.dock__item.is-active { color: var(--skin); opacity: 1; }
-.dock__item.is-active::before { transform: translateX(-50%) scaleX(1); opacity: 1; }
-.dock__label { font-size: var(--t-micro); font-weight: 600; letter-spacing: 0.005em; line-height: 14px; }
-.dock__item:active .icon { transform: scale(0.9); }
+.dock__item.is-active { color: var(--goldtx); }
+.dock__item.is-active::before { transform: scaleX(1); }
+.dock__item .material-symbols-outlined { font-size: 24px; transition: font-variation-settings .2s var(--ease); }
+.dock__item.is-active .material-symbols-outlined { font-variation-settings: 'FILL' 1, 'wght' 400; }
+.dock__label { font-size: 14px; line-height: 18px; font-weight: 400; margin-top: 3px; }
+.dock__item.is-active .dock__label { font-weight: 600; }
+.dock__item:active { transform: scale(.96); }
 
-/* The sync sweep, restated for the new material. */
-[data-holding-row] { --sweep: 0; }
-[data-holding-row]::after {
-  content: ''; position: absolute; inset: 0; pointer-events: none;
-  background: linear-gradient(90deg, transparent, var(--wash), transparent);
-  opacity: calc(1 - var(--sweep));
-  transform: translateX(calc(-100% + var(--sweep) * 200%));
+/* ═══ OVERVIEW CHART ═════════════════════════════════════════════════════
+   The line and fill are the design's SVG, stretched to the card. The end dot,
+   its tag and the scrub marker are HTML laid over it: text and circles inside a
+   non-uniformly scaled SVG come out squashed, and the tag's text has to meet
+   the 14px floor the design's 10px label did not. */
+.nwchart { position: relative; touch-action: pan-y; user-select: none; -webkit-user-select: none; }
+.nwchart__draw { position: relative; }
+.nwchart__dot {
+  position: absolute; width: 9px; height: 9px; margin: -4.5px 0 0 -4.5px; border-radius: 50%;
+  background: #C9A95A; filter: drop-shadow(0 0 8px rgba(201, 169, 90, 1));
+  opacity: 0; animation: nw-pop .5s cubic-bezier(.17, .89, .32, 1.28) 1.6s forwards;
 }
-
-.row__label   { display: block; min-width: 0; }
-.row__figures { display: block; text-align: right; }
-.row__name    { display: block; }
-.row__value   { display: block; }
-.row__delta   { display: block; }
-
-/* ═══ PAGE HEAD ═══════════════════════════════════════════════════════════ */
-.pagehead { padding: var(--s5) 0 var(--s1); }
-.pagehead .stamp { margin-top: var(--s2); }
-
-.sheet__head--split { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s4); }
-/* The typography hangs off the figure itself, not off `muted`. They were one
-   rule, so a head figure that wanted a colour of its own — Coming in is green,
-   Going out is red — silently lost its size and weight along with the grey. */
-.sheet__head--split .tnum,
-.sheet__head--split .muted { font-size: var(--t-small); font-weight: 600; }
-.sheet__head--split .muted { color: var(--ink-faint); }
-
-/* Horizontally scrollable filter that does not announce its scrollbar. */
-.seg--scroll {
-  overflow-x: auto; scrollbar-width: none; -ms-overflow-style: none;
-  margin: 0 calc(var(--gutter) * -1);
-  padding: 0 var(--gutter) 2px;
-  scroll-padding-inline: var(--gutter);
-  overscroll-behavior-x: contain;
+.nwchart__tag {
+  position: absolute; padding: 2px 8px; border-radius: 6px;
+  background: #14253F; border: 1px solid #C9A95A; color: #FAFAFA;
+  font-size: 14px; line-height: 20px; font-weight: 700; white-space: nowrap;
+  transform: translate(-100%, calc(-100% - 10px));
+  opacity: 0; animation: nw-tag .5s var(--ease) 1.75s forwards;
 }
-.seg--scroll::-webkit-scrollbar { display: none; }
-/* The filter ran off the right edge with a chip sliced clean in half and nothing
-   to say it could be scrolled — it just looked like a layout bug. A soft edge
-   reads as "there is more this way". Masked rather than overlaid with a
-   gradient block, so it works on any background including mid-transition. */
-.seg--scroll {
-  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 44px), transparent 100%);
-          mask-image: linear-gradient(to right, #000 calc(100% - 44px), transparent 100%);
+.nwchart__rule { position: absolute; top: 0; bottom: 0; width: 1px; background: rgba(201, 169, 90, .55); }
+.nwchart__hover {
+  position: absolute; width: 10px; height: 10px; margin: -5px 0 0 -5px; border-radius: 50%;
+  background: #FAFAFA; box-shadow: 0 0 0 3px rgba(201, 169, 90, .5);
 }
-.seg--scroll .seg__item { flex: 0 0 auto; padding: 0 var(--s4); scroll-snap-align: start; }
-
-/* A holding's row carries three facts: what it is, what it is worth, and how
-   sure we are of that. The third is the one most apps omit. */
-.holding .row__meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s1) var(--s3); }
-.holding .stamp { font-size: var(--t-micro); }
-.holding .stamp__dot { width: 4px; height: 4px; }
-.row__delta { font-size: var(--t-micro); letter-spacing: -0.005em; }
-
-.actions { display: grid; gap: var(--s3); padding-top: var(--s2); }
-
-/* ═══ EMPTY ═══════════════════════════════════════════════════════════════
-   An empty screen is an invitation, so it gets the same care as a full one:
-   a reason it is empty and the two ways out. */
-.empty { text-align: center; padding: var(--s8) var(--s4); }
-.empty__icon { font-size: 40px; color: var(--brass); opacity: 0.55; display: block; margin: 0 auto var(--s4); }
-.empty .lead { margin: var(--s3) auto 0; max-width: 26rem; }
-.empty .hero__cta { justify-content: center; }
-
-/* ═══ PLANNING ════════════════════════════════════════════════════════════ */
-.figures { padding: 0 0 var(--s5); display: grid; gap: var(--s5); }
-.figures__main .figure { margin: var(--s1) 0 4px; }
-.figures__side { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--s4); }
-.figures__val { font-size: var(--t-body); font-weight: 600; margin-top: 2px; }
-
-/* A filled rule reads as progress without spending the vertical space a donut
-   needs, and it sits naturally under the label it describes. */
-.meter { height: 3px; background: var(--rule); border-radius: 3px; overflow: hidden; margin: 0 var(--s5) var(--s2); }
-.meter--inline { margin: 7px 0 0; }
-.meter__fill { display: block; height: 100%; width: var(--pct, 0%); background: var(--brass); border-radius: 3px; transition: width var(--slow) var(--ease); }
-
-.linkbtn {
-  font-size: var(--t-micro); font-weight: 600; color: var(--brass);
-  /* Visually a link, but the tappable area is a full 44px — grown with padding
-     and pulled back with margin so the type still sits on the baseline. */
-  /* A short label ("Add") left the target 41px wide even with a 44px height,
-     so the minimum applies on both axes. */
-  min-height: 44px; min-width: 44px;
-  display: inline-flex; align-items: center; justify-content: flex-end;
-  padding: 0 var(--s2); margin: calc(var(--s3) * -1) calc(var(--s2) * -1);
-  border-radius: var(--r-control);
-}
-.linkbtn:hover { text-decoration: underline; text-underline-offset: 3px; }
-.sheet__note { padding: 0 0 var(--s5); color: var(--ink-faint); font-size: var(--t-small); max-width: var(--measure); }
-
-/* ═══ INSIGHTS ════════════════════════════════════════════════════════════ */
-.score { display: flex; align-items: center; justify-content: space-between; gap: var(--s4); padding: 0 0 var(--s4); }
-.score .figure { margin: var(--s1) 0 2px; }
-
-/* A conic ring reads the score at a glance without a chart library. */
-.score__ring {
-  width: 54px; height: 54px; flex: none;
-  border-radius: 999px;
-  display: grid; place-items: center;
-  background: conic-gradient(color-mix(in srgb, var(--brass) 78%, transparent) calc(var(--pct) * 1%), var(--rule) 0);
-  position: relative;
-}
-.score__ring::after {
-  content: ''; position: absolute; inset: 5px;
-  background: var(--sheet); border-radius: 999px;
-}
-.score__glyph { position: relative; z-index: 1; color: var(--brass); font-size: 20px; }
-
-/* ═══ THE AI PANEL ════════════════════════════════════════════════════════
-   Deliberately the only raised, filled, bordered surface left in the app, and
-   deliberately NOT the app's green: navy and gold. Everything else here is a
-   flat statement you read; this is the one thing you ASK. Making it the single
-   exception is what makes it legible as an action rather than as more content.
-
-   Its colours are fixed rather than tokenised to the theme — a "console" that
-   changes its identity between light and dark would just be another panel. */
-.sheet--ai {
-  --ai-navy:   #0B182E;
-  --ai-navy-2: #16294A;
-  --ai-gold:   #C9A227;
-  --ai-gold-2: #E6D08A;
-  --ai-ink:    #EEF2F8;
-}
-.sheet--ai {
-  position: relative;
-  /* Matches .sheet's responsive inset. A fixed 24px here while every other
-     card scales left the console's text 4-6px right of its neighbours — a
-     misalignment that only shows when the two are read down a column. */
-  padding: var(--s4) clamp(var(--s3), 3.8vw, var(--s4));
-  border-radius: var(--r-sheet);
-  color: var(--ai-ink);
-  background:
-    radial-gradient(120% 90% at 88% -10%, color-mix(in srgb, var(--ai-gold) 22%, transparent) 0%, transparent 62%),
-    linear-gradient(160deg, var(--ai-navy-2) 0%, var(--ai-navy) 58%);
-  box-shadow:
-    inset 0 0 0 1px color-mix(in srgb, var(--ai-gold) 30%, transparent),
-    var(--ai-cast);
-  overflow: hidden;
-}
-/* A hairline of gold along the top edge, the way a good box is lined. */
-.sheet--ai::before {
-  content: ''; position: absolute; inset: 0 0 auto; height: 1px;
-  background: linear-gradient(90deg, transparent, var(--ai-gold-2), transparent);
-  opacity: 0.55;
-}
-.sheet--ai .aicard { padding: var(--s4) 0 0; }
-.sheet--ai .sheet__note, .sheet--ai .aipanel__note { color: color-mix(in srgb, var(--ai-ink) 72%, transparent); }
-
-.aipanel { display: flex; align-items: flex-start; gap: var(--s4); }
-.aipanel__body { display: flex; align-items: baseline; justify-content: space-between;
-                 gap: var(--s3); flex: 1; min-width: 0; flex-wrap: wrap; }
-.aipanel__title {
-  font-family: var(--display); font-size: var(--t-lead); line-height: var(--lh-lead);
-  font-weight: 600; font-variation-settings: 'opsz' 24; color: var(--ai-ink);
-  letter-spacing: -0.005em;
-  /* Two short lines beat one long line and one orphan. */
-  text-wrap: balance;
-}
-.aipanel__note { font-size: var(--t-small); line-height: 21px; max-width: var(--measure); padding: 0 0 var(--s4); }
-.sheet--ai .linkbtn { color: var(--ai-gold-2); }
-.sheet--ai .btn--brass {
-  background: linear-gradient(180deg, var(--ai-gold-2), var(--ai-gold));
-  color: #1A1405; border: 0;
-}
-.sheet--ai .meter { background: color-mix(in srgb, var(--ai-ink) 16%, transparent); }
-.sheet--ai .meter__fill, .sheet--ai .meter__fill--indeterminate { background: var(--ai-gold); }
-.sheet--ai .row__name { color: var(--ai-ink); }
-/* The console keeps its palette in both themes, so its secondary text must
-   too. Left to the theme, light mode painted .row__meta and .label in the
-   page's dark-green ink — near-invisible on navy. */
-.sheet--ai .row__meta { color: color-mix(in srgb, var(--ai-ink) 76%, transparent); }
-.sheet--ai .label { color: color-mix(in srgb, var(--ai-ink) 70%, transparent); }
-.sheet--ai .disclaimer { color: color-mix(in srgb, var(--ai-ink) 58%, transparent); }
-
-/* ═══ THE READING ═════════════════════════════════════════════════════════ */
-/* Everything below renders a field the model was already returning and the
-   screen was already throwing away. All of it stays inside the navy console,
-   which keeps its own palette in both themes on purpose. */
-.ai__macro {
-  margin: var(--s2) 0 0;
-  font-size: var(--t-small); line-height: 1.5;
-  color: color-mix(in srgb, var(--ai-ink) 82%, transparent);
+@keyframes nw-pop { 0% { opacity: 0; transform: scale(0); } 50% { transform: scale(1.4); } 100% { opacity: 1; transform: scale(1); } }
+@keyframes nw-tag {
+  from { opacity: 0; transform: translate(-100%, calc(-100% - 4px)); }
+  to { opacity: 1; transform: translate(-100%, calc(-100% - 10px)); }
 }
 
-/* How the book serves this person's goal: a status pill and one sentence. */
-.ai__fit {
-  display: flex; align-items: baseline; gap: var(--s2); flex-wrap: wrap;
-  margin: var(--s2) 0 0;
-  font-size: var(--t-small); line-height: 1.5; font-weight: 600;
-  color: var(--ai-ink);
-}
-
-.ai__rec { align-items: flex-start; }
-.ai__rechead { display: flex; align-items: center; gap: var(--s2); flex-wrap: wrap; }
-/* The verdict on a holding. A bordered pill rather than bare text, because it
-   is the one word on the card a thumb scrolls looking for. */
-.ai__verdict {
-  flex: none;
-  padding: 2px 10px; border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--ai-ink) 26%, transparent);
-  font-size: var(--t-micro); line-height: var(--lh-micro); font-weight: 600;
-  letter-spacing: 0.06em; text-transform: uppercase;
-  color: color-mix(in srgb, var(--ai-ink) 72%, transparent);
-}
-.ai__verdict.is-add { color: var(--ai-gold); border-color: color-mix(in srgb, var(--ai-gold) 48%, transparent); }
-.ai__verdict.is-cut { color: #E8A0A0; border-color: color-mix(in srgb, #E8A0A0 40%, transparent); }
-
-/* The figures an insight leaned on. Without these a reader cannot tell a
-   researched claim from a remembered one — which was the whole complaint. */
-.ai__evidence { display: flex; flex-wrap: wrap; gap: 6px; margin-top: var(--s2); }
-.ai__chip {
-  padding: 3px 9px; border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--ai-gold) 34%, transparent);
-  font-size: var(--t-micro); line-height: var(--lh-micro);
-  color: var(--ai-gold-2);
-}
-
-.ai__sources {
-  margin: var(--s2) 0 0;
-  font-size: var(--t-micro); line-height: var(--lh-micro);
-  color: color-mix(in srgb, var(--ai-ink) 56%, transparent);
-}
-
-/* A finding's rank, set as a figure: the order IS the message. */
-.ai__rank {
-  flex: none; min-width: 22px; height: 22px; border-radius: 50%;
-  display: inline-flex; align-items: center; justify-content: center;
-  border: 1px solid color-mix(in srgb, var(--ai-gold) 48%, transparent);
-  font-size: var(--t-micro); font-weight: 600; color: var(--ai-gold);
-}
-.ai__consider {
-  display: block; margin-top: var(--s1);
-  font-size: var(--t-micro); line-height: var(--lh-micro);
-  color: color-mix(in srgb, var(--ai-ink) 82%, transparent);
-}
-.ai__consider strong { color: var(--ai-gold-2); font-weight: 600; margin-right: 4px; }
-.ai__chip--name {
-  border-color: color-mix(in srgb, var(--ai-ink) 22%, transparent);
-  color: color-mix(in srgb, var(--ai-ink) 78%, transparent);
-}
-
-/* Per-holding calls, closed by default so the findings stay the answer. */
-.ai__more { margin-top: var(--s3); border-top: 1px solid color-mix(in srgb, var(--ai-ink) 14%, transparent); }
-.ai__more > summary {
-  list-style: none; cursor: pointer;
-  display: flex; align-items: center; gap: var(--s2);
-  min-height: 44px;
-  font-size: var(--t-micro); font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
-  color: var(--ai-gold-2);
-}
-.ai__more > summary::-webkit-details-marker { display: none; }
-.ai__more > summary .icon { margin-left: auto; transition: transform 200ms var(--spring-soft, ease); }
-.ai__more[open] > summary .icon { transform: rotate(180deg); }
-.ai__count { color: color-mix(in srgb, var(--ai-ink) 56%, transparent); }
-.ai__line { padding-block: var(--s2); }
-
-/* ═══ THE DAILY BRIEF ═════════════════════════════════════════════════════ */
-/* Under the console, on the page's own material — it is something you read,
-   not something you ask. The on-device score sits at its foot. */
-.brief__head { display: flex; align-items: center; justify-content: space-between; gap: var(--s3); }
-.brief__item { align-items: flex-start; gap: var(--s3); }
-.brief__icon { color: var(--brass); margin-top: 2px; }
-.brief__stamp {
-  margin: var(--s2) 0 0;
-  font-size: var(--t-micro); line-height: var(--lh-micro);
-  color: var(--ink-soft);
-}
-.brief__score .score { margin-top: var(--s3); }
-.brief__ask { width: 100%; text-align: left; }
-
-/* ═══ FIRST RUN ═══════════════════════════════════════════════════════════ */
-/* One question per screen. Full-bleed, on the ground colour, so it reads as
-   the app beginning rather than a sheet over something else. */
-.onboard {
-  position: fixed; inset: 0; z-index: 90;
-  background: var(--ground);
-  overflow-y: auto; overflow-x: hidden;
-  padding: calc(env(safe-area-inset-top) + var(--s3)) var(--gutter) calc(env(safe-area-inset-bottom) + var(--s4));
-}
-.onboard__frame { max-width: var(--measure); min-height: 100%; margin: 0 auto; display: flex; flex-direction: column; }
-.onboard__top { display: flex; align-items: center; justify-content: space-between; gap: var(--s3); min-height: 44px; }
-.onboard__top > .linkbtn:first-child:not([style*="none"]) { margin-right: auto; }
-.onboard__dots { display: flex; gap: 6px; margin: 0 auto; }
-.onboard__dot { width: 6px; height: 6px; border-radius: 50%; background: var(--rule-strong); transition: background 200ms ease, transform 200ms ease; }
-.onboard__dot.is-on { background: var(--brass); }
-.onboard__body { flex: 1; padding-top: var(--s6); }
-.onboard__q { display: grid; gap: var(--s4); animation: onboard-in 320ms var(--spring-soft, ease) both; }
-.onboard__input { font-size: var(--t-lead); min-height: 52px; }
-.onboard__opts { display: grid; gap: var(--s2); }
-.onboard__opts--grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.onboard__opt {
-  display: grid; gap: 2px; text-align: left;
-  min-height: 56px; padding: var(--s3) var(--s4);
-  border-radius: var(--r-control); border: 1px solid var(--rule-strong);
-  background: var(--sheet); color: var(--ink);
-  transition: border-color 160ms ease, background 160ms ease, transform 120ms ease;
-}
-.onboard__opt:active { transform: scale(0.985); }
-.onboard__opt[aria-pressed="true"] {
-  border-color: var(--brass);
-  background: color-mix(in srgb, var(--brass) 12%, var(--sheet));
-}
-.onboard__optt { font-size: var(--t-body); font-weight: 600; }
-.onboard__optd { font-size: var(--t-micro); line-height: var(--lh-micro); color: var(--ink-soft); }
-.onboard__foot { padding-top: var(--s5); }
-@keyframes onboard-in { from { opacity: 0; transform: translateY(10px); } }
-@media (prefers-reduced-motion: reduce) { .onboard__q { animation: none; } }
-
-/* The mark: an aperture, not a robot. Two rings around a lit core, with a
-   single point travelling the outer ring — the visual idea is something
-   LOOKING at your position, which is exactly what the feature does. */
-.aimark { flex: none; width: 46px; height: 46px; display: block; margin-top: -2px; }
-.aimark svg { width: 100%; height: 100%; overflow: visible; }
-.aimark__ring {
-  fill: none; stroke: var(--ai-gold); stroke-width: 1.25; opacity: 0.55;
-  stroke-dasharray: 26 14; stroke-linecap: round;
-  transform-origin: 32px 32px;
-  animation: aimark-spin 18s linear infinite;
-}
-.aimark__ring--in {
-  opacity: 0.38; stroke-dasharray: 12 20; stroke-width: 1;
-  animation: aimark-spin 11s linear infinite reverse;
-}
-.aimark__core { filter: drop-shadow(0 0 7px color-mix(in srgb, var(--ai-gold) 70%, transparent)); }
-.aimark__orbit {
-  fill: var(--ai-gold-2); transform-origin: 32px 32px;
-  animation: aimark-spin 7s linear infinite;
-}
-@keyframes aimark-spin { to { transform: rotate(360deg); } }
-
-/* A mark that spins forever is motion nobody asked for. Held still, the
-   composition still reads as an aperture. */
-@media (prefers-reduced-motion: reduce) {
-  .aimark__ring, .aimark__ring--in, .aimark__orbit { animation: none; }
-}
-
-.aicard { padding: 0 0 var(--s5); }
-.meter__fill--indeterminate {
-  width: 38%; animation: slide 1.4s var(--ease) infinite;
-}
-@keyframes slide { 0% { transform: translateX(-100%); } 100% { transform: translateX(280%); } }
-
-.disclaimer {
-  padding: var(--s3) 0 var(--s5);
-  font-size: 12px; line-height: 17px; color: var(--ink-faint);
-  border-top: 1px solid var(--rule); margin-top: var(--s2);
-}
-
-/* ═══ SHEETS ══════════════════════════════════════════════════════════════ */
+/* ═══ SHEETS ═════════════════════════════════════════════════════════════
+   Each design drew its sheet over a mock of the page beneath. Here the page
+   beneath is real, so the scrim and the rise are the app's and everything
+   inside the sheet is the design's. */
 .scrim {
-  position: fixed; inset: 0; z-index: 60;
+  position: fixed; inset: 0; z-index: 80;
   display: flex; align-items: flex-end; justify-content: center;
-  background: color-mix(in srgb, var(--ground-sunk) 72%, transparent);
-  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
-  animation: scrim-in var(--fast) var(--ease);
+  background: rgba(0, 0, 0, .62);
 }
-.scrim--top { align-items: flex-start; }
-@keyframes scrim-in { from { opacity: 0; } }
-
+.scrim--top { align-items: flex-start; padding-top: var(--sat); }
 .bsheet {
-  width: 100%; max-width: 34rem;
-  /* A sheet scrolls DOWN and never sideways. Without the second axis named,
-     `overflow-y: auto` alone makes the x axis compute to auto as well, so one
-     child too wide for the phone turns the whole panel into a pannable canvas
-     and its edges walk off the screen. */
-  max-height: 88vh; overflow-y: auto; overflow-x: hidden;
-  background: var(--sheet);
-  border-radius: var(--r-sheet) var(--r-sheet) 0 0;
-  box-shadow: var(--lift-high);
-  padding-bottom: calc(var(--s5) + env(safe-area-inset-bottom));
-  animation: sheet-up 460ms var(--spring-soft);
+  position: relative !important;
+  inset: auto !important;
+  width: 100%; max-width: var(--col);
+  margin: 0 !important;
+  max-height: calc(92dvh - var(--sat)); min-height: 0 !important;
+  overflow-y: auto; overscroll-behavior: contain;
+  animation: sheet-up .42s var(--ease) backwards;
 }
+.bsheet--top { animation-name: sheet-down; }
+@keyframes sheet-up { from { transform: translateY(32px); } }
+@keyframes sheet-down { from { transform: translateY(-32px); } }
 
-.bsheet--top {
-  border-radius: 0 0 var(--r-sheet) var(--r-sheet);
-  margin-top: env(safe-area-inset-top);
-  animation: sheet-down 460ms var(--spring-soft);
+/* ═══ PULL TO SYNC ═══════════════════════════════════════════════════════
+   Android's own refresh control: a raised disc that follows the finger down
+   from under the status bar, its arc growing with the pull and spinning while
+   the sync runs. Moved by the gesture with inline transform/opacity only; the
+   version that wrote reactive state per touchmove froze the phone. */
+.ptr {
+  position: fixed; top: var(--sat); left: 50%; z-index: 96;
+  width: 40px; height: 40px; margin: -48px 0 0 -20px;
+  display: grid; place-items: center;
+  border-radius: 50%;
+  background: #1C1C20;
+  border: 1px solid rgba(228, 228, 231, .12);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, .55);
+  opacity: 0; pointer-events: none; will-change: transform, opacity;
 }
-@keyframes sheet-up   { from { transform: translateY(100%); } }
-@keyframes sheet-down { from { transform: translateY(-100%); } }
-
-.bsheet__grip { width: 36px; height: 4px; border-radius: 999px; background: var(--rule-strong); margin: var(--s3) auto var(--s1); }
-.bsheet__head { display: flex; align-items: center; justify-content: space-between; gap: var(--s4); padding: var(--s4) var(--s5) var(--s2); }
-.bsheet__head .title { font-size: var(--t-title); }
-
-/* On a page surface the gutter is already supplied, so the form adds none. A
-   BOTTOM SHEET is still a real panel with its own edges, so there it keeps the
-   inner padding — same class, two contexts, and only one of them wants it. */
-.form { padding: var(--s3) 0 0; display: grid; gap: var(--s4); }
-.bsheet .form { padding-inline: var(--s5); }
-.f { display: grid; gap: 6px; }
-.f__label { font-size: var(--t-micro); font-weight: 600; color: var(--ink-soft); }
-.f__label-row { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s2); }
-.type-picker__selected { font-size: var(--t-micro); font-weight: 600; color: var(--brass); }
-.f__row { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s3); }
-
-/* Custom Holding Type Chip Picker (replaces legacy native select) */
-.type-chips {
-  display: flex; flex-wrap: wrap; gap: 6px;
-  padding: 2px 0 4px;
+.ptr__arc { width: 24px; height: 24px; transform: rotate(-90deg); overflow: visible; }
+.ptr__arc circle {
+  fill: none; stroke: var(--goldtx); stroke-width: 2.5; stroke-linecap: round;
+  stroke-dasharray: 0 100; transition: stroke-dasharray .12s linear;
 }
-.type-chip {
-  display: inline-flex; align-items: center; gap: 6px;
-  /* 44px is the touch floor the polish audit enforces. The chip was 42px, which the
-     audit never saw because chips only ever appeared inside bottom sheets it does not
-     open — putting one on a scanned route is what surfaced it. Padding alone cannot
-     guarantee the height once the font scales, so the floor is stated directly. */
-  min-height: 44px;
-  padding: 8px 13px;
-  border-radius: var(--r-control);
-  font-size: var(--t-micro);
-  font-weight: 500;
-  color: var(--ink-soft);
-  background: var(--wash);
-  border: 1px solid var(--rule);
-  cursor: pointer;
-  transition: all var(--fast) var(--ease);
-  -webkit-tap-highlight-color: transparent;
+body.is-syncing .ptr__arc { animation: ptr-spin .9s linear infinite; }
+body.is-syncing .ptr__arc circle { stroke-dasharray: 28 100 !important; }
+@keyframes ptr-spin { from { transform: rotate(-90deg); } to { transform: rotate(270deg); } }
+
+/* ═══ SNACKBAR ═══════════════════════════════════════════════════════════
+   How a finished background action reports back on Android: one line on the
+   inverse surface, above the dock, gone after a few seconds. */
+.snack {
+  position: fixed; left: 50%; z-index: 70;
+  bottom: calc(var(--dock-h) + var(--sab) + 12px);
+  width: calc(100% - 32px); max-width: 358px;
+  padding: 14px 16px; border-radius: 12px;
+  background: #E4E4E7; color: #18181B;
+  font-size: 14px; line-height: 20px; font-weight: 600;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .5);
+  transform: translate(-50%, 16px); opacity: 0; pointer-events: none;
+  transition: transform .28s var(--ease), opacity .2s linear;
 }
-.type-chip:active { transform: scale(0.97); }
-.type-chip--active {
-  color: var(--ink);
-  background: color-mix(in srgb, var(--jade) 14%, var(--sheet));
-  border-color: var(--brass);
-  font-weight: 600;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.12);
-}
-.type-chip__mark {
-  font-size: 11px;
-  color: var(--brass);
-  font-weight: 700;
-  line-height: 1;
-}
+.snack.on { transform: translate(-50%, 0); opacity: 1; }
+.snack.low { bottom: calc(var(--sab) + 16px); }
 
-.typeahead { list-style: none; margin: 0; padding: 0; border: 1px solid var(--rule); border-radius: var(--r-control); overflow: hidden; background: var(--sheet-raised); }
-.typeahead__item { display: block; width: 100%; text-align: left; padding: var(--s3) var(--s4); font-size: var(--t-small); }
-.typeahead__item:hover { background: var(--wash); }
-.typeahead li + li .typeahead__item { box-shadow: inset 0 1px 0 var(--rule); }
+/* Refresh icons spin exactly once when pressed. */
+.spin-once { animation: spin-once .6s var(--ease) 1; }
+@keyframes spin-once { to { transform: rotate(360deg); } }
 
-/* A market result carries three facts and they rank in this order: the company
-   you were looking for, the ticker the app will actually quote, and the venue
-   that settles the ambiguity between two listings of the same name. */
-.typeahead__item--mark { display: flex; align-items: center; gap: var(--s3); padding: var(--s3) var(--s4); }
-.typeahead__body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.typeahead__ttl { font-size: var(--t-small); color: var(--ink); line-height: 1.3;
-                  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.typeahead__sub { display: flex; align-items: center; gap: var(--s2); font-size: var(--t-micro); color: var(--ink-faint); }
-.typeahead__sub b { font-family: var(--ui); font-variant-numeric: tabular-nums;
-                    letter-spacing: 0.04em; color: var(--brass); font-weight: 600; }
-.typeahead__note { padding: var(--s3) var(--s4); font-size: var(--t-micro); color: var(--ink-faint); }
+/* A disabled action has to look unavailable, not merely do nothing. */
+button:disabled, button[disabled] { opacity: .4; cursor: not-allowed; }
 
-/* Stands in for a logo. Generated from the symbol, so it is always present and
-   always the same colour for the same holding — no broken image, ever. */
-.mark { flex: none; display: grid; place-items: center; width: 40px; height: 40px;
-        position: relative; overflow: hidden;
-        border-radius: 50%; font-size: var(--t-micro); font-weight: 600;
-        letter-spacing: 0.02em; font-family: var(--ui);
-        color: hsl(var(--mark-h) 42% 30%);
-        background: hsl(var(--mark-h) 38% 88%);
-        box-shadow: inset 0 0 0 1px hsl(var(--mark-h) 30% 78%), var(--card-cast); }
-/* The detail screen's mark leads the page rather than a row, so it is sized to
-   the headline beside it. */
-.mark--lg { width: 64px; height: 64px; font-size: var(--t-lead); }
-:root[data-theme="dark"] .mark {
-        color: hsl(var(--mark-h) 55% 78%);
-        background: hsl(var(--mark-h) 30% 20%);
-        box-shadow: inset 0 0 0 1px hsl(var(--mark-h) 28% 30%), var(--card-cast); }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .mark {
-        color: hsl(var(--mark-h) 55% 78%);
-        background: hsl(var(--mark-h) 30% 20%);
-        box-shadow: inset 0 0 0 1px hsl(var(--mark-h) 28% 30%), var(--card-cast); }
-}
-
-/* The real logo, laid OVER the monogram rather than instead of it.
-
-   It is transparent until its own load event fires, so a symbol with no logo, a 404,
-   or no network at all simply leaves the monogram showing — there is no state in which
-   a broken image can appear. That was the stated reason this app had no logos at all;
-   layering answers it without giving up the mark. */
-.mark__img {
-  position: absolute; inset: 0; width: 100%; height: 100%;
-  object-fit: contain; padding: 4px;
-  background: var(--sheet-raised);
-  opacity: 0; transition: opacity 180ms var(--ease);
-}
-.mark__img[data-ok="1"] { opacity: 1; }
-@media (prefers-reduced-motion: reduce) { .mark__img { transition: none; } }
-
-
-.bsheet__foot { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--s3); padding-top: var(--s4); }
-.bsheet__foot--split { justify-content: space-between; align-items: center; }
-.bsheet__footactions { display: flex; gap: var(--s3); }
-
-/* ═══ DETAIL ══════════════════════════════════════════════════════════════ */
-/* A back affordance that names its destination. A bare arrow makes the user
-   guess where they are about to land. */
-.backlink {
-  display: inline-flex; align-items: center; gap: 6px;
-  min-height: 44px;
-  margin-top: var(--s4); margin-left: calc(var(--s2) * -1);
-  padding: 0 var(--s2);
-  border-radius: var(--r-control);
-  font-size: var(--t-small); font-weight: 600; color: var(--ink-soft);
-}
-.backlink:hover { color: var(--ink); }
-.pagehead + * { margin-top: var(--s4); }
-
-.dropzone {
-  display: grid; justify-items: center; gap: 4px;
-  padding: var(--s7) var(--s5);
-  margin: var(--s4) var(--s5) 0;
-  border: 1px dashed var(--rule-strong);
-  border-radius: var(--r-panel);
-  text-align: center; cursor: pointer;
-  transition: border-color var(--fast) var(--ease), background var(--fast) var(--ease);
-}
-.dropzone:hover { border-color: var(--brass); background: var(--wash); }
-.dropzone__icon { font-size: 34px; color: var(--brass); margin-bottom: var(--s2); }
-
-.check { width: 22px; height: 22px; accent-color: var(--brass); flex: none; }
-.check__row {
-  display: flex; align-items: center; gap: var(--s3);
-  min-height: 44px; cursor: pointer;
-}
-.importrow { cursor: pointer; align-items: center; }
-
-.editrow { grid-template-columns: minmax(0,1fr) 6.5rem auto; align-items: center; gap: var(--s2); padding-right: var(--s3); }
-.field--bare { background: transparent; border-color: transparent; padding-left: 0; padding-right: 0; min-height: 44px; min-width: 0; }
-.field--bare:hover { border-color: var(--rule); }
-.field--num { text-align: right; padding-right: var(--s2); }
-.iconbtn--sm { width: 44px; height: 44px; margin-right: calc(var(--s2) * -1); }
-.addrow .row__name { color: var(--brass); display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }
-
-/* ═══ VIEW TRANSITIONS ════════════════════════════════════════════════════
-   The browser snapshots both states and cross-fades on the compositor. The
-   corpus figure is the one element that exists across surfaces, so it gets a
-   name and MORPHS between them rather than fading out and back in. */
+/* ═══ PAGE TRANSITIONS ═══════════════════════════════════════════════════ */
 ::view-transition-old(root) { animation: corpus-view-out 90ms ease both; }
 ::view-transition-new(root) { animation: corpus-view-in 190ms var(--ease) both; }
 @keyframes corpus-view-out { to { opacity: 0; } }
-@keyframes corpus-view-in {
-  from { opacity: 0; transform: translateY(4px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-.figure { view-transition-name: corpus-figure; }
-.wordmark { view-transition-name: corpus-mark; }
+@keyframes corpus-view-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 
-@media (prefers-reduced-motion: reduce) {
-  ::view-transition-old(root),
-  ::view-transition-new(root) { animation: none !important; }
-}
-
-/* ═══ TUTORIAL ════════════════════════════════════════════════════════════ */
+/* ═══ TOUR ═══════════════════════════════════════════════════════════════ */
 .driver-popover.corpus-tour {
-  background: var(--sheet);
+  background: linear-gradient(180deg, #1B1B1F, #151518);
   color: var(--ink);
-  border: 1px solid var(--rule);
-  border-radius: var(--r-panel);
-  box-shadow: var(--lift);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  box-shadow: 0 24px 48px -20px rgba(0, 0, 0, .9);
   font-family: var(--ui);
   max-width: 19rem;
-  padding: var(--s5);
+  padding: 20px;
 }
 .driver-popover.corpus-tour .driver-popover-title {
-  font-family: var(--display); font-size: var(--t-title); line-height: var(--lh-title);
-  font-weight: 600; font-variation-settings: 'opsz' 32; margin-bottom: 6px;
+  font-family: var(--display); font-size: 20px; line-height: 26px; font-weight: 600; margin-bottom: 6px;
 }
-.driver-popover.corpus-tour .driver-popover-description {
-  font-size: var(--t-small); line-height: 21px; color: var(--ink-soft);
-}
-.driver-popover.corpus-tour .driver-popover-footer { margin-top: var(--s4); gap: var(--s2); }
-.driver-popover.corpus-tour .driver-popover-progress-text { color: var(--ink-faint); font-size: var(--t-micro); }
+.driver-popover.corpus-tour .driver-popover-description { font-size: 14px; line-height: 21px; color: var(--mute); }
+.driver-popover.corpus-tour .driver-popover-footer { margin-top: 16px; gap: 8px; }
+.driver-popover.corpus-tour .driver-popover-progress-text { color: var(--mute); font-size: 14px; }
 .driver-popover.corpus-tour button:not(.driver-popover-close-btn) {
-  background: var(--ink); color: var(--ground);
-  border: 0; border-radius: var(--r-control);
-  font-family: var(--ui); font-size: var(--t-micro); font-weight: 600;
-  padding: 9px 16px; text-shadow: none;
+  background: linear-gradient(180deg, var(--gold1), var(--gold2)); color: #1A1405;
+  border: 0; border-radius: 12px; font-family: var(--ui); font-size: 14px; font-weight: 700;
+  min-height: 44px; padding: 0 16px; text-shadow: none;
 }
-.driver-popover.corpus-tour .driver-popover-prev-btn { background: transparent; color: var(--ink-soft); }
+.driver-popover.corpus-tour .driver-popover-prev-btn { background: transparent !important; color: var(--soft) !important; }
 .driver-popover.corpus-tour .driver-popover-close-btn {
-  background: transparent; color: var(--ink-faint); font-size: 18px;
-  width: 30px; height: 30px; padding: 0; line-height: 1; border-radius: var(--r-control);
+  background: transparent; color: var(--mute); font-size: 20px;
+  width: 44px; height: 44px; padding: 0; line-height: 1; border-radius: 12px;
 }
-.driver-popover.corpus-tour .driver-popover-arrow-side-top    { border-top-color: var(--sheet); }
-.driver-popover.corpus-tour .driver-popover-arrow-side-bottom { border-bottom-color: var(--sheet); }
-.driver-popover.corpus-tour .driver-popover-arrow-side-left   { border-left-color: var(--sheet); }
-.driver-popover.corpus-tour .driver-popover-arrow-side-right  { border-right-color: var(--sheet); }
-/* Driver marks an unavailable step button with its own class; without this it
-   inherits the primary fill and reads as an equal, tappable choice. */
+.driver-popover.corpus-tour .driver-popover-arrow-side-top { border-top-color: #1B1B1F; }
+.driver-popover.corpus-tour .driver-popover-arrow-side-bottom { border-bottom-color: #1B1B1F; }
+.driver-popover.corpus-tour .driver-popover-arrow-side-left { border-left-color: #1B1B1F; }
+.driver-popover.corpus-tour .driver-popover-arrow-side-right { border-right-color: #1B1B1F; }
 .driver-popover.corpus-tour button.driver-popover-btn-disabled,
-.driver-popover.corpus-tour .driver-popover-prev-btn:disabled {
-  background: transparent; color: var(--ink-faint); opacity: 0.5; cursor: default;
-}
-.driver-popover.corpus-tour .driver-popover-close-btn:focus-visible { outline-offset: 0; }
-
-/* A disabled primary action must LOOK unavailable. Without this the button
-   reads as tappable and simply does nothing, which is worse than being greyed. */
-.btn:disabled,
-.btn[disabled] {
-  opacity: 0.38;
-  cursor: not-allowed;
-  transform: none;
-  box-shadow: none;
-}
-.btn:disabled:active { transform: none; }
-
-/* ═══ APP BAR IDENTITY ═══════════════════════════════════════════════════ */
-.titleslot {
-  display: grid;
-  align-items: center;
-  justify-items: start;
-  min-height: 44px;
-  text-align: left;
-}
-.titleslot > * {
-  transition: opacity 190ms var(--ease), transform 230ms var(--ease);
-}
-.titleslot__mark {
-  font-family: var(--display);
-  font-size: clamp(18px, 4.5vw, 21px); font-weight: 600;
-  font-variation-settings: 'opsz' 30;
-  letter-spacing: -0.015em;
-  color: var(--skin);
-}
+.driver-popover.corpus-tour .driver-popover-prev-btn:disabled { opacity: .5; cursor: default; }
 
 @media (prefers-reduced-motion: reduce) {
-  .titleslot > * { transition: opacity 1ms; transform: none !important; }
+  .dock__item::before, .dock__item .material-symbols-outlined { transition-duration: 0s !important; }
+  .bsheet, .spin-once, body.is-syncing .ptr__arc { animation: none !important; }
+  .nwchart__dot, .nwchart__tag { animation: none !important; opacity: 1 !important; }
+  .ptr { transition-duration: 1ms !important; }
+  ::view-transition-old(root), ::view-transition-new(root) { animation: none !important; }
 }
 
-/* "Since you last looked" — set apart from the headline delta by a short brass
-   rule rather than a box, so it reads as a footnote to the figure rather than
-   a second competing statistic. */
-.hero__since {
-  display: flex; align-items: center; gap: var(--s3);
-  margin-top: var(--s3);
-  font-size: var(--t-small); font-weight: 600;
+/* A real date input inside a field the design drew with a calendar icon: the
+   browser's own picker button is stretched invisibly over the whole field, so
+   the design's icon stays and a tap anywhere opens the calendar. */
+:where(.field) { position: relative; }
+:where(.field) input[type="date"] { color-scheme: dark; }
+:where(.field) input[type="date"]::-webkit-calendar-picker-indicator {
+  position: absolute; inset: 0; width: auto; height: auto; opacity: 0; cursor: pointer;
 }
-.hero__since-rule {
-  width: 18px; height: 2px; border-radius: 2px;
-  background: currentColor; opacity: 0.45; flex: none;
-}
-.hero__delta-in { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+:where(.field) select { cursor: pointer; }
+:where(.field) select option { background: #151518; color: var(--ink); }
 
-/* ═══ SYNC RESULT ═════════════════════════════════════════════════════════
-   Not a toast. A toast disappears, and the fact that two holdings are running
-   on an old price is still true ten seconds later — so it stays until the
-   situation changes. */
-.syncbar {
-  display: flex; align-items: flex-start; gap: var(--s3);
-  padding: var(--s4) var(--s5);
-  background: var(--sheet);
-  border: 1px solid var(--rule);
-  border-radius: var(--r-panel);
-  font-size: var(--t-small); font-weight: 600;
-  color: var(--ink-soft);
-}
-.syncbar--warn { border-color: var(--brass-rule); background: var(--wash); color: var(--ink); }
-.syncbar--warn .icon { color: var(--brass); margin-top: 1px; }
-.syncbar__body { display: grid; gap: 2px; flex: 1; min-width: 0; }
-.syncbar__detail { font-size: var(--t-micro); font-weight: 500; color: var(--ink-faint); }
-/* The banner's headline is a disclosure control, so it has to look like text
-   and behave like a button: no chrome, full width, and the whole line tappable
-   rather than a chevron the thumb has to find. */
-.syncbar__toggle {
-  background: none; border: 0; padding: 0; margin: 0;
-  font: inherit; color: inherit; text-align: left; width: 100%;
-  min-height: 44px; display: grid; align-content: center; gap: 2px;
-}
-.syncbar__line { display: flex; align-items: center; justify-content: space-between; gap: var(--s2); }
-.syncbar .linkbtn { flex: none; align-self: flex-start; margin-top: -6px; }
+/* Two-up fields in a grid must be allowed to shrink below their input's
+   intrinsic width, or the right-hand field runs off the sheet. */
+:where(.two) > * { min-width: 0; }
+:where(input.field, select.field) { width: 100%; min-width: 0; }
 
-.syncbar__spinner {
-  width: 15px; height: 15px; flex: none; margin-top: 2px;
-  border: 2px solid var(--rule-strong);
-  border-top-color: var(--brass);
-  border-radius: 999px;
-  animation: spin 800ms linear infinite;
+/* Dates read "12 Mar 2025", as the designs write them. The native input sits
+   invisibly over the field so a tap anywhere still opens the system picker. */
+.datefield__text { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.datefield__input { position: absolute !important; inset: 0; width: 100% !important; height: 100% !important; opacity: 0; cursor: pointer; }
+
+/* ═══ INSIGHTS MOTION ════════════════════════════════════════════════════
+   From "Insights - Animated & Interactive": the AI mark breathes, the refresh
+   spins once, the per-holding drawer opens by row height, the health bar fills
+   and the in-progress status shimmers. All of it is transform, opacity or a
+   grid-row height, and all of it stops under reduced motion. */
+.screen .aimark__core { animation: ai-breathe 3.5s ease-in-out infinite alternate; }
+@keyframes ai-breathe {
+  0% { filter: drop-shadow(0 0 5px rgba(201, 162, 39, .5)); opacity: .9; }
+  100% { filter: drop-shadow(0 0 11px rgba(230, 208, 138, .9)); opacity: 1; }
 }
-/* ═══ STATEMENT DIFF RESOLUTION ════════════════════════════════════════════
-   Smart portfolio diff presentation when importing broker statements (Groww,
-   CAMS, Zerodha, etc.). Displays an AI conversational assessment, side-by-side
-   holding deltas, and actionable resolution choices. */
-.diff-sheet {
-  border: 1px solid var(--brass-rule);
-  background: var(--sheet-raised);
+.consider {
+  margin-top: 10px; padding: 8px 12px; border-radius: 2px 8px 8px 2px;
+  background: rgba(201, 169, 90, .07); border-left: 2px solid var(--goldtx);
+  display: flex; align-items: baseline; gap: 8px;
 }
-.diff-badges {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--s2);
-  margin-bottom: var(--s2);
+.consider__label { flex: none; font-size: 14px; line-height: 20px; font-weight: 700; color: var(--goldtx); }
+.consider__text { font-size: 14px; line-height: 20px; font-weight: 500; color: rgba(238, 242, 248, .9); }
+.disclose-icon { transition: transform .4s var(--spring); }
+.disclose.is-open .disclose-icon { transform: rotate(180deg); }
+.holdings-drawer {
+  display: grid; grid-template-rows: 0fr; opacity: 0; margin-top: 0;
+  transition: grid-template-rows .45s var(--ease), opacity .35s ease, margin .35s ease;
 }
-.diff-badge {
-  font-size: var(--t-micro);
-  font-weight: 600;
-  padding: 3px 8px;
-  border-radius: 999px;
-  background: var(--wash);
-  color: var(--brass);
+.holdings-drawer.is-open { grid-template-rows: 1fr; opacity: 1; margin-top: 14px; }
+.drawer-inner { overflow: hidden; }
+.holdings-list {
+  display: flex; flex-direction: column; gap: 8px; padding: 10px 12px;
+  background: rgba(6, 14, 28, .6); border-radius: 12px; border: 1px solid rgba(201, 162, 39, .18);
 }
-.diff-badge--broker {
-  background: color-mix(in srgb, var(--brass) 18%, transparent);
-  color: var(--brass-bright);
+.holding-pill { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 8px 10px; background: rgba(14, 26, 46, .65); border-radius: 8px; }
+.holding-pill__name { color: #EEF2F8; font-weight: 600; font-size: 14px; line-height: 20px; }
+.holding-pill__sub { color: #A7B3C8; font-size: 14px; line-height: 20px; }
+.pill-tag { flex: none; padding: 2px 8px; border-radius: 999px; font-size: 14px; line-height: 20px; font-weight: 700; color: #FAFAFA; }
+.pill-tag.healthy { background: #14532D; }
+.pill-tag.neutral { background: #22344F; }
+.pill-tag.review { background: #6B4E12; }
+.shimmer-text {
+  background: linear-gradient(90deg, #A7B3C8 0%, #FFFFFF 50%, #A7B3C8 100%);
+  background-size: 200% 100%; -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent; animation: shimmer 1.5s linear infinite;
 }
-.diff-badge--cat {
-  background: color-mix(in srgb, var(--jade) 14%, transparent);
-  color: var(--jade);
-}
-.diff-badge--date {
-  background: var(--ground-sunk);
-  color: var(--ink-faint);
+@keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+.health-bar > i { width: 0 !important; transition: width 1.6s cubic-bezier(.19, 1, .22, 1) .3s; box-shadow: 0 0 12px rgba(201, 162, 39, .6); background: linear-gradient(90deg, #9A7B2C, #C0A04A, #E6D08A) !important; }
+.health-bar.is-animated > i { width: var(--w) !important; }
+@media (prefers-reduced-motion: reduce) {
+  .screen .aimark__core, .shimmer-text { animation: none !important; }
+  .shimmer-text { -webkit-text-fill-color: #EEF2F8; }
+  .holdings-drawer, .disclose-icon, .health-bar > i { transition: none !important; }
 }
 
-.diff-callout {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--s3);
-  padding: var(--s4);
-  background: color-mix(in srgb, var(--brass) 8%, var(--sheet));
-  border: 1px solid var(--brass-rule);
-  border-radius: var(--r-panel);
-  margin: var(--s4) 0;
+/* ═══ FIRST RUN ══════════════════════════════════════════════════════════
+   A full-screen layer over the app. The question screen inside it is the
+   design's own; this only lifts it above the dock and lets it scroll. */
+.onboard.screen { position: fixed; inset: 0; z-index: 90; padding-top: var(--sat); overflow-y: auto; overscroll-behavior: contain; background: var(--bg); }
+.onboard .fixed-bottom { z-index: 91; }
+
+/* Grid children may shrink below their content, so a two-up row of options
+   wraps its text on a 360px phone instead of pushing the card off screen. */
+:where(.stack, .opts) > * { min-width: 0; }
+
+/* The designs draw some chips and compact buttons at 40px. They keep that look
+   and get a 44px hit area: the extra 2px above and below is invisible but tappable. */
+:where([data-s~=ho], [data-s~=hofe]) :where(.chip, .chip-on, .btn-gold),
+:where([data-s~=pl]) .btn-soft,
+:where([data-s~=is]) .head .link { position: relative; }
+:where([data-s~=ho], [data-s~=hofe]) :where(.chip, .chip-on, .btn-gold)::after,
+:where([data-s~=pl]) .btn-soft::after { content: ''; position: absolute; inset: -2px 0; }
+:where([data-s~=is]) .head .link::after { content: ''; position: absolute; inset: 0 -10px; }
+
+/* ═══ ADD A HOLDING: ASSET TYPE ══════════════════════════════════════════
+   Four types over three, each row filling the sheet edge to edge. At the
+   design's 16px padding the first row needed 364px of a 344px sheet and
+   left Gold alone on a line. */
+.bsheet[aria-label="Add a holding"] .chip-row { display: flex; flex-wrap: nowrap; gap: 8px; }
+.bsheet[aria-label="Add a holding"] .chip-row + .chip-row { margin-top: 8px; }
+.bsheet[aria-label="Add a holding"] .chip-row > button {
+  flex: 1 1 auto; justify-content: center; min-width: 0;
+  padding-left: 12px; padding-right: 12px;
 }
-.diff-callout__icon {
-  width: 36px;
-  height: 36px;
-  border-radius: 999px;
-  display: grid;
-  place-items: center;
-  background: color-mix(in srgb, var(--brass) 16%, transparent);
-  color: var(--brass);
-  flex: none;
+.bsheet[aria-label="Add a holding"] .chip-row > button.chip-on { padding-left: 10px; }
+
+/* ═══ EPF SHEET FOOTER ═══════════════════════════════════════════════════
+   The design pinned this footer to the viewport with position:fixed. Inside a
+   scrolling sheet that is the wrong anchor: the footer rode up with the form
+   and sat mid-sheet. Sticky to the sheet's own scroll edge, as the other
+   Add a holding footers are. */
+[data-s~=ah-epf] .bar { position: sticky !important; left: auto !important; transform: none !important; bottom: 0 !important; margin: 12px -20px 0 !important; width: auto !important; max-width: none !important; }
+[data-s~=ah-epf] .form { padding-bottom: 0 !important; }
+
+/* ═══ PICKER ═════════════════════════════════════════════════════════════
+   The app's list chooser, over the sheet that opened it. Rows follow the
+   stock search results: a name, a quiet line under it, a gold tick when
+   chosen. */
+.picker-scrim { z-index: 85; }
+.picker {
+  background: #131316; color: var(--ink);
+  border-radius: 24px 24px 0 0; border-top: 1px solid rgba(228, 228, 231, .10);
+  padding: 8px 0 calc(12px + var(--sab));
+  max-height: calc(80dvh - var(--sat)) !important;
+  display: flex; flex-direction: column;
 }
-.diff-callout__icon .icon {
-  font-size: 20px;
+.picker__handle { width: 36px; height: 4px; border-radius: 2px; background: #3F3F46; margin: 4px auto 8px; flex: none; }
+.picker__head { display: flex; align-items: center; justify-content: space-between; padding: 4px 12px 8px 20px; flex: none; }
+.picker__title { font-family: var(--display); font-weight: 500; font-size: 24px; line-height: 30px; letter-spacing: -.01em; }
+.picker__close {
+  width: 44px; height: 44px; display: grid; place-items: center; border: 0; background: none;
+  color: var(--soft); border-radius: 12px;
 }
-.diff-callout__content {
-  flex: 1;
-  min-width: 0;
+.picker__search {
+  display: flex; align-items: center; gap: 10px; margin: 4px 20px 8px; padding: 0 14px; height: 48px; flex: none;
+  background: #0E0E11; border: 1px solid #3F3F46; border-radius: 12px; color: var(--mute);
 }
-.diff-callout__title {
-  font-size: var(--t-small);
-  font-weight: 600;
-  color: var(--brass);
-  letter-spacing: 0.01em;
+.picker__search:focus-within { border-color: var(--goldtx); }
+.picker__search input { flex: 1; min-width: 0; background: none; border: 0; outline: 0; color: var(--ink); font: 600 16px/24px var(--ui); }
+.picker__list { overflow-y: auto; overscroll-behavior: contain; flex: 1 1 auto; min-height: 0; padding: 0 8px; }
+.picker__row {
+  display: flex; align-items: center; gap: 12px; width: 100%; min-height: 56px; padding: 10px 12px;
+  background: none; border: 0; border-radius: 12px; text-align: left; color: var(--ink);
+  transition: background-color .15s linear, transform .12s var(--ease);
 }
-.diff-callout__text {
-  font-size: var(--t-body);
-  line-height: var(--lh-body);
-  color: var(--ink);
-  margin-top: var(--s1);
+.picker__row:active { transform: scale(.985); background: rgba(228, 228, 231, .05); }
+.picker__row.on { background: rgba(201, 169, 90, .08); }
+.picker__text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.picker__name { font-weight: 600; font-size: 16px; line-height: 22px; text-wrap: pretty; }
+.picker__meta { font-size: 14px; line-height: 20px; color: var(--mute); }
+.picker__tick { color: var(--goldtx); font-size: 22px; font-variation-settings: 'wght' 500; }
+.picker__none { padding: 16px 12px; color: var(--mute); font-size: 14px; line-height: 20px; }
+.picker__other { flex: none; padding: 12px 20px 4px; border-top: 1px solid var(--line); margin-top: 4px; }
+.picker__label { display: block; font-size: 14px; line-height: 20px; font-weight: 600; color: var(--mute); margin-bottom: 8px; }
+.picker__otherrow { display: flex; gap: 8px; }
+.picker__otherrow input {
+  flex: 1; min-width: 0; height: 48px; padding: 0 14px; border-radius: 12px;
+  background: #0E0E11; border: 1px solid #3F3F46; color: var(--ink); font: 600 16px/24px var(--ui); outline: 0;
+}
+.picker__otherrow input:focus { border-color: var(--goldtx); }
+.picker__use {
+  height: 48px; padding: 0 18px; border-radius: 12px; border: 0;
+  background: linear-gradient(180deg, var(--gold1), var(--gold2)); color: #1A1405; font: 700 15px/20px var(--ui);
+}
+.picker__use:disabled { opacity: .45; }
+
+/* A field that opens the picker reads like the text fields beside it. */
+.pickfield { display: flex !important; align-items: center; justify-content: space-between; gap: 10px; cursor: pointer; }
+.pickfield__v { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); font-weight: 600; }
+.pickfield__v.is-empty { color: #71717A; font-weight: 500; }
+
+/* ═══ FINISH ═════════════════════════════════════════════════════════════
+   Body copy balances its last line, so a sentence never ends on one word
+   alone ("the app."). Anything pressable answers the finger; :where keeps
+   this below every design rule that already sets its own pressed state. */
+p, .t-meta, .t-body, .help span, .note { text-wrap: pretty; }
+h1, h2, h3, .t-title, .t-section, .t-sheet { text-wrap: balance; }
+:where(button, .btn-reset, [role="option"], [role="radio"]):not(:disabled):active { transform: scale(.98); }
+:where(button, .btn-reset, [role="option"], [role="radio"]) { transition: transform .12s var(--ease), background-color .15s linear, box-shadow .2s linear; }
+@media (prefers-reduced-motion: reduce) {
+  :where(button, .btn-reset, [role="option"], [role="radio"]) { transition-duration: 0s; }
+  :where(button, .btn-reset, [role="option"], [role="radio"]):active { transform: none; }
 }
 
-.diff-summary-bar {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-  gap: var(--s3);
-  padding: var(--s3) var(--s4);
-  background: var(--ground-sunk);
-  border-radius: var(--r-panel);
-  margin-bottom: var(--s4);
+/* ═══ LOGOS ══════════════════════════════════════════════════════════════
+   The real mark sits over the monogram and stays transparent until it has
+   loaded, so no network, a 404 or an unknown symbol leaves the monogram and
+   never a broken image. Indian marks are full-bleed tiles; US ones are
+   logos on white, given a margin. */
+.well, .mark { position: relative; }
+.logo {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  border-radius: inherit; object-fit: cover; background: #FFFFFF;
+  opacity: 0; transition: opacity .2s linear; pointer-events: none;
 }
-.diff-metric {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.diff-metric__label {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--ink-faint);
-  font-weight: 600;
-}
-.diff-metric__val {
-  font-family: var(--display);
-  font-size: var(--t-lead);
-  font-weight: 600;
-  color: var(--ink);
-}
+.logo--pad { object-fit: contain; padding: 6px; }
+.logo.on { opacity: 1; }
 
-.diff-section {
-  margin-bottom: var(--s4);
-}
-.diff-section__title {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: var(--t-small);
-  font-weight: 600;
-  color: var(--ink-soft);
-  padding: var(--s3) 0 var(--s2);
-  border-bottom: 1px solid var(--rule);
-}
+.sip-link { display: block; }
+.sip-link.is-warn { color: #F0B4B4; }
 
-.diff-item {
-  padding: var(--s3) 0;
-  border-bottom: 1px solid var(--rule);
+/* ═══ FIRST RUN: PER-ASSET ANSWERS ═══════════════════════════════════════
+   One card per asset class, each holding a wrapping row of multi-select
+   chips: the chip of the Add a holding sheet, gold when on. */
+.onboard .pclasses { display: grid; gap: 12px; margin-top: 20px; }
+.onboard .pcls {
+  background: #111114; border: 1px solid rgba(228, 228, 231, .12);
+  border-radius: 16px; padding: 14px 14px 14px;
 }
-.diff-item:last-child {
-  border-bottom: none;
+.onboard .pcls__head { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 16px; line-height: 22px; color: var(--ink); }
+.onboard .pcls__head .material-symbols-outlined { color: var(--goldtx); font-size: 22px; }
+.onboard .pchips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.onboard .pchip {
+  display: inline-flex; align-items: center; gap: 4px;
+  min-height: 40px; padding: 0 14px; border-radius: 999px;
+  border: 1px solid rgba(228, 228, 231, .28); background: #0E0E11;
+  color: var(--soft); font: 600 14px/20px var(--ui); white-space: nowrap;
 }
-.diff-item--new {
-  background: color-mix(in srgb, var(--jade) 4%, transparent);
-  padding: var(--s3);
-  border-radius: var(--r-panel);
-  margin-top: var(--s2);
+.onboard .pchip.on {
+  border-color: transparent; padding-left: 10px;
+  background: linear-gradient(180deg, var(--gold1), var(--gold2)); color: #1A1405;
 }
-.diff-item__top {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--s3);
+.onboard .pchip .material-symbols-outlined { font-size: 18px; font-variation-settings: 'wght' 500; }
+.onboard .ob-sub { font-family: var(--display); font-weight: 500; font-size: 22px; line-height: 28px; margin: 28px 0 12px; color: var(--ink); }
+.onboard .catchup {
+  margin: 4px 0 16px; padding: 12px 14px; border-radius: 12px;
+  background: rgba(201, 169, 90, .08); border: 1px solid rgba(201, 169, 90, .24);
+  color: var(--soft); font-size: 14px; line-height: 20px;
 }
-.diff-item__name {
-  font-size: var(--t-body);
-  font-weight: 600;
-  color: var(--ink);
-  flex: 1;
-}
-.diff-item__folio {
-  font-size: var(--t-micro);
-  color: var(--ink-faint);
-  flex: none;
-}
-.diff-item__grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--s4);
-  margin-top: var(--s2);
-}
-.diff-col {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.diff-col__label {
-  font-size: 11px;
-  color: var(--ink-faint);
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-}
-.diff-col__flow {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-.diff-val {
-  font-size: var(--t-small);
-  font-weight: 600;
-}
-.diff-val--old {
-  color: var(--ink-faint);
-  text-decoration: line-through;
-  opacity: 0.75;
-}
-.diff-val--new {
-  color: var(--ink);
-  font-weight: 700;
-}
-.diff-arrow {
-  font-size: 14px;
-  color: var(--brass);
-  flex: none;
-}
-.diff-delta {
-  font-size: var(--t-micro);
-  font-weight: 600;
-}
+.onboard .plan { display: grid; }
+.onboard .plan__when { margin: 10px 0 4px 8px; }
+.onboard main { padding-bottom: 160px; }
 
-.diff-note {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--s2);
-  padding: var(--s3);
-  background: var(--wash);
-  border-radius: var(--r-control);
-  font-size: var(--t-small);
-  line-height: var(--lh-small);
-  margin: var(--s3) 0;
-}
-
-.diff-actions {
-  display: grid;
-  gap: var(--s3);
-  padding-top: var(--s3);
-}
-.diff-subactions {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding-top: var(--s2);
-}
-
-/* ═══ WIDER SCREENS ═══════════════════════════════════════════════════════
-   A phone layout stretched across a tablet reads as unfinished rather than
-   adapted. Content already centres at --measure; these bring the two
-   full-bleed elements — the dock and the chart — back into that column so the
-   page reads as one object instead of a strip floating in a field. */
-@media (min-width: 600px) {
-  :root {
-    --t-figure: clamp(36px, 8vw, 56px);
-  }
-  body {
-    padding-bottom: calc(100px + env(safe-area-inset-bottom));
-  }
-  .dock {
-    left: 50%; right: auto; transform: translateX(-50%);
-    width: min(calc(100% - 48px), 44rem);
-    min-height: 60px;
-    bottom: calc(20px + env(safe-area-inset-bottom));
-    border-radius: 9999px;
-    box-shadow: inset 0 1px 0 var(--rule), var(--card-cast);
-  }
-  .dock__item { min-height: 60px; padding: 10px 4px 12px; }
-  .dock__item .icon { font-size: 22px; }
-
-  /* The chart bleeds to the screen edge on a phone because the screen IS the
-     column. On a tablet it must bleed to the COLUMN edge instead. */
-  .series { margin-inline: 0; border-radius: var(--r-panel); }
-  .series__canvas { height: 180px; }
-  .series__empty { height: 180px; }
-  .series .seg { margin: var(--s3) var(--gutter) 0; }
-  /* The panel stops being full-bleed here, so its own left edge already IS the
-     page's. Keeping the gutter would push the caption 20px in from every other
-     line of text on the screen — which the alignment audit measures. */
-  .series__foot { margin: var(--s3) 0 0; }
-  .series__empty { margin-inline: 0; }
-
-  .hero { padding-top: var(--s7); }
-  .surface { padding-inline: var(--s5); }
-}
-
-/* Past the point where one column looks lonely, the figure and the chart can
-   share a row — the chart is a restatement of the figure, so pairing them
-   costs nothing and shortens the scroll. */
-@media (min-width: 900px) {
-  main.surface { max-width: 56rem; }
-  .dock { width: min(calc(100% - 48px), 56rem); }
-}
+/* ═══ INSIGHTS: BY ASSET ═════════════════════════════════════════════════
+   One row per asset class, judged against that class's own answers. */
+.byasset { margin: 20px 0 8px; padding: 16px; border-radius: 16px; background: rgba(9, 9, 11, .35); border: 1px solid rgba(228, 228, 231, .10); }
+.byasset__h { font-family: var(--display); font-weight: 500; font-size: 20px; line-height: 26px; color: #EEF2F8; margin-bottom: 4px; }
+.byasset__row { padding: 12px 0; }
+.byasset__row + .byasset__row { border-top: 1px solid rgba(228, 228, 231, .08); }
+.byasset__top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.byasset__name { font-weight: 600; font-size: 16px; line-height: 22px; color: #EEF2F8; }
+.byasset__tag { font-size: 14px; line-height: 20px; font-weight: 700; padding: 2px 10px; border-radius: 999px; background: #14532D; color: #DCFCE7; white-space: nowrap; }
+.byasset__tag.is-drifting { background: #6B4E12; color: #FDEBC8; }
+.byasset__tag.is-off-track { background: #701A1A; color: #FEE2E2; }
+.byasset__line { margin-top: 4px; font-size: 14px; line-height: 21px; color: #C9D2E0; text-wrap: pretty; }

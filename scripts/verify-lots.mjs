@@ -49,7 +49,7 @@ async function boot(investments) {
     // "unchanged". verify-figures carries the same note for the same reason.
     await page.addInitScript(s => {
         if (!localStorage.getItem('rfm_v1')) localStorage.setItem('rfm_v1', s);
-        localStorage.setItem('corpus_tour_v1', 'seen'); localStorage.setItem('rfm_v1', JSON.stringify((v => ({ ...v, profile: v.profile || { completedAt: '2026-09-01T00:00:00.000Z', name: 'Test', age: 40, goal: 'balanced', risk: 'medium', horizon: '7to15', interests: ['stocks'] } }))(JSON.parse(localStorage.getItem('rfm_v1') || '{}'))));
+        localStorage.setItem('corpus_tour_v1', 'seen'); localStorage.setItem('rfm_v1', JSON.stringify((v => ({ ...v, profile: v.profile || { version: 2, completedAt: '2026-09-01T00:00:00.000Z', name: 'Test', age: 40, goal: 'balanced', risk: 'medium', horizon: '7to15', interests: ['stocks'] } }))(JSON.parse(localStorage.getItem('rfm_v1') || '{}'))));
         localStorage.setItem('rfm_tour_v1', 'seen');
         localStorage.setItem('corpus_chart_mode', 'corpus');
     }, BOOK(investments));
@@ -295,11 +295,13 @@ console.log('\nTHE SHEET — reachable, honest, and it closes');
         d.lotForm.amount = 500; d.lotForm.timing = 'offhours';
         await new Promise(res => setTimeout(res, 350));
         const offText = el ? el.innerText : '';
-        return { visible, text, offText, hasSelect: !!el?.querySelector('select') };
+        const radios = el ? [...el.querySelectorAll('[role="radiogroup"] [role="radio"]')].map(b => b.textContent.trim()) : [];
+        return { visible, text, offText, radios };
     });
     ok('the sheet opens', sheet.visible);
     ok('it names the holding', /Broadcom/.test(sheet.text), sheet.text.split('\n')[0] || '');
-    ok('the timing is a dropdown', sheet.hasSelect);
+    // Add to a position v4 asks with two choices rather than a dropdown.
+    ok('the timing is a two-way choice', sheet.radios.join(' / ') === 'During market hours / After the close', sheet.radios.join(' / '));
     // The off-hours branch must not print a price anywhere — that is the whole
     // claim it is making.
     ok('off hours shows no fill price', !/\$3\d\d\./.test(sheet.offText),

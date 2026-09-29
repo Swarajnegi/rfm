@@ -16,10 +16,10 @@ import { pathToFileURL } from 'node:url';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
-const PAGES = ['home','investments','cashflow','regen','goals','emergency','networth','tax','more'];
+const PAGES = ['home','investments','cashflow','regen','goals','emergency','networth','tax','settings'];
 const b = await chromium.launch();
 const p = await b.newPage({ viewport: { width: 390, height: 844 } });
-await p.addInitScript(s => { localStorage.setItem('rfm_v1', s); localStorage.setItem('corpus_tour_v1','x'); localStorage.setItem('rfm_v1', JSON.stringify((v => ({ ...v, profile: v.profile || { completedAt: '2026-09-01T00:00:00.000Z', name: 'Test', age: 40, goal: 'balanced', risk: 'medium', horizon: '7to15', interests: ['stocks'] } }))(JSON.parse(localStorage.getItem('rfm_v1') || '{}')))); },
+await p.addInitScript(s => { localStorage.setItem('rfm_v1', s); localStorage.setItem('corpus_tour_v1','x'); localStorage.setItem('rfm_v1', JSON.stringify((v => ({ ...v, profile: v.profile || { version: 2, completedAt: '2026-09-01T00:00:00.000Z', name: 'Test', age: 40, goal: 'balanced', risk: 'medium', horizon: '7to15', interests: ['stocks'] } }))(JSON.parse(localStorage.getItem('rfm_v1') || '{}')))); },
                       readFileSync('scripts/seed.json','utf8'));
 await p.route('**/*', r => r.request().url().startsWith('file://') ? r.continue() : r.abort());
 await p.goto(pathToFileURL(path.resolve('web/index.html')).href, { waitUntil: 'load' });
@@ -43,7 +43,7 @@ for (const page of PAGES) {
       const box = el.getBoundingClientRect();
       if (box.width < 4 || box.height < 4) continue;
       // Ignore anything inside a right-aligned figures column or a control.
-      if (el.closest('.row__figures, .dock, .appbar, .seg, .bsheet')) continue;
+      if (el.closest('.row__figures, .dock, .appbar, .seg, .bsheet, button, .avatar, .well')) continue;
       // NOTE: this used to skip .sheet--ai as "the one raised surface in the
       // app", whose contents were inset by design rather than by leftover
       // padding. That premise died when the material changed — EVERY .sheet is
@@ -57,7 +57,7 @@ for (const page of PAGES) {
       // the one real signal. What is being looked for is a BLOCK of text that
       // should start at the gutter and does not, so restrict to block-level
       // elements that are the first in-flow child of their parent.
-      if (el.classList.contains('icon')) continue;
+      if (el.classList.contains('icon') || el.classList.contains('material-symbols-outlined')) continue;
       if (el.closest('.row')) continue;
       if (!['block','flex','grid','list-item'].includes(cs.display)) continue;
       // A second grid/flex COLUMN is meant to be away from the gutter, and so is
@@ -76,7 +76,8 @@ for (const page of PAGES) {
       // Measure against the element's own container's content edge, not the
       // page. Inside a card that is the card's padding box; outside one it is
       // the page gutter. Either way a correctly aligned block reads 0.
-      const host = el.closest('.sheet') || main;
+      // Corpus 3.0's surfaces: the navy hero, the cards and the AI panel.
+      const host = el.closest('.reg, .sheet, .card, .hero, .ai, .brief, .group, .file, .profile') || main;
       const base = host.getBoundingClientRect().left
                  + parseFloat(getComputedStyle(host).paddingLeft || 0);
       const x = Math.round(box.left - base);

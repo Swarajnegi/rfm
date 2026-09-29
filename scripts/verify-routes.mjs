@@ -1,4 +1,4 @@
-// Visits every route in both themes with a seeded portfolio AND empty, asserting
+// Visits every route with a seeded portfolio AND empty, asserting
 // each renders exactly one page with no console error. A screenshot of one
 // screen cannot tell you the other twelve are fine.
 import { chromium } from 'playwright';
@@ -7,12 +7,13 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
 const ROUTES = ['home','investments','holding','import','maturity','cashflow','income','goals',
-                'emergency','networth','tax','pension','regen'];
+                'emergency','networth','tax','pension','regen','settings','notifications'];
 const seed = readFileSync('scripts/seed.json', 'utf8');
 let fails = 0;
 
 const b = await chromium.launch();
-for (const theme of ['light','dark']) {
+// Dark only until the light designs exist; the app sets data-theme="dark" itself.
+for (const theme of ['dark']) {
   for (const seeded of [true,false]) {
     const p = await b.newPage({ viewport:{width:390,height:844} });
     const errs = [];
@@ -23,7 +24,7 @@ for (const theme of ['light','dark']) {
       localStorage.setItem('corpus_theme', t);
       localStorage.setItem('rfm_tour_v1','seen');
       // The first-run questions are tested in verify-profile; here they are answered.
-      localStorage.setItem('rfm_v1', JSON.stringify((v => ({ ...v, profile: v.profile || { completedAt: '2026-09-01T00:00:00.000Z', name: 'Test', age: 40, goal: 'balanced', risk: 'medium', horizon: '7to15', interests: ['stocks'] } }))(JSON.parse(localStorage.getItem('rfm_v1') || '{}'))));
+      localStorage.setItem('rfm_v1', JSON.stringify((v => ({ ...v, profile: v.profile || { version: 2, completedAt: '2026-09-01T00:00:00.000Z', name: 'Test', age: 40, goal: 'balanced', risk: 'medium', horizon: '7to15', interests: ['stocks'] } }))(JSON.parse(localStorage.getItem('rfm_v1') || '{}'))));
     }, [seed, theme, seeded]);
     await p.route('**/*', r => r.request().url().startsWith('file://') ? r.continue() : r.abort());
     await p.goto(pathToFileURL(path.resolve('web/index.html')).href);
@@ -52,5 +53,5 @@ for (const theme of ['light','dark']) {
   }
 }
 await b.close();
-console.log(fails ? `\n  ${fails} route failures\n` : `\n  all ${ROUTES.length} routes x 2 themes x 2 data states OK\n`);
+console.log(fails ? `\n  ${fails} route failures\n` : `\n  all ${ROUTES.length} routes x 2 data states OK\n`);
 process.exit(fails ? 1 : 0);

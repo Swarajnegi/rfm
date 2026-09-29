@@ -406,13 +406,14 @@
        portfolio: someone who asked Corpus to watch gold and government schemes
        hears about them before they hold any. */
     function profileSearches(profile) {
-        const want = new Set(profile?.interests || []);
+        const want = new Set(profile?.holdings || []);
+        const purposes = new Set(Object.values(profile?.purpose || {}).flat());
         const out = [];
         if (want.has('gold')) out.push(et('ET Commodities (gold, silver)', 'markets/commodities/rssfeeds/1808152121'));
-        if (want.has('schemes') || profile?.goal === 'retired' || Number(profile?.age) >= 60) {
+        if (want.has('schemes') || Number(profile?.age) >= 60) {
             out.push(et('ET Savings (schemes, deposits)', 'wealth/save/rssfeeds/47119915'));
         }
-        if (want.has('fdbonds') || profile?.goal === 'income' || profile?.goal === 'safe') {
+        if (want.has('fd_bonds') || purposes.has('income') || purposes.has('safe')) {
             out.push(et('ET Bonds and rates', 'markets/bonds/rssfeeds/2146846'));
         }
         if (want.has('mf')) out.push(et('ET Mutual funds', 'mf/mf-news/rssfeeds/1107225967'));
@@ -462,7 +463,7 @@
     let lastPack = null;
     const bookKey = (app, opts) => JSON.stringify([
         (app.investments || []).map(i => [i.id, i.units, i.amount, i.ticker, i.schemeCode]),
-        opts.profile?.interests || [], opts.profile?.goal || null, Number(opts.profile?.age) || null, !!opts.metals,
+        opts.profile || null, !!opts.metals,
     ]);
 
     function buildPack(app, onProgress, opts = {}) {
@@ -523,7 +524,9 @@
             const [price, fund, news] = await Promise.all([
                 studyHolding(app, inv).catch(() => null),
                 fundamentals(app, inv).catch(() => null),
-                headlines(app, inv.ticker, MAX_NEWS_PER_HOLDING).catch(() => []),
+                // A bare NSE symbol collides with US tickers (HAL is Halliburton,
+                // TCS The Container Store); an Indian holding is searched by name.
+                headlines(app, app._marketBand(inv) === 'US' ? inv.ticker : (inv.name || inv.ticker), MAX_NEWS_PER_HOLDING).catch(() => []),
             ]);
             const market = app._marketBand(inv);
             return {
@@ -578,7 +581,7 @@
             });
 
         const holdsGold = (app.investments || []).some(i => /gold|sgb/i.test(`${i.type} ${i.name} ${i.ticker || ''}`));
-        const metalsP = (opts.metals || holdsGold || (opts.profile?.interests || []).includes('gold'))
+        const metalsP = (opts.metals || holdsGold || (opts.profile?.holdings || []).includes('gold'))
             ? metals(app).catch(() => null) : Promise.resolve(null);
         const searchesP = Promise.all(profileSearches(opts.profile).map(f => feed(app, f))).catch(() => []);
 

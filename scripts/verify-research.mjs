@@ -505,7 +505,7 @@ console.log('\nNEWS TRANSPORT — the device bug, tested');
         d.fetchMarketJson = async () => { throw new Error('no'); };
         try {
             window.CorpusResearch._resetReuse();
-            const pack = await window.CorpusResearch.buildPack(d, null, { profile: { interests: ['gold', 'schemes', 'mf'] } });
+            const pack = await window.CorpusResearch.buildPack(d, null, { profile: { holdings: ['gold', 'schemes', 'mf'] } });
             return { sources: (pack.macro.profile || []).map(f => `${f.source}:${f.items.length}`), asked };
         } finally { d.httpGetJson = realHttp; d.fetchMarketJson = realMarket; }
     });
@@ -667,7 +667,7 @@ console.log('\nBACKGROUND — native result can be recovered after the WebView r
 console.log('\nRENDERER — the fields that used to be discarded');
 {
     const { ctx, page, errors } = await boot([AVGO]);
-    const text = await page.evaluate(async () => {
+    let text = await page.evaluate(async () => {
         const d = document.querySelector('[x-data]')._x_dataStack[0];
         d.activePage = 'regen';
         d.regenWealth.apiKeySet = true;
@@ -691,32 +691,31 @@ console.log('\nRENDERER — the fields that used to be discarded');
         };
         await new Promise(r => setTimeout(r, 700));
         const main = [...document.querySelectorAll('main')].find(m => m.offsetParent !== null);
-        return main ? main.innerText : '';
+        const drawer = document.querySelector('[data-s~="in"] .disclose');
+        return { text: main ? main.innerText : '', closed: drawer ? drawer.getAttribute('aria-expanded') === 'false' : null };
     });
-    ok('the macro reading reaches the DOM', /Repo rate held/.test(text));
+    const closed = text.closed;
+    text = text.text;
+    // Insights v6 shows the fit, the ranked findings with what to consider, a
+    // closed per-holding drawer and one source note. The macro line and the
+    // evidence chips are not part of the approved screen.
     ok('the fit to their goal is stated', /DRIFTING/i.test(text) && /Income covers half/.test(text));
     ok('findings arrive ranked', text.indexOf('Monthly income falls short') < text.indexOf('Broadcom drawdown'),
        'order in the DOM');
     ok('each finding says what to consider', /SCSS pays 8\.2% quarterly/.test(text));
-    ok('the evidence chips show the figures used', /27 buy \/ 3 hold \/ 0 sell/.test(text));
-    ok('and the holdings each finding concerns', /HDFC FD/.test(text));
     // The verdict is the one word a thumb scrolls looking for.
     // Matched case-insensitively: the pill is text-transform: uppercase and
     // innerText returns RENDERED text, so a "Hold" verdict arrives as "HOLD".
     // Per-holding calls exist, but the section starts CLOSED: innerText of a
     // closed <details> carries the summary, not the rows inside it.
-    ok('the per-holding section is there', /Holding by holding/i.test(text));
-    ok('and starts closed', !/Consensus Buy; position already large/.test(text));
+    ok('the per-holding section is there', /See the reading for each of your 1 holdings/i.test(text));
+    ok('and starts closed', closed === true, String(closed));
     ok('the analyst target is shown', /\$519\.21/.test(text));
-    ok('scheme matches are counted', /1 government scheme/.test(text), (text.match(/\d+ of \d+ holdings.*/) || [''])[0]);
     // A source that returned nothing must not be counted as a source.
     ok('only sources that returned something are credited',
-       /RBI Press Releases \(2\)/.test(text) && !/Dead feed/.test(text),
-       (text.match(/Read:.*/) || [''])[0]);
-    ok('coverage is stated', /1 of 1 holdings researched/.test(text), (text.match(/\d+ of \d+ holdings.*/) || [''])[0]);
-    // "0 with an analyst view" is exactly the signal that was invisible while
-    // quoteSummary returned Invalid Crumb on every call.
-    ok('and it names the analyst coverage', /with an analyst view/.test(text));
+       /Read from RBI Press Releases/.test(text) && !/Dead feed/.test(text),
+       (text.match(/Read from.*/) || [''])[0]);
+    ok('coverage is stated', /1 of 1 holdings read/.test(text), (text.match(/\d+ of \d+ holdings.*/) || [''])[0]);
     ok('no console errors', errors.length === 0, errors[0] || '');
     await ctx.close();
 }
