@@ -1,5 +1,9 @@
 # Legacy shells
 
+Updated: 2026-10-14. This document describes historical assets only. Follow the
+[Corpus product plan](../product-plan.md) and [decision log](../decisions.md) for
+current product direction; these archived files are not the UI specification.
+
 `index_new.html` and `index_old.html` are earlier generations of `web/index.html`,
 kept for reference only. **Neither is shipped** — Capacitor serves `web/` and only
 `web/index.html` is loaded.

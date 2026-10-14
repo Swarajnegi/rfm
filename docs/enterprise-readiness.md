@@ -1,62 +1,45 @@
-# Enterprise Readiness Plan
+# Corpus architecture and readiness notes
 
-## Current Boundary
+Updated: 2026-10-14. These are requirements and options to assess in INV-010, not an approved stack or implemented production architecture. The [product plan](product-plan.md) and [decision log](decisions.md) govern delivery and investigation order.
 
-The app is a Capacitor shell around a browser-only Alpine application. Portfolio data, API keys, price-sync state, and AI responses are stored in device localStorage. Market quotes are requested from public internet endpoints directly by the client.
+## Current prototype
 
-That model is acceptable for a single-device prototype. It is not an enterprise architecture: it cannot provide account recovery, multi-device consistency, durable audit records, provider-grade quote reliability, server-side secrets, or support operations for millions of users.
+Corpus is a Capacitor Android shell around an Alpine.js client with custom local CSS and bundled assets. Portfolio records, price-sync state, optional AI configuration and responses are stored in localStorage. The client requests market data and optional AI from remote services. A SQL schema in the repository does not establish a deployed backend.
 
-## Product Direction
+Local rendering and records support a single-device prototype. They do not demonstrate secure credential custody, durable transaction history, account recovery, cross-device consistency, licensed data access or reliable public operations. Current runtime, financial correctness and Android readiness remain unverified; the committed APK predates the redesign.
 
-The primary experience should be a financial timeline, not a collection of forms.
+## Agreed product direction
 
-- Home: current net worth, quote freshness, daily valuation history, cash runway, and the next one or two decisions.
-- Portfolio: grouped holdings with source, last successful quote, cost basis, valuation, and an explicit stale-price state.
-- Planning: goals, recurring contributions, tax preparation milestones, and a scenario view.
-- Insights: evidence-backed planning observations with a clear distinction between facts, assumptions, and questions for a licensed adviser.
+The first development stage is a private prototype for the owner. The intended public product is a simple portfolio app with paid personalised AI research and planning, using portfolio, goals, risk, financial status, planned budget and actual spending history. Individual portfolios come first; family access is deferred.
 
-Never invent a chart point, quote time, market context, or data source. A partial sync must show which holdings failed and retain the last verified value with its timestamp.
+Start with a short profile and learn gradually from authorised data, reported changes and corrections. Ask the user's purpose and a few useful follow-up questions when necessary. Research should cite dated sources and explain suitability, uncertainty, alternatives and material risks. Do not promise returns or infer suitability from age or favourable news alone.
 
-## Target Architecture
+User-facing service is software/AI; no hired-adviser service is selected. INV-002 is reopened for the full recommendation scope. Private use and AI delivery do not establish exemption, provider permission or public readiness. LR1 and PV1 remain mandatory before public launch.
 
-```text
-Android / iOS / Web clients
-        |
-API gateway + authenticated session
-        |
-Portfolio service ---- Market-data service ---- Licensed quote vendors
-        |                     |
-Ledger and valuation store  Quote cache and freshness policy
-        |
-Planning and insights service ---- Model gateway ---- Approved AI providers
-        |
-Audit log, notifications, analytics, support tooling
-```
+## Requirements to establish before implementation
 
-The portfolio service owns holdings, transactions, cost basis, and valuations. The ledger is append-only: corrections create new events rather than mutating history. The market-data service normalizes symbols, applies provider limits, caches prices, records source timestamps, and exposes a consistent quote contract to clients.
+| Area | Private-prototype question | Public-product question |
+|---|---|---|
+| Acquisition | Which permitted owner-data connections or accepted imports provide holdings and history? | Which entities, contracts, consents, commercial rights and provider coverage permit customer data access? |
+| Financial records | How are original records, cost, cash flows, corrections, currencies and missing history represented? | What reconciliation, audit, export and retention obligations apply at the accepted scale? |
+| AI and research | Which tools, sources, calculations and evaluation cases establish usefulness for the owner's questions? | What suitability, disclosure, legal responsibility, quality controls, quotas and cost limits are required? |
+| Privacy and recovery | Where is sensitive context stored, what leaves the device, and how can the owner correct/delete/export/restore it? | Are accounts/sync required, and what consent, deletion, recovery, encryption and incident controls follow? |
+| Operations | How are stale data, failed connections and incomplete answers made understandable? | What freshness, support, monitoring, provider entitlement and reliability targets are affordable? |
 
-The model gateway holds provider credentials server-side, enforces user consent and rate limits, redacts unnecessary information, validates structured output, and records non-sensitive request telemetry. It must never depend on a client-stored API key for a consumer product.
+Each private-stage data source still needs permission. Neither column is an automatic exception or an assertion that a particular architecture is sufficient.
 
-## Non-Negotiable Production Controls
+## Architecture options for INV-010
 
-- Use authenticated accounts, encrypted server-side data, device-session management, and account recovery.
-- Store an immutable transaction and valuation history; local caches are read-through replicas, not the record of truth.
-- Use licensed market-data providers with entitlement checks, retries, circuit breakers, and published freshness targets.
-- Keep AI provider keys on the server. Apply per-user quotas, abuse controls, schema validation, evaluation suites, and prompt/version observability.
-- Treat generated financial content as educational decision support unless regulated advice, suitability checks, required disclosures, and the relevant licensed entity are in place.
-- Add consent records, export/delete workflows, audit events, monitoring, error tracking, backups, and disaster recovery before public launch.
+Compare local storage with explicit backup, local storage plus selected remote services, and authenticated account/synchronisation designs against accepted rights, recovery needs, costs and operating requirements. No database, backend vendor, append-only ledger or multi-service architecture is selected here.
 
-## Delivery Sequence
+If remote portfolio/quote/AI services are needed, evaluate separation of records, market data, research and model access; secure credentials; consent/purpose enforcement; source timestamps; retries/rate limits; non-sensitive telemetry; and export/deletion. A paid consumer AI design must resolve credential custody rather than copy the current localStorage pattern. A service diagram alone establishes neither reliability nor permission.
 
-1. Stabilize the client: truthful valuation history, quote freshness, actionable errors, accessible mobile sheets, and no hidden data mutation.
-2. Introduce account identity, a portfolio transaction ledger, API gateway, and a migration from localStorage.
-3. Move quote retrieval and AI requests to backend services with provider abstraction, caching, and observability.
-4. Add cross-device sync, reconciliation, reporting, notifications, support workflows, load testing, security review, and compliance review.
+Migration must preserve existing `rfm_v1` data and relevant history/preferences through a reviewed backup, validation and recovery process. Decide event history and correction rules in INV-008/INV-010 before choosing persistence technologies.
 
-## Acceptance Metrics
+## Delivery and readiness
 
-- Portfolio valuation updates within the documented freshness target and identifies any stale holdings.
-- A sync result shows updated, skipped, and failed holdings without losing the last good value.
-- No user data is silently seeded, overwritten, or changed during app launch.
-- A selected AI model either completes with validated JSON or reports the exact model and provider failure.
-- Mobile navigation and sheets remain usable within the safe area on supported screen sizes.
+Follow INV-001–INV-011 sequentially, with INV-002 currently active. G1 product requirements, G2 permitted feasibility and G3 architecture precede G4 UI specification; G5 implementation starts after those gates close. UI design must cover short onboarding, optional permissions, stale/incomplete portfolios, connection failures, correction and recovery in accessible language.
+
+Private-prototype acceptance will assess the chosen planning question, input completeness, calculations, researched claims and recommendations, persistence, failure handling and owner usability. Criteria are to be specified in INV-008/INV-011; none have passed from this document.
+
+Public launch additionally requires independent demand/payment evidence under PV1, actual output/prompt/marketing/regulatory review under LR1, provider permissions under G2, accepted privacy/operations requirements and application/browser/Android validation. No deadline, paid engagement or deployment is authorised by these notes.

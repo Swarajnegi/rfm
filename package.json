@@ -1,7 +1,7 @@
 {
   "name": "corpus",
   "version": "1.0.0",
-  "description": "A private, offline-first portfolio manager for Indian investors.",
+  "description": "A portfolio manager prototype with a planned paid personalised AI financial companion.",
   "main": "index.js",
   "scripts": {
     "build:vendor": "esbuild src/vendor.js --bundle --format=iife --outfile=web/vendor.js --minify",
@@ -15,16 +15,16 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Swarajnegi/dadfinanceapp.git"
+    "url": "git+https://github.com/Swarajnegi/rfm.git"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
   "bugs": {
-    "url": "https://github.com/Swarajnegi/dadfinanceapp/issues"
+    "url": "https://github.com/Swarajnegi/rfm/issues"
   },
-  "homepage": "https://github.com/Swarajnegi/dadfinanceapp#readme",
+  "homepage": "https://github.com/Swarajnegi/rfm#readme",
   "dependencies": {
     "@capacitor/android": "^8.4.2",
     "@capacitor/app": "^8.1.0",
